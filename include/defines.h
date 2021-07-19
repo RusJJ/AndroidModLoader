@@ -1,0 +1,2 @@
+#define CONVERT_THIS_MACRO_CONTENTS_TO_STRING(_macro) #_macro
+#define MACROSTRING(_macro) CONVERT_THIS_MACRO_CONTENTS_TO_STRING(_macro) // Use this.
