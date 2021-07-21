@@ -1,4 +1,4 @@
-#pragma once
+/* DO NOT CHANGE IT */
 
 #ifndef __GETINTERFACE_H
 #define __GETINTERFACE_H
@@ -21,7 +21,7 @@ inline void* GetInterface(const char* szInterfaceName)
 #if defined(_WIN32) || defined(_WIN64)
     GetInterfaceFn _GetInterface = (GetInterfaceFn)GetProcAddress(GetModuleHandleA(DEFAULT_LIB_NAME ".dll"), "GetInterface");
 #else
-    GetInterfaceFn _GetInterface = (GetInterfaceFn)dlsym((void*)dlopen(DEFAULT_LIB_NAME ".so", RTLD_NOW), "GetInterface");
+    GetInterfaceFn _GetInterface = (GetInterfaceFn)dlsym((void*)dlopen("lib" DEFAULT_LIB_NAME ".so", RTLD_NOW), "GetInterface");
 #endif
     return _GetInterface(szInterfaceName);
 }
@@ -31,7 +31,7 @@ inline void RegisterInterface(const char* szInterfaceName, void* pInterface)
 #if defined(_WIN32) || defined(_WIN64)
     RegInterfaceFn _RegInterface = (RegInterfaceFn)GetProcAddress(GetModuleHandleA(DEFAULT_LIB_NAME ".dll"), "CreateInterface");
 #else
-    RegInterfaceFn _RegInterface = (RegInterfaceFn)dlsym((void*)dlopen(DEFAULT_LIB_NAME ".so", RTLD_NOW), "CreateInterface");
+    RegInterfaceFn _RegInterface = (RegInterfaceFn)dlsym((void*)dlopen("lib" DEFAULT_LIB_NAME ".so", RTLD_NOW), "CreateInterface");
 #endif
     _RegInterface(szInterfaceName, pInterface);
 }

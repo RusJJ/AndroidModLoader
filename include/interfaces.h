@@ -3,8 +3,6 @@
 #include <map>
 #include <string>
 
-#define WRAP_INTERFACE(__interface_name, __interface_var)	interfaces->Register(#__interface_name, __interface_var)
-
 class InterfaceSys
 {
 public:

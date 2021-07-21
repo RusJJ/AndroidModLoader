@@ -1,4 +1,4 @@
-#include <jni.h>
+#include <jnifn.h>
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -7,24 +7,24 @@
 namespace fs = std::filesystem;
 
 #include <defines.h>
+#include <mod/amlmod.h>
 #include <logger/logger.h>
 
 #include <interfaces.h>
-#include <iaml.h>
-#include <amlmod.h>
-
-MYMOD(AMLLoader, 1.0.0, RusJJ aka [-=KILL MAN=-]);
+#include <modslist.h>
 
 std::string g_szAppName;
 std::string g_szModsDir;
 std::string g_szDataModsDir;
 
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.0", "RusJJ aka [-=KILL MAN=-]");
+ModInfo* modinfo = &modinfoLocal;
+
 void LoadMods()
 {
-    logger->Info("Starting loading mods...");
-
     std::filesystem::path filepath;
     std::filesystem::path datapath = g_szDataModsDir + "libmodcopy.so";
+    ModInfo* pModInfo = nullptr;
 	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
 	{
 		filepath = file.path();
@@ -35,61 +35,41 @@ void LoadMods()
             fs::copy(filepath.string(), datapath.string());
             chmod(datapath.string().c_str(), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
-            logger->Info("Working with %s...", filepath.filename().string().c_str());
-            void* handle = dlopen(datapath.string().c_str(), RTLD_NOW);
+            void* handle = dlopen(datapath.string().c_str(), RTLD_NOW); // Load it to RAM!
             
-            GetModInfoFn modInfo = (GetModInfoFn)dlsym(handle, "GetModInfo");
-            if(modInfo != nullptr)
+            GetModInfoFn modInfoFn = (GetModInfoFn)dlsym(handle, "GetModInfo");
+            if(modInfoFn != nullptr)
             {
-                ModInfo* pModInfo = modInfo();
-                logger->Info("Loaded: %s by %s", pModInfo->GetName(), pModInfo->GetAuthor());
-                logger->Info("Version: %d.%d.%d.%d", pModInfo->Major(), pModInfo->Minor(), pModInfo->Revision(), pModInfo->Build());
+                pModInfo = modInfoFn();
+                if(dlsym(handle, "OnModPreLoad") == nullptr && dlsym(handle, "OnModLoad") == nullptr)
+                {
+                    logger->Error("Mod (GUID %s) has no EntryPoint!", pModInfo->GUID());
+                    dlclose(handle);
+                    goto nextMod;
+                }
+                if(!modlist->AddMod(pModInfo, (uintptr_t)handle))
+                {
+                    logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
+                    dlclose(handle);
+                    goto nextMod;
+                }
             }
             else
             {
-                logger->Info("%s has no ModInfo, stopped loading!", filepath.filename().string().c_str());
                 dlclose(handle);
             }
 
+            nextMod:
             fs::remove(datapath.string());
 		}
 	}
-
-    logger->Info("Finished!");
-}
-
-jobject GetGlobalContext(JNIEnv *env)
-{
-    jclass activityThread = env->FindClass("android/app/ActivityThread");
-    jmethodID currentActivityThread = env->GetStaticMethodID(activityThread, "currentActivityThread", "()Landroid/app/ActivityThread;");
-    jobject at = env->CallStaticObjectMethod(activityThread, currentActivityThread);
-    jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
-    jobject context = env->CallObjectMethod(at, getApplication);
-    return context;
-}
-
-jstring GetPackageName(JNIEnv *env, jobject jActivity)
-{
-    jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getPackageName", "()Ljava/lang/String;");
-    return (jstring) env->CallObjectMethod(jActivity, method);
-}
-
-jobject GetFilesDir(JNIEnv *env, jobject jActivity)
-{
-    jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getFilesDir", "()Ljava/io/File;");
-    return (jstring) env->CallObjectMethod(jActivity, method);
-}
-
-jstring GetAbsolutePath(JNIEnv *env, jobject jFile)
-{
-    jmethodID method = env->GetMethodID(env->GetObjectClass(jFile), "getAbsolutePath", "()Ljava/lang/String;");
-    return (jstring) env->CallObjectMethod(jFile, method);
 }
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
     interfaces->Register("AMLInterface", aml);
+    modlist->AddMod(modinfo, 0);
 
     /* JNI Environment */
     JNIEnv* env = nullptr;
@@ -98,31 +78,35 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved)
         logger->Error("Cannot get JNI Environment!");
         return -1;
     }
-    logger->Info("JNI Environment is ready!");
+
+    logger->Info("Determining app info...");
 
     /* Application Context */
-    logger->Info("Getting context...");
     jobject appContext = GetGlobalContext(env);
-    logger->Info("Got context!");
 
     /* Package Name */
-    logger->Info("Getting package name...");
     g_szAppName = env->GetStringUTFChars(GetPackageName(env, appContext), NULL);
     g_szModsDir = "/sdcard/Android/data/";
     g_szModsDir += g_szAppName;
     g_szModsDir += "/files/aml/";
     fs::create_directories(g_szModsDir.c_str());
-    logger->Info("Got package name! Im inside \"%s\"!", g_szAppName.c_str());
 
     /* Data/Data Folder */
-    logger->Info("Getting data folder...");
     g_szDataModsDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
     g_szDataModsDir += "/aml/";
-    logger->Info("Got data folder! Folder is: %s", g_szDataModsDir.c_str());
     fs::create_directories(g_szDataModsDir.c_str());
 
     /* Mods? */
+    logger->Info("Working with mods...");
     LoadMods();
+
+    /* All mods loaded. We should check for dependencies! */
+    logger->Info("Checking for dependencies...");
+    modlist->ProcessDependencies();
+    modlist->ProcessPreLoading();
+    modlist->ProcessLoading();
+
+    logger->Info("Mods were launched!");
 
     return JNI_VERSION_1_6;
 }
