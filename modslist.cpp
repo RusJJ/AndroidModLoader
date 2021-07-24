@@ -1,5 +1,5 @@
 #include <modslist.h>
-#include <logger/logger.h>
+#include <mod/logger.h>
 #include <dlfcn.h>
 
 typedef ModInfoDependency* (*GetDependenciesListFn)();
@@ -18,7 +18,7 @@ bool ModsList::AddMod(ModInfo* modinfo, uintptr_t modhandle)
     modinfo->dependencies = nullptr;
     if(modhandle != 0)
     {
-        GetDependenciesListFn getDepList = (GetDependenciesListFn)dlsym((void*)modhandle, "GetDependenciesList");
+        GetDependenciesListFn getDepList = (GetDependenciesListFn)dlsym((void*)modhandle, "__GetDepsList");
         if(getDepList != nullptr)
             modinfo->dependencies = getDepList();
     }
@@ -130,9 +130,9 @@ void ModsList::ProcessDependencies()
         auto end = modlist->m_vecModInfo.end();
         while( it != end )
         {
-            depList = (*it)->dependencies;
-            if(depList != nullptr)
+            if((*it)->dependencies != nullptr)
             {
+                depList = (*it)->dependencies;
                 for(i = 0; depList[i].szGUID[0] != '\0'; ++i)
                 {
                     if(!HasModOfVersion(depList[i].szGUID, depList[i].szVersion))
@@ -146,7 +146,7 @@ void ModsList::ProcessDependencies()
                     }
                 }
                 if( bRepeatDependencies ) break;
-                (*it)->dependencies = nullptr; // Dont check that mod again...
+                (*it)->dependencies = nullptr; // Dont check that mod again if everything is ok...
             }
             ++it;
         }
@@ -181,6 +181,22 @@ void ModsList::ProcessLoading()
         if((*it)->handle != 0)
         {
             onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModLoad");
+            if(onModLoadFn != nullptr) onModLoadFn();
+        }
+        ++it;
+    }
+}
+
+void ModsList::ProcessUnloading()
+{
+    OnModLoadFn onModLoadFn;
+    auto it = modlist->m_vecModInfo.begin();
+    auto end = modlist->m_vecModInfo.end();
+    while( it != end )
+    {
+        if((*it)->handle != 0)
+        {
+            onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModUnload");
             if(onModLoadFn != nullptr) onModLoadFn();
         }
         ++it;

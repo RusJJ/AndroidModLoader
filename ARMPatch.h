@@ -89,7 +89,7 @@ namespace ARMPatch
 	uintptr_t getAddressFromPattern(const char* pattern, const char* soLib);
 	
 	/*
-		Cydia's Substrate (use hook instead of hookInternal, ofc reprotects it!)
+		Cydia's Substrate / Rprop's Inline Hook (use hook instead of hookInternal, ofc reprotects it!)
 		addr - what to hook?
 		func - Call that function instead of an original
 		original - Original function!

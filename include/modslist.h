@@ -12,6 +12,7 @@ public:
     void ProcessDependencies();
     void ProcessPreLoading();
     void ProcessLoading();
+    void ProcessUnloading();
 
 private:
     std::vector<ModInfo*> m_vecModInfo;

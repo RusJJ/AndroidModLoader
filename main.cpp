@@ -1,4 +1,6 @@
 #include <jnifn.h>
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -8,7 +10,8 @@ namespace fs = std::filesystem;
 
 #include <defines.h>
 #include <mod/amlmod.h>
-#include <logger/logger.h>
+#include <mod/logger.h>
+#include <mod/config.h>
 
 #include <interfaces.h>
 #include <modslist.h>
@@ -16,15 +19,20 @@ namespace fs = std::filesystem;
 std::string g_szAppName;
 std::string g_szModsDir;
 std::string g_szDataModsDir;
+std::string g_szCfgPath;
 
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.0", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
+static Config cfgLocal("ModLoaderCore");
+Config* cfg = &cfgLocal;
 
+typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
     std::filesystem::path filepath;
     std::filesystem::path datapath = g_szDataModsDir + "libmodcopy.so";
     ModInfo* pModInfo = nullptr;
+    SpecificGameFn maybeINeedAGame = nullptr;
 	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
 	{
 		filepath = file.path();
@@ -37,10 +45,17 @@ void LoadMods()
 
             void* handle = dlopen(datapath.string().c_str(), RTLD_NOW); // Load it to RAM!
             
-            GetModInfoFn modInfoFn = (GetModInfoFn)dlsym(handle, "GetModInfo");
+            GetModInfoFn modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
             if(modInfoFn != nullptr)
             {
                 pModInfo = modInfoFn();
+                maybeINeedAGame = (SpecificGameFn)dlsym(handle, "__INeedASpecificGame");
+                if(maybeINeedAGame != nullptr && strcmp(maybeINeedAGame(), g_szAppName.c_str()) != 0)
+                {
+                    logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
+                    dlclose(handle);
+                    goto nextMod;
+                }
                 if(dlsym(handle, "OnModPreLoad") == nullptr && dlsym(handle, "OnModLoad") == nullptr)
                 {
                     logger->Error("Mod (GUID %s) has no EntryPoint!", pModInfo->GUID());
@@ -65,7 +80,7 @@ void LoadMods()
 	}
 }
 
-jint JNI_OnLoad(JavaVM *vm, void *reserved)
+JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
     interfaces->Register("AMLInterface", aml);
@@ -79,22 +94,47 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved)
         return -1;
     }
 
-    logger->Info("Determining app info...");
-
     /* Application Context */
     jobject appContext = GetGlobalContext(env);
 
+    /* Permissions! We really need them for configs! */
+    /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
+       !HasPermissionGranted(env, appContext, "WRITE_EXTERNAL_STORAGE"))
+    {
+        RequestPermissions(env, appContext);
+    }*/
+
     /* Package Name */
     g_szAppName = env->GetStringUTFChars(GetPackageName(env, appContext), NULL);
+    std::transform(g_szAppName.begin(), g_szAppName.end(), g_szAppName.begin(), [](unsigned char c) { return std::tolower(c); });
+    logger->Info("Determined app info: %s", g_szAppName.c_str());
+
     g_szModsDir = "/sdcard/Android/data/";
     g_szModsDir += g_szAppName;
-    g_szModsDir += "/files/aml/";
+    g_szModsDir += "/mods/";
     fs::create_directories(g_szModsDir.c_str());
+
+    g_szCfgPath = "/sdcard/Android/data/";
+    g_szCfgPath += g_szAppName;
+    g_szCfgPath += "/configs/";
+    fs::create_directories(g_szCfgPath.c_str());
 
     /* Data/Data Folder */
     g_szDataModsDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
-    g_szDataModsDir += "/aml/";
+    //g_szDataModsDir += "/aml/";
     fs::create_directories(g_szDataModsDir.c_str());
+
+    cfg->Init();
+    auto pCE = cfg->Bind("ExcuseMe", "0.001");
+    cfg->Bind("NoExcuse", "1");
+    cfg->Bind("NoExcuseMe", "1");
+    cfg->Bind("NoExcuseMe2", "1");
+    cfg->Bind("NoExcuseMe3", "1");
+    cfg->Bind("NoExcuseMe4", "1");
+    cfg->Bind("NoExcuseMe5", "1");
+    cfg->Bind("NoExcuseMe6", "1");
+    pCE->SetFloat(0.002);
+    cfg->Save();
 
     /* Mods? */
     logger->Info("Working with mods...");
@@ -108,5 +148,11 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
     logger->Info("Mods were launched!");
 
+
     return JNI_VERSION_1_6;
+}
+
+JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
+{
+    modlist->ProcessUnloading();
 }

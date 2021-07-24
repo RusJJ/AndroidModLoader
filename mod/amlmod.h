@@ -8,11 +8,22 @@
 #define MYMOD(_guid, _name, _version, _author)                          \
     static ModInfo modinfoLocal(#_guid, #_name, #_version, #_author);   \
     ModInfo* modinfo = &modinfoLocal;                                   \
-    extern "C" ModInfo* GetModInfo() { return modinfo; }                \
+    extern "C" ModInfo* __GetModInfo() { return modinfo; }              \
     IAML* aml = (IAML*)GetInterface("AMLInterface");
 
+#define MYMODCFG(_guid, _name, _version, _author)                       \
+    static ModInfo modinfoLocal(#_guid, #_name, #_version, #_author);   \
+    ModInfo* modinfo = &modinfoLocal;                                   \
+    extern "C" ModInfo* __GetModInfo() { return modinfo; }              \
+    IAML* aml = (IAML*)GetInterface("AMLInterface");                    \
+    static Config cfgLocal(#_guid);                                     \
+    Config* cfg = &cfgLocal;
+
+#define NEEDGAME(_pkg_name)                                             \
+    extern "C" const char* __INeedASpecificGame() {return #_pkg_name;}
+
 #define MYMODDECL()                                                     \
-    extern ModInfo* modinfo; extern "C" ModInfo* GetModInfo(); // Just in case if you need to use that somewhere else in your mod
+    extern ModInfo* modinfo; // Just in case if you need to use that somewhere else in your mod
 
 /* Dependencies! */
 #define BEGIN_DEPLIST()                                                 \
@@ -26,7 +37,7 @@
 
 #define END_DEPLIST()                                                   \
     {"", ""} };                                                         \
-    extern "C" ModInfoDependency* GetDependenciesList() { return &g_listDependencies[0]; }
+    extern "C" ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
 
 
 
@@ -77,7 +88,7 @@ public:
     inline unsigned short Build() { return build; }
     inline uintptr_t Handle() { return handle; }
 private:
-    char szGUID[32];
+    char szGUID[48];
     char szName[48];
     char szVersion[24];
     char szAuthor[48];

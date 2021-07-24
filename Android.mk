@@ -23,7 +23,7 @@ include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cpp .cc
 LOCAL_SHARED_LIBRARIES := armpatch
 LOCAL_MODULE    := AML
-LOCAL_SRC_FILES := main.cpp aml.cpp interface.cpp modslist.cpp logger/logger.cpp
+LOCAL_SRC_FILES := main.cpp aml.cpp interface.cpp modslist.cpp mod/logger.cpp mod/config.cpp
 LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17
 LOCAL_C_INCLUDES += ./include
 LOCAL_LDLIBS += -llog # ARM64 library requires it so...
