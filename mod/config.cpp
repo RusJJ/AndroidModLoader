@@ -55,16 +55,17 @@ void Config::Save()
 	cfgStream.close();
 }
 
-ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue)
+ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const char* szSection)
 {
 	if(!m_bInitialized) return nullptr;
 
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
+	pRet->m_szMySection = szSection;
 	pRet->m_szMyKey = szKey;
 	const char* tryToGetValue;
 	
-	auto s = ((inipp::Ini<char>*)m_iniMyConfig)->sections["PREFERENCES"];
+	auto s = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection];
 	tryToGetValue = s[szKey].c_str();
 	if(tryToGetValue[0] == '\0')
 		tryToGetValue = szDefaultValue;
@@ -81,7 +82,7 @@ void ConfigEntry::SetString(const char* newValue)
 	m_nIntegerValue = atoi(m_szValue);
 	m_fFloatValue = (float)atof(m_szValue);
 
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections["PREFERENCES"][m_szMyKey] = m_szValue;
+	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
 }
 
 void ConfigEntry::SetFloat(float newValue)
@@ -93,7 +94,7 @@ void ConfigEntry::SetFloat(float newValue)
 	sprintf(szVal, "%f", newValue);
     m_szValue = szVal;
 
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections["PREFERENCES"][m_szMyKey] = m_szValue;
+	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
 }
 
 void ConfigEntry::SetInt(int newValue)
@@ -105,7 +106,7 @@ void ConfigEntry::SetInt(int newValue)
 	sprintf(szVal, "%d", newValue);
     m_szValue = szVal;
 	
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections["PREFERENCES"][m_szMyKey] = m_szValue;
+	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
 }
 
 void ConfigEntry::SetBool(bool newValue)
@@ -114,5 +115,5 @@ void ConfigEntry::SetBool(bool newValue)
     m_nIntegerValue = newValue?1:0;
     m_szValue = newValue?"1":"0";
 	
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections["PREFERENCES"][m_szMyKey] = m_szValue;
+	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
 }

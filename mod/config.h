@@ -6,7 +6,7 @@ public:
     Config(const char* szName);
     void Init();
     void Save();
-    ConfigEntry* Bind(const char* szKey, const char* szDefaultValue);
+    ConfigEntry* Bind(const char* szKey, const char* szDefaultValue, const char* szSection = "Preferences");
     static Config* GetConfig();
 private:
     bool m_bInitialized;
@@ -29,6 +29,7 @@ public:
     inline int GetInt() { return m_nIntegerValue; }
 private:
     Config* m_pBoundCfg;
+    const char* m_szMySection;
     const char* m_szMyKey;
     const char* m_szValue;
     float m_fFloatValue;
