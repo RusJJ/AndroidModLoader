@@ -23,8 +23,12 @@ include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cpp .cc
 LOCAL_SHARED_LIBRARIES := armpatch
 LOCAL_MODULE    := AML
-LOCAL_SRC_FILES := main.cpp aml.cpp interface.cpp modslist.cpp mod/logger.cpp mod/config.cpp
+LOCAL_SRC_FILES := main.cpp aml.cpp interface.cpp modslist.cpp icfg.cpp mod/logger.cpp mod/config.cpp
 LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17
 LOCAL_C_INCLUDES += ./include
-LOCAL_LDLIBS += -llog # ARM64 library requires it so...
+LOCAL_LDLIBS += -llog
+# Uncomment these two lines to add IL2CPP support! (NOT WORKING)
+#LOCAL_SRC_FILES += il2cpp/gc.cpp il2cpp/functions.cpp
+#LOCAL_CFLAGS += -D__IL2CPPUTILS
+# Uncomment these two lines to add IL2CPP support! (NOT WORKING)
 include $(BUILD_SHARED_LIBRARY)

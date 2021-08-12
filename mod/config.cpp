@@ -2,24 +2,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
-#include <fstream>
+#include <mod/logger.h>
 
 #include "amlmod.h"
 #include "iaml.h"
-#include "thirdparty/inipp.h"
+#ifdef _ICFG
+	//ICFG* icfg;
+#else
+	#include <fstream>
+	#include "thirdparty/inipp.h"
+#endif
+#ifdef __AML
+	extern std::string g_szCfgPath;
+#endif
+
+
 
 extern ModInfo* modinfo;
 
-extern std::string g_szCfgPath;
-
 Config::Config(const char* szName)
 {
+#ifndef _ICFG
+	m_iniMyConfig = new inipp::Ini<char>();
+#else
+	m_pICFG = (ICFG*)GetInterface("AMLConfig");
+	m_iniMyConfig = m_pICFG->InitIniPointer();
+#endif
 	m_bInitialized = false;
     m_szName = szName;
-	m_iniMyConfig = new inipp::Ini<char>();
 
 	#ifndef __AML
-	Init();
+		Init();
 	#endif
 }
 
@@ -27,32 +40,40 @@ void Config::Init()
 {
 	if(m_bInitialized) return;
 	m_bInitialized = true;
-	#ifdef __AML
-		std::ifstream cfgStream((g_szCfgPath + m_szName + ".ini").c_str());
+	#ifdef _ICFG
+		m_pICFG->ParseInputStream(m_iniMyConfig, m_szName);
 	#else
-		std::ifstream cfgStream((std::string(aml->GetConfigPath()) + m_szName + ".ini").c_str());
+		#ifdef __AML
+			std::ifstream cfgStream((g_szCfgPath + m_szName + ".ini").c_str());
+		#else
+			std::ifstream cfgStream((std::string(aml->GetConfigPath()) + m_szName + ".ini").c_str());
+		#endif
+		if(cfgStream.is_open())
+		{
+			((inipp::Ini<char>*)m_iniMyConfig)->parse(cfgStream);
+		}
+		cfgStream.close();
 	#endif
-	if(cfgStream.is_open())
-	{
-		((inipp::Ini<char>*)m_iniMyConfig)->parse(cfgStream);
-	}
-	cfgStream.close();
 }
 
 void Config::Save()
 {
 	if(!m_bInitialized) return;
-	#ifdef __AML
-		std::ofstream cfgStream((g_szCfgPath + m_szName + ".ini").c_str());
+	#ifdef _ICFG
+		m_pICFG->GenerateToOutputStream(m_iniMyConfig, m_szName);
 	#else
-		std::ofstream cfgStream((std::string(aml->GetConfigPath()) + m_szName + ".ini").c_str());
+		#ifdef __AML
+			std::ofstream cfgStream((g_szCfgPath + m_szName + ".ini").c_str());
+		#else
+			std::ofstream cfgStream((std::string(aml->GetConfigPath()) + m_szName + ".ini").c_str());
+		#endif
+		if(cfgStream.is_open())
+		{
+			((inipp::Ini<char>*)m_iniMyConfig)->generate(cfgStream);
+		}
+		cfgStream << "";
+		cfgStream.close();
 	#endif
-	if(cfgStream.is_open())
-	{
-		((inipp::Ini<char>*)m_iniMyConfig)->generate(cfgStream);
-	}
-	cfgStream << "\n";
-	cfgStream.close();
 }
 
 ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const char* szSection)
@@ -65,8 +86,11 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
 	pRet->m_szMyKey = szKey;
 	const char* tryToGetValue;
 	
-	auto s = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection];
-	tryToGetValue = s[szKey].c_str();
+	#ifndef _ICFG
+		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+	#else
+		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+	#endif
 	if(tryToGetValue[0] == '\0')
 		tryToGetValue = szDefaultValue;
 	pRet->SetString(tryToGetValue);
@@ -82,7 +106,11 @@ void ConfigEntry::SetString(const char* newValue)
 	m_nIntegerValue = atoi(m_szValue);
 	m_fFloatValue = (float)atof(m_szValue);
 
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+	#ifndef _ICFG
+		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+	#else
+		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
+	#endif
 }
 
 void ConfigEntry::SetFloat(float newValue)
@@ -94,7 +122,11 @@ void ConfigEntry::SetFloat(float newValue)
 	sprintf(szVal, "%f", newValue);
     m_szValue = szVal;
 
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+	#ifndef _ICFG
+		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+	#else
+		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
+	#endif
 }
 
 void ConfigEntry::SetInt(int newValue)
@@ -105,8 +137,12 @@ void ConfigEntry::SetInt(int newValue)
 	char szVal[32];
 	sprintf(szVal, "%d", newValue);
     m_szValue = szVal;
-	
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+
+	#ifndef _ICFG
+		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+	#else
+		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
+	#endif
 }
 
 void ConfigEntry::SetBool(bool newValue)
@@ -114,6 +150,10 @@ void ConfigEntry::SetBool(bool newValue)
 	m_fFloatValue = newValue?1.0f:0.0f;
     m_nIntegerValue = newValue?1:0;
     m_szValue = newValue?"1":"0";
-	
-	((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+
+	#ifndef _ICFG
+		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+	#else
+		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
+	#endif
 }

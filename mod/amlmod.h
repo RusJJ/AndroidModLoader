@@ -5,6 +5,17 @@
 #include <stdio.h>
 #include <string>
 
+#ifdef __clang__
+    #define TARGET_ARM __attribute__((target("no-thumb-mode")))
+    #define TARGET_THUMB  __attribute__((target("thumb-mode")))
+#endif
+
+#ifdef __GNUC__
+    #define ASM_NAKED __attribute__((naked))
+#else
+    #define ASM_NAKED __declspec(naked)
+#endif
+
 #define MYMOD(_guid, _name, _version, _author)                          \
     static ModInfo modinfoLocal(#_guid, #_name, #_version, #_author);   \
     ModInfo* modinfo = &modinfoLocal;                                   \

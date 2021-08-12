@@ -55,5 +55,25 @@ void AML::Write(uintptr_t dest, uintptr_t src, size_t size)
     ARMPatch::write(dest, src, size);
 }
 
+void AML::Read(uintptr_t src, uintptr_t dest, size_t size)
+{
+    ARMPatch::read(src, dest, size);
+}
+
+void AML::PlaceNOP(uintptr_t addr, size_t count)
+{
+    ARMPatch::NOP(addr, count);
+}
+
+void AML::PlaceJMP(uintptr_t addr, uintptr_t dest)
+{
+    ARMPatch::JMP(addr, dest);
+}
+
+void AML::PlaceRET(uintptr_t addr)
+{
+    ARMPatch::RET(addr);
+}
+
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;

@@ -11,6 +11,7 @@
 class IAML
 {
 public:
+    /* AML 1.0.0 */
     virtual const char* GetCurrentGame() = 0;
     virtual const char* GetConfigPath() = 0;
     virtual bool HasMod(const char* szGUID) = 0;
@@ -21,6 +22,10 @@ public:
     virtual void HookPLT(void* handle, void* fnAddress, void** orgFnAddress = nullptr) = 0;
     virtual int Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
     virtual void Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
+    virtual void Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
+    virtual void PlaceNOP(uintptr_t addr, size_t count = 1) = 0; // Untested on ARMv8
+    virtual void PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
+    virtual void PlaceRET(uintptr_t addr) = 0; // Untested on ARMv8
 };
 
 extern IAML* aml;

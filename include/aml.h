@@ -13,4 +13,8 @@ public:
     void HookPLT(void* handle, void* fnAddress, void** orgFnAddress = nullptr);
     int Unprot(uintptr_t handle, size_t len = PAGE_SIZE);
     void Write(uintptr_t dest, uintptr_t src, size_t size);
+    void Read(uintptr_t src, uintptr_t dest, size_t size);
+    void PlaceNOP(uintptr_t addr, size_t count = 1);
+    void PlaceJMP(uintptr_t addr, uintptr_t dest);
+    void PlaceRET(uintptr_t addr);
 };

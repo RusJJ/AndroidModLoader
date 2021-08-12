@@ -13,6 +13,14 @@ namespace fs = std::filesystem;
 #include <mod/logger.h>
 #include <mod/config.h>
 
+#ifdef __IL2CPPUTILS
+    #include <il2cpp/functions.h>
+#endif
+
+/* Should be after config.h in main.cpp */
+#include <icfg_desc.h>
+/* Should be after config.h in main.cpp */
+
 #include <interfaces.h>
 #include <modslist.h>
 
@@ -25,12 +33,14 @@ static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.0", "RusJJ aka [
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
+static CFG icfgLocal;
+ICFG* icfg = &icfgLocal;
 
 typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
     std::filesystem::path filepath;
-    std::filesystem::path datapath = g_szDataModsDir + "libmodcopy.so";
+    std::filesystem::path datapath = g_szDataModsDir + "/libmodcopy.so";
     ModInfo* pModInfo = nullptr;
     SpecificGameFn maybeINeedAGame = nullptr;
 	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
@@ -84,6 +94,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
     interfaces->Register("AMLInterface", aml);
+    interfaces->Register("AMLConfig", icfg);
     modlist->AddMod(modinfo, 0);
 
     /* JNI Environment */
@@ -101,7 +112,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
        !HasPermissionGranted(env, appContext, "WRITE_EXTERNAL_STORAGE"))
     {
-        RequestPermissions(env, appContext);
+        RequestPermissions(env, appContext); // Instead of appContext should be !!!ACTIVITY!!! <- hard to get without SMALI-Inject (just a smali hand-rewritten, lol)
     }*/
 
     /* Package Name */
@@ -125,19 +136,14 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     fs::create_directories(g_szDataModsDir.c_str());
 
     cfg->Init();
-    auto pCE = cfg->Bind("ExcuseMe", "0.001");
-    cfg->Bind("NoExcuse", "1");
-    cfg->Bind("NoExcuseMe", "1");
-    cfg->Bind("NoExcuseMe2", "1");
-    cfg->Bind("NoExcuseMe3", "1");
-    cfg->Bind("NoExcuseMe4", "1");
-    cfg->Bind("NoExcuseMe5", "1");
-    cfg->Bind("NoExcuseMe6", "1");
-    pCE->SetFloat(0.002);
+    cfg->Bind("Author", "RusJJ aka [-=KILL MAN=-]");
     cfg->Save();
 
     /* Mods? */
     logger->Info("Working with mods...");
+    #ifdef __IL2CPPUTILS
+        IL2CPP::Func::HookFunctions();
+    #endif
     LoadMods();
 
     /* All mods loaded. We should check for dependencies! */
@@ -154,5 +160,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
 JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
 {
+    /* Not sure if it'll work... */
     modlist->ProcessUnloading();
 }

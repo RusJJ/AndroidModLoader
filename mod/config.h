@@ -1,3 +1,6 @@
+/* Is not required. Can be used only for a smaller size of mod (~480kb savings) */
+#include "icfg.h"
+
 class ConfigEntry;
 
 class Config
@@ -13,6 +16,10 @@ private:
     const char* m_szName;
     void* m_iniMyConfig;
 
+#ifdef _ICFG
+    /* Built-in optimizer think he's best! Ha-ha... Not funny. It's 3AM... */
+    ICFG* m_pICFG;
+#endif
     friend class ConfigEntry;
 };
 
