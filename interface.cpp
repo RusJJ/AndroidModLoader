@@ -25,13 +25,10 @@ void* InterfaceSys::Get(std::string szInterfaceName)
 
 	while (it != it_end)
 	{
-		logger->Info("Testing if %s == %s", szInterfaceName.c_str(), it->first.c_str());
 		if (it->first == szInterfaceName)
 		{
-			logger->Info("It is! Pointer: 0x%x", it->second);
 			return (it->second);
 		}
-		logger->Info("It's not?");
 		++it;
 	}
 	return nullptr;

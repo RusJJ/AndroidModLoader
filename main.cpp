@@ -36,6 +36,7 @@ Config* cfg = &cfgLocal;
 static CFG icfgLocal;
 ICFG* icfg = &icfgLocal;
 
+
 typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
@@ -93,6 +94,8 @@ void LoadMods()
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
+
+    
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
     modlist->AddMod(modinfo, 0);
@@ -153,7 +156,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     modlist->ProcessLoading();
 
     logger->Info("Mods were launched!");
-
 
     return JNI_VERSION_1_6;
 }
