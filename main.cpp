@@ -29,7 +29,7 @@ std::string g_szModsDir;
 std::string g_szDataModsDir;
 std::string g_szCfgPath;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.1", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.2", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;

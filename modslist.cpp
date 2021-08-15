@@ -29,8 +29,6 @@ bool ModsList::AddMod(ModInfo* modinfo, uintptr_t modhandle)
 
 bool ModsList::RemoveMod(ModInfo* modinfo)
 {
-    if(modinfo->handle == 0) return false;
-
     auto it = m_vecModInfo.begin();
     auto end = m_vecModInfo.end();
     while( it != end )
@@ -51,7 +49,6 @@ bool ModsList::RemoveMod(const char* szGUID)
     auto end = m_vecModInfo.end();
     while( it != end )
     {
-        if((*it)->handle == 0) return false;
         if(!strcmp((*it)->szGUID, szGUID))
         {
             m_vecModInfo.erase(it);
@@ -96,18 +93,20 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
 
     auto it = m_vecModInfo.begin();
     auto end = m_vecModInfo.end();
+    ModInfo* pInfo = nullptr;
     while( it != end )
     {
-        if(!strcmp((*it)->szGUID, szGUID))
+        pInfo = *it;
+        if(!strcmp(pInfo->szGUID, szGUID))
         {
-            if(major > (*it)->major) return true;
-            if(major == (*it)->major)
+            if(pInfo->major > major) return true;
+            if(pInfo->major == major)
             {
-                if(minor > (*it)->minor) return true;
-                if(minor == (*it)->minor)
+                if(pInfo->minor > minor) return true;
+                if(pInfo->minor == minor)
                 {
-                    if(revision > (*it)->revision) return true;
-                    if(revision == (*it)->revision && build >= (*it)->build) return true;
+                    if(pInfo->revision > revision) return true;
+                    if(pInfo->revision == revision && pInfo->build >= build) return true;
                 }
             }
             return false;
@@ -121,32 +120,35 @@ void ModsList::ProcessDependencies()
 {
     bool bRepeatDependencies = true;
     ModInfoDependency* depList = nullptr;
+    ModInfo* pInfo = nullptr;
     int i;
 
-    while( bRepeatDependencies )
+    while( bRepeatDependencies && m_vecModInfo.size() > 1 )
     {
         bRepeatDependencies = false;
         auto it = modlist->m_vecModInfo.begin();
         auto end = modlist->m_vecModInfo.end();
         while( it != end )
         {
-            if((*it)->dependencies != nullptr)
+            //logger->Info("Mods count: %d", m_vecModInfo.size());
+            pInfo = *it;
+            if(pInfo->dependencies != nullptr)
             {
-                depList = (*it)->dependencies;
+                depList = pInfo->dependencies;
                 for(i = 0; depList[i].szGUID[0] != '\0'; ++i)
                 {
                     if(!HasModOfVersion(depList[i].szGUID, depList[i].szVersion))
                     {
-                        logger->Error("Mod (GUID %s) requires a mod %s %s", (*it)->szGUID, depList[i].szGUID, depList[i].szVersion);
-                        RemoveMod(*it);
-                        dlclose((void*)((*it)->handle));
+                        logger->Error("Mod (GUID %s) requires a mod %s %s", pInfo->szGUID, depList[i].szGUID, depList[i].szVersion);
+                        dlclose((void*)(pInfo->handle));
+                        RemoveMod(pInfo);
 
                         bRepeatDependencies = true;
                         break;
                     }
                 }
                 if( bRepeatDependencies ) break;
-                (*it)->dependencies = nullptr; // Dont check that mod again if everything is ok...
+                pInfo->dependencies = nullptr; // Dont check that mod again if everything is ok...
             }
             ++it;
         }
