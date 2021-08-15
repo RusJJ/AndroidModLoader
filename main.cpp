@@ -29,7 +29,7 @@ std::string g_szModsDir;
 std::string g_szDataModsDir;
 std::string g_szCfgPath;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.0", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.1", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -110,6 +110,9 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
     /* Application Context */
     jobject appContext = GetGlobalContext(env);
+
+    /* Create a folder in /sdcard/Android/data/ */
+    GetExternalFilesDir(env, appContext);
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
