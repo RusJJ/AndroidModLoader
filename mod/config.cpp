@@ -22,11 +22,11 @@ extern ModInfo* modinfo;
 
 Config::Config(const char* szName)
 {
-#if defined(__AML)
-	m_iniMyConfig = new inipp::Ini<char>();
-#else
+#if !defined(__AML) && defined(_ICFG)
 	m_pICFG = (ICFG*)GetInterface("AMLConfig");
 	m_iniMyConfig = m_pICFG->InitIniPointer();
+#else
+	m_iniMyConfig = new inipp::Ini<char>();
 #endif
 	m_bInitialized = false;
     m_szName = szName;
