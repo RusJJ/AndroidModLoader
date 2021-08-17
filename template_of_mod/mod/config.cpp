@@ -79,24 +79,84 @@ void Config::Save()
 ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const char* szSection)
 {
 	if(!m_bInitialized) return nullptr;
-
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
 	pRet->m_szMyKey = szKey;
 	const char* tryToGetValue;
-	
 	#if !defined(__AML) && defined(_ICFG)
 		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
 	#else
 		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
 	#endif
 	if(tryToGetValue[0] == '\0')
-		tryToGetValue = szDefaultValue;
-	pRet->SetString(tryToGetValue);
-
+		pRet->SetString(szDefaultValue);
+	else
+		pRet->SetString(tryToGetValue);
 	Save();
+	return pRet;
+}
 
+ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSection)
+{
+	if(!m_bInitialized) return nullptr;
+	ConfigEntry* pRet = new ConfigEntry;
+	pRet->m_pBoundCfg = this;
+	pRet->m_szMySection = szSection;
+	pRet->m_szMyKey = szKey;
+	const char* tryToGetValue;
+	#if !defined(__AML) && defined(_ICFG)
+		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+	#else
+		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+	#endif
+	if(tryToGetValue[0] == '\0')
+		pRet->SetInt(nDefaultValue);
+	else
+		pRet->SetString(tryToGetValue);
+	Save();
+	return pRet;
+}
+
+ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* szSection)
+{
+	if(!m_bInitialized) return nullptr;
+	ConfigEntry* pRet = new ConfigEntry;
+	pRet->m_pBoundCfg = this;
+	pRet->m_szMySection = szSection;
+	pRet->m_szMyKey = szKey;
+	const char* tryToGetValue;
+	#if !defined(__AML) && defined(_ICFG)
+		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+	#else
+		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+	#endif
+	if(tryToGetValue[0] == '\0')
+		pRet->SetFloat(flDefaultValue);
+	else
+		pRet->SetString(tryToGetValue);
+	Save();
+	return pRet;
+}
+
+ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szSection)
+{
+	if(!m_bInitialized) return nullptr;
+	ConfigEntry* pRet = new ConfigEntry;
+	pRet->m_pBoundCfg = this;
+	pRet->m_szMySection = szSection;
+	pRet->m_szMyKey = szKey;
+	const char* tryToGetValue;
+	#if !defined(__AML) && defined(_ICFG)
+		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+	#else
+		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+	#endif
+	if(tryToGetValue[0] == '\0')
+		pRet->SetBool(bDefaultValue);
+	else
+		pRet->SetString(tryToGetValue);
+	Save();
 	return pRet;
 }
 

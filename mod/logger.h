@@ -1,3 +1,6 @@
+#ifndef _LOGGER
+#define _LOGGER
+
 class Logger
 {
 public:
@@ -10,3 +13,5 @@ private:
     const char* m_szTag;
 };
 extern Logger* logger;
+
+#endif // _LOGGER

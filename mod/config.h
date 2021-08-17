@@ -1,3 +1,6 @@
+#ifndef _CONFIG
+#define _CONFIG
+
 /* Is not required. Can be used only for a smaller size of mod (~480kb savings) */
 #include "icfg.h"
 
@@ -10,6 +13,9 @@ public:
     void Init();
     void Save();
     ConfigEntry* Bind(const char* szKey, const char* szDefaultValue, const char* szSection = "Preferences");
+    ConfigEntry* Bind(const char* szKey, int nDefaultValue, const char* szSection = "Preferences");
+    ConfigEntry* Bind(const char* szKey, float flDefaultValue, const char* szSection = "Preferences");
+    ConfigEntry* Bind(const char* szKey, bool bDefaultValue, const char* szSection = "Preferences");
     static Config* GetConfig();
 private:
     bool m_bInitialized;
@@ -45,3 +51,5 @@ private:
     friend class Config;
 };
 extern Config* cfg;
+
+#endif // _CONFIG
