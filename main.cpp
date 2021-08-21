@@ -30,7 +30,7 @@ std::string g_szModsDir;
 std::string g_szDataModsDir;
 std::string g_szCfgPath;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.2", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.3", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -119,7 +119,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     }*/
 
     /* Internal Storage */
-    //g_szInternalStoragePath = "/sdcard";
     g_szInternalStoragePath = env->GetStringUTFChars(GetAbsolutePath(env, GetStorageDir(env)), NULL);
 
     /* Package Name */
