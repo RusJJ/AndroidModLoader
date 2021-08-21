@@ -24,6 +24,7 @@ namespace fs = std::filesystem;
 #include <interfaces.h>
 #include <modslist.h>
 
+std::string g_szInternalStoragePath;
 std::string g_szAppName;
 std::string g_szModsDir;
 std::string g_szDataModsDir;
@@ -94,7 +95,6 @@ void LoadMods()
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
-
     
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
@@ -111,9 +111,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Application Context */
     jobject appContext = GetGlobalContext(env);
 
-    /* Create a folder in /sdcard/Android/data/ */
-    GetExternalFilesDir(env, appContext);
-
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
        !HasPermissionGranted(env, appContext, "WRITE_EXTERNAL_STORAGE"))
@@ -121,26 +118,30 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         RequestPermissions(env, appContext); // Instead of appContext should be !!!ACTIVITY!!! <- hard to get without SMALI-Inject (just a smali hand-rewritten, lol)
     }*/
 
+    /* Internal Storage */
+    //g_szInternalStoragePath = "/sdcard";
+    g_szInternalStoragePath = env->GetStringUTFChars(GetAbsolutePath(env, GetStorageDir(env)), NULL);
+
     /* Package Name */
     g_szAppName = env->GetStringUTFChars(GetPackageName(env, appContext), NULL);
     std::transform(g_szAppName.begin(), g_szAppName.end(), g_szAppName.begin(), [](unsigned char c) { return std::tolower(c); });
     logger->Info("Determined app info: %s", g_szAppName.c_str());
 
-    g_szModsDir = "/sdcard/Android/data/";
-    g_szModsDir += g_szAppName;
-    g_szModsDir += "/mods/";
+    /* Create a folder in /sdcard/Android/data/ */
+    if(!fs::exists(g_szInternalStoragePath + "/Android/data/" + g_szAppName)) GetExternalFilesDir(env, appContext);
+
+    /* Create a mods folder in /Android/data/ */
+    g_szModsDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/mods/";
     fs::create_directories(g_szModsDir.c_str());
 
-    g_szCfgPath = "/sdcard/Android/data/";
-    g_szCfgPath += g_szAppName;
-    g_szCfgPath += "/configs/";
+    /* Create a configs folder in Android/data/ */
+    g_szCfgPath = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/configs/";
     fs::create_directories(g_szCfgPath.c_str());
 
-    /* Data/Data Folder */
+    /* root/data/data Folder */
     g_szDataModsDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
-    //g_szDataModsDir += "/aml/";
-    fs::create_directories(g_szDataModsDir.c_str());
 
+    /* AML Config (unused currently) */
     cfg->Init();
     cfg->Bind("Author", "RusJJ aka [-=KILL MAN=-]");
     cfg->Save();
