@@ -9,3 +9,6 @@ AML provides you an interface system (like in Source Engine). You can add your o
 AML should be loaded after all libraries somehow. For example: added through the smali code (easiest way?).
 
 AML supports hard dependencies and can help you get info about mod (if it's loaded) just like a SOFT dependency. That's really cool.
+
+# Discord
+Discord Server of this project located here: https://discord.gg/2MY7W39kBg
