@@ -1,5 +1,6 @@
 #include <mod/iaml.h>
 #include <mod/logger.h>
+#include <dlfcn.h>
 
 namespace IL2CPP::Func
 {
@@ -8,7 +9,7 @@ namespace IL2CPP::Func
     {
         if(m_bInitialized) return;
 
-        uintptr_t pIL2CPP = aml->GetLib("libil2cpp.so");
+        void* pIL2CPP = dlopen("libil2cpp.so", RTLD_LAZY);
         if(!pIL2CPP)
         {
             logger->Error("Looks like we dont have IL2CPP?");

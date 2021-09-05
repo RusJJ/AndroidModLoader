@@ -30,9 +30,9 @@ uintptr_t AML::GetLib(const char* szLib)
     return ARMPatch::getLib(szLib);
 }
 
-uintptr_t AML::GetSym(uintptr_t handle, const char* sym)
+uintptr_t AML::GetSym(void* handle, const char* sym)
 {
-    return ARMPatch::getSym(handle, sym);
+    return ARMPatch::getSym((uintptr_t)handle, sym);
 }
 
 void AML::Hook(void* handle, void* fnAddress, void** orgFnAddress)

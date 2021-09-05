@@ -3,7 +3,7 @@
 #include <dlfcn.h>
 
 typedef ModInfoDependency* (*GetDependenciesListFn)();
-bool ModsList::AddMod(ModInfo* modinfo, uintptr_t modhandle)
+bool ModsList::AddMod(ModInfo* modinfo, void* modhandle)
 {
     auto it = m_vecModInfo.begin();
     auto end = m_vecModInfo.end();
@@ -16,9 +16,9 @@ bool ModsList::AddMod(ModInfo* modinfo, uintptr_t modhandle)
     modinfo->handle = modhandle;
 
     modinfo->dependencies = nullptr;
-    if(modhandle != 0)
+    if(modhandle != nullptr)
     {
-        GetDependenciesListFn getDepList = (GetDependenciesListFn)dlsym((void*)modhandle, "__GetDepsList");
+        GetDependenciesListFn getDepList = (GetDependenciesListFn)dlsym(modhandle, "__GetDepsList");
         if(getDepList != nullptr)
             modinfo->dependencies = getDepList();
     }
@@ -156,7 +156,6 @@ void ModsList::ProcessDependencies()
 }
 
 typedef void (*OnModLoadFn)();
-
 void ModsList::ProcessPreLoading()
 {
     OnModLoadFn onModLoadFn;
@@ -172,7 +171,6 @@ void ModsList::ProcessPreLoading()
         ++it;
     }
 }
-
 void ModsList::ProcessLoading()
 {
     OnModLoadFn onModLoadFn;
@@ -188,7 +186,6 @@ void ModsList::ProcessLoading()
         ++it;
     }
 }
-
 void ModsList::ProcessUnloading()
 {
     OnModLoadFn onModLoadFn;

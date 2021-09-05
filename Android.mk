@@ -26,7 +26,7 @@ LOCAL_MODULE    := AML
 LOCAL_SRC_FILES := main.cpp interface.cpp aml.cpp modslist.cpp icfg.cpp mod/logger.cpp mod/config.cpp
 LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17
 LOCAL_C_INCLUDES += ./include
-LOCAL_LDLIBS += -llog
+LOCAL_LDLIBS += -llog -ldl
 # Uncomment these two lines to add IL2CPP support! (NOT WORKING)
 #LOCAL_SRC_FILES += il2cpp/gc.cpp il2cpp/functions.cpp
 #LOCAL_CFLAGS += -D__IL2CPPUTILS

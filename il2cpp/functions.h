@@ -1,17 +1,19 @@
 #include <mod/il2cpp.h>
+#include "types.h"
+#include "typedefs.h"
 
 namespace IL2CPP::Func
 {
     /* Just a functions of our Utils */
     void HookFunctions();
 
-    /* Pointers to IL2CPP functions */
-	#ifdef UNITY_2019
-		int (*init)(const char* domain_name);
-		int (*init_utf16)(const IL2Char * domain_name);
+    /* Pointers to IL2 functions */
+	  #ifdef UNITY_2019
+        int (*init)(const char* domain_name);
+        int (*init_utf16)(const IL2Char * domain_name);
     #else
-		void (*init)(const char* domain_name);
-		void (*init_utf16)(const IL2Char * domain_name);
+        void (*init)(const char* domain_name);
+        void (*init_utf16)(const IL2Char * domain_name);
     #endif
     void (*shutdown)();
     void (*set_config_dir)(const char *config_path);
@@ -30,9 +32,9 @@ namespace IL2CPP::Func
     IL2Class* (*array_class_get)(IL2Class * element_class, uint32_t rank);
     uint32_t (*array_length)(IL2Array * array);
     uint32_t (*array_get_byte_length)(IL2Array * array);
-    IL2Array* (*array_new)(IL2Class * elementTypeInfo, il2cpp_array_size_t length);
-    IL2Array* (*array_new_specific)(IL2Class * arrayTypeInfo, il2cpp_array_size_t length);
-    IL2Array* (*array_new_full)(IL2Class * array_class, il2cpp_array_size_t * lengths, il2cpp_array_size_t * lower_bounds);
+    IL2Array* (*array_new)(IL2Class * elementTypeInfo, IL2ArraySize_t length);
+    IL2Array* (*array_new_specific)(IL2Class * arrayTypeInfo, IL2ArraySize_t length);
+    IL2Array* (*array_new_full)(IL2Class * array_class, IL2ArraySize_t * lengths, IL2ArraySize_t * lower_bounds);
     IL2Class* (*bounded_array_class_get)(IL2Class * element_class, uint32_t rank, bool bounded);
     int (*array_element_size)(const IL2Class * array_class);
     const IL2Image* (*assembly_get_image)(const IL2Assembly * assembly);
@@ -45,9 +47,9 @@ namespace IL2CPP::Func
     bool (*class_is_assignable_from)(IL2Class * klass, IL2Class * oklass);
     bool (*class_is_subclass_of)(IL2Class * klass, IL2Class * klassc, bool check_interfaces);
     bool (*class_has_parent)(IL2Class * klass, IL2Class * klassc);
-    IL2Class* (*class_from_il2cpp_type)(const IL2Type * type);
+    IL2Class* (*class_from_IL2_type)(const IL2Type * type);
     IL2Class* (*class_from_name)(const IL2Image * image, const char* namespaze, const char *name);
-    IL2Class* (*class_from_system_type)(Il2CppReflectionType * type);
+    IL2Class* (*class_from_system_type)(IL2ReflectionType * type);
     IL2Class* (*class_get_element_class)(IL2Class * klass);
     const EventInfo* (*class_get_events)(IL2Class * klass, void* *iter);
     FieldInfo* (*class_get_fields)(IL2Class * klass, void* *iter);
@@ -90,10 +92,10 @@ namespace IL2CPP::Func
     size_t (*class_get_bitmap_size)(const IL2Class * klass);
     void (*class_get_bitmap)(IL2Class * klass, size_t * bitmap);
     bool (*stats_dump_to_file)(const char *path);
-    uint64_t (*stats_get_value)(Il2CppStat stat);
-    Il2CppDomain* (*domain_get)();
-    const IL2Assembly* (*domain_assembly_open)(Il2CppDomain * domain, const char* name);
-    const IL2Assembly** (*domain_get_assemblies)(const Il2CppDomain * domain, size_t * size);
+    uint64_t (*stats_get_value)(IL2Stat stat);
+    IL2Domain* (*domain_get)();
+    const IL2Assembly* (*domain_assembly_open)(IL2Domain * domain, const char* name);
+    const IL2Assembly** (*domain_get_assemblies)(const IL2Domain * domain, size_t * size);
     #ifdef UNITY_2019
 		void (*raise_exception)(IL2Exception*);
     #endif
@@ -150,7 +152,7 @@ namespace IL2CPP::Func
 		uint32_t (*offset_of_array_bounds_in_array_object_header)();
 		uint32_t (*allocation_granularity)();
     #endif
-    void* (*unity_liveness_calculation_begin)(IL2Class * filter, int max_object_count, il2cpp_register_object_callback callback, void* userdata, il2cpp_WorldChangedCallback onWorldStarted, il2cpp_WorldChangedCallback onWorldStopped);
+    void* (*unity_liveness_calculation_begin)(IL2Class * filter, int max_object_count, IL2RegisterObjectCB callback, void* userdata, IL2WorldChangedCB onWorldStarted, IL2WorldChangedCB onWorldStopped);
     void (*unity_liveness_calculation_end)(void* state);
     void (*unity_liveness_calculation_from_root)(IL2Object * root, void* state);
     void (*unity_liveness_calculation_from_statics)(void* state);
@@ -172,12 +174,12 @@ namespace IL2CPP::Func
 
     // ONLY IF THE PROFILER EXISTS FOR UNITY_2019
     void (*profiler_install)(IL2Profiler * prof, IL2ProfileFunc shutdown_callback);
-    void (*profiler_set_events)(Il2CppProfileFlags events);
-    void (*profiler_install_enter_leave)(Il2CppProfileMethodFunc enter, Il2CppProfileMethodFunc fleave);
-    void (*profiler_install_allocation)(Il2CppProfileAllocFunc callback);
-    void (*profiler_install_gc)(Il2CppProfileGCFunc callback, Il2CppProfileGCResizeFunc heap_resize_callback);
-    void (*profiler_install_fileio)(Il2CppProfileFileIOFunc callback);
-    void (*profiler_install_thread)(Il2CppProfileThreadFunc start, Il2CppProfileThreadFunc end);
+    void (*profiler_set_events)(IL2ProfileFlags events);
+    void (*profiler_install_enter_leave)(IL2ProfileMethodFunc enter, IL2ProfileMethodFunc fleave);
+    void (*profiler_install_allocation)(IL2ProfileAllocFunc callback);
+    void (*profiler_install_gc)(IL2ProfileGCFunc callback, IL2ProfileGCResizeFunc heap_resize_callback);
+    void (*profiler_install_fileio)(IL2ProfileFileIOFunc callback);
+    void (*profiler_install_thread)(IL2ProfileThreadFunc start, IL2ProfileThreadFunc end);
 
     uint32_t (*property_get_flags)(const PropertyInfo * prop);
     const MethodInfo* (*property_get_get_method)(const PropertyInfo * prop);
@@ -246,9 +248,9 @@ namespace IL2CPP::Func
     size_t (*image_get_class_count)(const IL2Image * image);
     const IL2Class* (*image_get_class)(const IL2Image * image, size_t index);
     IL2ManagedMemorySnapshot* (*capture_memory_snapshot)();
-    void (*free_captured_memory_snapshot)(Il2CppManagedMemorySnapshot * snapshot);
-    void (*set_find_plugin_callback)(Il2CppSetFindPlugInCallback method);
-    void (*register_log_callback)(Il2CppLogCallback method);
+    void (*free_captured_memory_snapshot)(IL2ManagedMemorySnapshot * snapshot);
+    void (*set_find_plugin_callback)(IL2SetFindPlugInCallback method);
+    void (*register_log_callback)(IL2LogCallback method);
     void (*debugger_set_agent_options)(const char* options);
     bool (*is_debugger_attached)();
     #ifdef UNITY_2019

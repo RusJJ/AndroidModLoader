@@ -4,6 +4,7 @@
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <link.h>
 #include <dlfcn.h>
 #include <filesystem>
 namespace fs = std::filesystem;
@@ -30,7 +31,7 @@ std::string g_szModsDir;
 std::string g_szDataModsDir;
 std::string g_szCfgPath;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.3", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.4", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -42,7 +43,7 @@ typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
     std::filesystem::path filepath;
-    std::filesystem::path datapath = g_szDataModsDir + "/libmodcopy.so";
+    std::filesystem::path datapath = g_szDataModsDir + "/libAMLMod.so";
     ModInfo* pModInfo = nullptr;
     SpecificGameFn maybeINeedAGame = nullptr;
 	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
@@ -74,7 +75,7 @@ void LoadMods()
                     dlclose(handle);
                     goto nextMod;
                 }
-                if(!modlist->AddMod(pModInfo, (uintptr_t)handle))
+                if(!modlist->AddMod(pModInfo, handle))
                 {
                     logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
                     dlclose(handle);
