@@ -28,7 +28,7 @@ namespace fs = std::filesystem;
 std::string g_szInternalStoragePath;
 std::string g_szAppName;
 std::string g_szModsDir;
-std::string g_szDataModsDir;
+std::string g_szDataDir;
 std::string g_szCfgPath;
 
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.4", "RusJJ aka [-=KILL MAN=-]");
@@ -43,7 +43,7 @@ typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
     std::filesystem::path filepath;
-    std::filesystem::path datapath = g_szDataModsDir + "/libAMLMod.so";
+    std::filesystem::path datapath = g_szDataDir + "/libAMLMod.so";
     ModInfo* pModInfo = nullptr;
     SpecificGameFn maybeINeedAGame = nullptr;
 	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
@@ -139,7 +139,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     fs::create_directories(g_szCfgPath.c_str());
 
     /* root/data/data Folder */
-    g_szDataModsDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
+    g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
 
     /* AML Config (unused currently) */
     cfg->Init();

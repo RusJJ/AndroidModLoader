@@ -5,6 +5,7 @@
 
 extern std::string g_szAppName;
 extern std::string g_szCfgPath;
+extern std::string g_szDataDir;
 const char* AML::GetCurrentGame()
 {
     return g_szAppName.c_str();
@@ -13,6 +14,11 @@ const char* AML::GetCurrentGame()
 const char* AML::GetConfigPath()
 {
     return g_szCfgPath.c_str();
+}
+
+const char* AML::GetDataPath()
+{
+    return g_szDataDir.c_str();
 }
 
 bool AML::HasMod(const char* szGUID)
