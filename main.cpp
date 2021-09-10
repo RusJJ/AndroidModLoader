@@ -52,7 +52,7 @@ void LoadMods()
 		if (filepath.extension() == ".so")
 		{
             fs::remove(datapath.string()); // Fix crash of fs::copy
-
+ 
             fs::copy(filepath.string(), datapath.string());
             chmod(datapath.string().c_str(), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
@@ -144,6 +144,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* AML Config (unused currently) */
     cfg->Init();
     cfg->Bind("Author", "RusJJ aka [-=KILL MAN=-]");
+    cfg->Bind("Version", modinfo->VersionString());
     cfg->Save();
 
     /* Mods? */
