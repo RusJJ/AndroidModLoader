@@ -54,19 +54,19 @@ inline IAML* GetAMLInterface() { return aml; }
 	void HookOf_##_name(__VA_ARGS__)
 /* Just a hook of a function */
 #define HOOK(_name, _fnAddr)                                    \
-    aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+    aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a function located in PLT section (by address!) */
 #define HOOKPLT(_name, _fnAddr)                                 \
-    aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+    aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a function hidden behind IL2CPP */
 #define HOOK_IL2CPP(_name, _methodInfo)                         \
-    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&HookOf_##_name), (void**)(&_name));
+    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&HookOf_##_name), (void**)(&_name))
 /* Unhook a function (unsafe, actually) */
 #define UNHOOK(_name, _fnAddr)                                  \
-    aml->Hook((void*)(_fnAddr), (void*)(&_name), (void**)0);
+    aml->Hook((void*)(_fnAddr), (void*)(&_name), (void**)0)
 /* Unhook an IL2CPP function (unsafe, actually) */
 #define UNHOOK_IL2CPP(_name, _methodInfo)                       \
-    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&_name), (void**)0);
+    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&_name), (void**)0)
 
 /* Just a hook decl with saveable original function pointer */
 #define DECL_HOOK2(_ret, _name, ...)                            \
@@ -81,17 +81,17 @@ inline IAML* GetAMLInterface() { return aml; }
 /* Just a hook of a function and save original function pointer */
 #define HOOK2(_name, _fnAddr)                                   \
     fnLocated##_name = (void*)_fnAddr;                          \
-    aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+    aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a function located in PLT section (by address!) and save original function pointer */
 #define HOOK2PLT(_name, _fnAddr)                                \
     fnLocated##_name = (void*)_fnAddr;                          \
-    aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+    aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a function hidden behind IL2CPP and save original function pointer */
 #define HOOK2_IL2CPP(_name, _methodInfo)                        \
     fnLocated##_name = (void*)_methodInfo->methodPointer;       \
-    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&HookOf_##_name), (void**)(&_name));
+    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&HookOf_##_name), (void**)(&_name))
 /* Unhook a function (unsafe, actually) that was saved before */
 #define UNHOOK2(_name)                                          \
-    aml->Hook(fnLocated##_name, (void*)(&_name), (void**)0);
+    aml->Hook(fnLocated##_name, (void*)(&_name), (void**)0)
 
 #endif // _IAML
