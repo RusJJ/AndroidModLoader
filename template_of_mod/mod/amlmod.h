@@ -12,8 +12,10 @@
 
 #ifdef __GNUC__
     #define ASM_NAKED __attribute__((naked))
+    #define EXPORT __attribute__((visibility("default")))
 #else
     #define ASM_NAKED __declspec(naked)
+    #define EXPORT
 #endif
 
 #define MYMOD(_guid, _name, _version, _author)                          \
@@ -97,7 +99,7 @@ public:
     inline unsigned short Minor() { return minor; }
     inline unsigned short Revision() { return revision; }
     inline unsigned short Build() { return build; }
-    inline uintptr_t Handle() { return handle; }
+    inline void* Handle() { return handle; }
 private:
     char szGUID[48];
     char szName[48];
@@ -107,7 +109,7 @@ private:
     unsigned short minor;
     unsigned short revision;
     unsigned short build;
-    uintptr_t handle;
+    void* handle;
     ModInfoDependency* dependencies;
 
     friend class ModsList;
