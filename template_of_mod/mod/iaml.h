@@ -35,11 +35,7 @@ public:
 };
 
 extern IAML* aml;
-inline IAML* GetAMLInterface()
-{
-    return aml;
-}
-
+inline IAML* GetAMLInterface() { return aml; }
 
 /* Unprotect that memory chunk for making changes */
 #define UNPROT(_addr, ...)                                      \

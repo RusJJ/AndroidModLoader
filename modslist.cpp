@@ -130,7 +130,6 @@ void ModsList::ProcessDependencies()
         auto end = modlist->m_vecModInfo.end();
         while( it != end )
         {
-            //logger->Info("Mods count: %d", m_vecModInfo.size());
             pInfo = *it;
             if(pInfo->dependencies != nullptr)
             {
@@ -217,6 +216,23 @@ void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
             onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->handle), "OnInterfaceAdded");
             if(onInterfaceAddedFn == nullptr) onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->handle), "_Z16OnInterfaceAddedPKcPKv");
             if(onInterfaceAddedFn != nullptr) onInterfaceAddedFn(name, ptr);
+        }
+        ++it;
+    }
+}
+
+void ModsList::OnAllModsLoaded()
+{
+    OnModLoadFn onModsLoadedFn;
+    auto it = modlist->m_vecModInfo.begin();
+    auto end = modlist->m_vecModInfo.end();
+    while( it != end )
+    {
+        if((*it)->handle != 0)
+        {
+            onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnAllModsLoaded");
+            if(onModsLoadedFn == nullptr) onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z16OnAllModsLoadedv");
+            if(onModsLoadedFn != nullptr) onModsLoadedFn();
         }
         ++it;
     }

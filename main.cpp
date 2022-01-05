@@ -130,16 +130,18 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     std::transform(g_szAppName.begin(), g_szAppName.end(), g_szAppName.begin(), [](unsigned char c) { return std::tolower(c); });
     logger->Info("Determined app info: %s", g_szAppName.c_str());
 
-    /* Create a folder in /sdcard/Android/data/.../ */
+    /* Create a folder in /Android/data/.../ */
     if(!fs::exists(g_szInternalStoragePath + "/Android/data/" + g_szAppName)) GetExternalFilesDir(env, appContext);
 
-    /* Create a mods folder in /Android/data/.../ */
+    /* Create "mods" folder in /Android/data/.../ */
     g_szModsDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/mods/";
     fs::create_directories(g_szModsDir.c_str());
 
+    /* Create "files" folder in /Android/data/.../ */
     g_szAndroidDataDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/files/";
+    fs::create_directories(g_szAndroidDataDir.c_str()); // Who knows, right?
 
-    /* Create a configs folder in Android/data/.../ */
+    /* Create "configs" folder in /Android/data/.../ */
     g_szCfgPath = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/configs/";
     fs::create_directories(g_szCfgPath.c_str());
 
@@ -169,6 +171,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     modlist->ProcessPreLoading();
     modlist->ProcessLoading();
 
+    modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
 
     return JNI_VERSION_1_6;

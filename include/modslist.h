@@ -21,6 +21,7 @@ public:
 // Callbacks
 public:
     void OnInterfaceAdded(const char* name, const void* ptr);
+    void OnAllModsLoaded();
 
 private:
     std::vector<ModInfo*> m_vecModInfo;

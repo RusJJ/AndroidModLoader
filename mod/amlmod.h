@@ -25,10 +25,7 @@
     IAML* aml = (IAML*)GetInterface("AMLInterface");
 
 #define MYMODCFG(_guid, _name, _version, _author)                       \
-    static ModInfo modinfoLocal(#_guid, #_name, #_version, #_author);   \
-    ModInfo* modinfo = &modinfoLocal;                                   \
-    extern "C" ModInfo* __GetModInfo() { return modinfo; }              \
-    IAML* aml = (IAML*)GetInterface("AMLInterface");                    \
+    MYMOD(_guid, _name, _version, _author);                             \
     static Config cfgLocal(#_guid);                                     \
     Config* cfg = &cfgLocal;
 
