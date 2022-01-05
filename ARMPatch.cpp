@@ -5,12 +5,12 @@
 #include <ctype.h>
 
 #ifdef __arm__
-	extern "C" void MSHookFunction(void* symbol, void* replace, void** result);
+	extern "C" bool MSHookFunction(void* symbol, void* replace, void** result);
 #elif defined __aarch64__
-	extern "C" void A64HookFunction(void *const symbol, void *const replace, void **result);
+	extern "C" bool A64HookFunction(void *const symbol, void *const replace, void **result);
 	#define cacheflush(c, n, zeroarg) __builtin___clear_cache((char*)(c), (char*)(n))
 #else
-	#error This lib is supposed to work on ARMv7 and ARMv8 only!
+	#error This lib is supposed to work on ARM only!
 #endif
 
 using namespace std;
@@ -24,20 +24,18 @@ namespace ARMPatch
 		uintptr_t address = 0;
 
 		fp = fopen( "/proc/self/maps", "rt" );
-		if (fp == 0) goto done;
-			
-		while (fgets(buffer, sizeof(buffer), fp))
+		if (fp != NULL)
 		{
-			if ( strstr( buffer, soLib ) )
+			while (fgets(buffer, sizeof(buffer), fp))
 			{
-				address = (uintptr_t)strtoul( buffer, 0, 16 );
-				break;
+				if ( strstr( buffer, soLib ) )
+				{
+					address = (uintptr_t)strtoul( buffer, 0, 16 );
+					break;
+				}
 			}
+			fclose(fp);
 		}
-
-		done:
-		if (fp) fclose(fp);
-
 		return address;
 	}
 	uintptr_t getLibLength(const char* soLib)
@@ -48,21 +46,19 @@ namespace ARMPatch
 		uintptr_t address = 0;
 
 		fp = fopen( "/proc/self/maps", "rt" );
-		if (fp == 0) goto done;
-		
-		while (fgets(buffer, sizeof(buffer), fp))
+		if (fp != NULL)
 		{
-			if ( strstr( buffer, soLib ) )
+			while (fgets(buffer, sizeof(buffer), fp))
 			{
-				address = (uintptr_t)strtoul( buffer, 0, 16 );
-				address = (uintptr_t)strtoul( &buffer[9], 0, 16 ) - address;
-				break;
+				if ( strstr( buffer, soLib ) )
+				{
+					address = (uintptr_t)strtoul( buffer, 0, 16 );
+					address = (uintptr_t)strtoul( &buffer[9], 0, 16 ) - address;
+					break;
+				}
 			}
+			fclose(fp);
 		}
-
-		done:
-		if (fp) fclose(fp);
-
 		return address;
 	}
 	uintptr_t getSym(uintptr_t handle, const char* sym)
@@ -77,7 +73,7 @@ namespace ARMPatch
 	{
 		unprotect(dest);
 		memcpy((void*)dest, (void*)src, size);
-		cacheflush(dest, dest + size, 0);
+		cacheflush(CLEAR_BIT0(dest), CLEAR_BIT0(dest) + size, 0);
 	}
 	void read(uintptr_t src, uintptr_t dest, size_t size)
 	{
@@ -92,7 +88,7 @@ namespace ARMPatch
 			(*(char*)p) = 0x00;
 			(*(char*)(p + 1)) = 0x46;
 		}
-		cacheflush(addr, addr + count * 2, 0);
+		cacheflush(CLEAR_BIT0(addr), CLEAR_BIT0(addr) + count * 2, 0);
 	}
 	void JMP(uintptr_t addr, uintptr_t dest)
 	{
@@ -104,14 +100,14 @@ namespace ARMPatch
 	{
 		write(addr, (uintptr_t)"\xF7\x46", 2);
 	}
-	void hookInternal(void* addr, void* func, void** original)
+	bool hookInternal(void* addr, void* func, void** original)
 	{
-		if (addr == NULL) return;
+		if (addr == NULL || func == NULL) return false;
 		unprotect((uintptr_t)addr);
 		#ifdef __arm__
-			MSHookFunction(addr, func, original);
+			return MSHookFunction(addr, func, original);
 		#elif defined __aarch64__
-			A64HookFunction(addr, func, original);
+			return A64HookFunction(addr, func, original);
 		#endif
 	}
 	void hookPLTInternal(void* addr, void* func, void** original)

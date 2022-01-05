@@ -3,7 +3,8 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_MODULE := substrate
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
-	LOCAL_SRC_FILES := libsubstrate-armv7a.a # Cydia Substrate
+	LOCAL_SRC_FILES := libsubstrate-armv7a_Cydia.a # Cydia Substrate
+	#LOCAL_SRC_FILES := libsubstrate-armv7a_Inline.a # Android Inline Hook by ele7enxxh (you can hook one function ONLY ONCE (hope im not wrong))
 else
 	ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
 		LOCAL_SRC_FILES := libsubstrate-armv8a.a # And64InlineHook
@@ -28,7 +29,7 @@ LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17
 LOCAL_C_INCLUDES += ./include
 LOCAL_LDLIBS += -llog -ldl
 # Uncomment these two lines to add IL2CPP support! (NOT WORKING)
-#LOCAL_SRC_FILES += il2cpp/gc.cpp il2cpp/functions.cpp
-#LOCAL_CFLAGS += -D__IL2CPPUTILS
+#	LOCAL_SRC_FILES += il2cpp/gc.cpp il2cpp/functions.cpp
+#	LOCAL_CFLAGS += -D__IL2CPPUTILS
 # Uncomment these two lines to add IL2CPP support! (NOT WORKING)
 include $(BUILD_SHARED_LIBRARY)

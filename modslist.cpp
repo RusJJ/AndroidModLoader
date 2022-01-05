@@ -166,6 +166,7 @@ void ModsList::ProcessPreLoading()
         if((*it)->handle != 0)
         {
             onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModPreLoad");
+            if(onModLoadFn == nullptr) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z12OnModPreLoadv");
             if(onModLoadFn != nullptr) onModLoadFn();
         }
         ++it;
@@ -181,6 +182,7 @@ void ModsList::ProcessLoading()
         if((*it)->handle != 0)
         {
             onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModLoad");
+            if(onModLoadFn == nullptr) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z9OnModLoadv");
             if(onModLoadFn != nullptr) onModLoadFn();
         }
         ++it;
@@ -196,7 +198,25 @@ void ModsList::ProcessUnloading()
         if((*it)->handle != 0)
         {
             onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModUnload");
+            if(onModLoadFn == nullptr) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z11OnModUnloadv");
             if(onModLoadFn != nullptr) onModLoadFn();
+        }
+        ++it;
+    }
+}
+typedef void (*OnInterfaceAddedFn)(const char*, const void*);
+void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
+{
+    OnInterfaceAddedFn onInterfaceAddedFn;
+    auto it = modlist->m_vecModInfo.begin();
+    auto end = modlist->m_vecModInfo.end();
+    while( it != end )
+    {
+        if((*it)->handle != 0)
+        {
+            onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->handle), "OnInterfaceAdded");
+            if(onInterfaceAddedFn == nullptr) onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->handle), "_Z16OnInterfaceAddedPKcPKv");
+            if(onInterfaceAddedFn != nullptr) onInterfaceAddedFn(name, ptr);
         }
         ++it;
     }

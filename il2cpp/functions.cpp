@@ -4,15 +4,15 @@
 
 namespace IL2CPP::Func
 {
+    void* pIL2CPP = NULL;
     static bool m_bInitialized = false;
     void HookFunctions()
     {
         if(m_bInitialized) return;
 
-        void* pIL2CPP = dlopen("libil2cpp.so", RTLD_LAZY);
-        if(!pIL2CPP)
+        if(!(pIL2CPP = dlopen("libil2cpp.so", RTLD_LAZY)))
         {
-            logger->Error("Looks like we dont have IL2CPP?");
+            logger->Error("IL2CPP: Looks like this is not a Unity game?");
             return;
         }
 

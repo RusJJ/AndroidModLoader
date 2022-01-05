@@ -3,12 +3,22 @@
 #include <dlfcn.h>
 #include <sys/mman.h>
 
-#define DECLFN(_name, _ret, ...)			\
-		_ret (*orgnl_##_name)(__VA_ARGS__);	\
-		_ret hooked_##_name(__VA_ARGS__)
-#define USEFN(_name)	\
-		&hooked_##_name, &orgnl_##_name
-#define CALLFN(_name, ...) orgnl_##_name(__VA_ARGS__)
+/* Just a hook declaration */
+#define DECL_HOOK(_ret, _name, ...)                             \
+    _ret (*_name)(__VA_ARGS__);	                                \
+	_ret HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = void */
+#define DECL_HOOKv(_name, ...)                                  \
+    void (*_name)(__VA_ARGS__);	                                \
+	void HookOf_##_name(__VA_ARGS__)
+/* Just a hook of a function */
+#define HOOK(_name, _fnAddr)                                    \
+    ARMPatch::hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+/* Just a hook of a function located in PLT section (by address!) */
+#define HOOKPLT(_name, _fnAddr)                                 \
+    ARMPatch::hookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name));
+/* Clear a bit of an address! */
+#define CLEAR_BIT0(addr) (addr & 0xFFFFFFFE)
 
 struct bytePattern
 {
@@ -94,16 +104,16 @@ namespace ARMPatch
 		func - Call that function instead of an original
 		original - Original function!
 	*/
-	void hookInternal(void* addr, void* func, void** original);
+	bool hookInternal(void* addr, void* func, void** original);
 	template<class A, class B, class C>
-	void hook(A addr, B func, C original)
+	bool hook(A addr, B func, C original)
 	{
-		hookInternal((void*)addr, (void*)func, (void**)original);
+		return hookInternal((void*)addr, (void*)func, (void**)original);
 	}
 	template<class A, class B>
-	void hook(A addr, B func)
+	bool hook(A addr, B func)
 	{
-		hookInternal((void*)addr, (void*)func, (void**)NULL);
+		return hookInternal((void*)addr, (void*)func, (void**)NULL);
 	}
 	
 	/*

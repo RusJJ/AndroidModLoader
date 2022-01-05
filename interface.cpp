@@ -1,6 +1,8 @@
 #include "interfaces.h"
 #include "mod/logger.h"
 #include <jni.h>
+#define _IAML // Do not include "interface" twice!
+#include "modslist.h"
 
 static std::map<std::string, void*> g_hInterfacesMap;
 
@@ -8,14 +10,16 @@ void InterfaceSys::Register(std::string szInterfaceName, void* pInterfacePointer
 {
 	if(pInterfacePointer == nullptr)
 	{
-		logger->Error("Failed to add interface %s to list because it's NULLPTR!", szInterfaceName.c_str());
+		logger->Error("Failed to add interface %s to list because it's NULL!", szInterfaceName.c_str());
 		return;
 	}
 	auto ret = g_hInterfacesMap.insert(std::pair<std::string, void*>(szInterfaceName, pInterfacePointer));
 	if(!ret.second)
 	{
 		logger->Error("Failed to add interface %s to list!", szInterfaceName.c_str());
+		return;
 	}
+	modlist->OnInterfaceAdded(szInterfaceName.c_str(), pInterfacePointer);
 }
 
 void* InterfaceSys::Get(std::string szInterfaceName)

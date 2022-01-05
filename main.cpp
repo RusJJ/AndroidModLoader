@@ -28,10 +28,11 @@ namespace fs = std::filesystem;
 std::string g_szInternalStoragePath;
 std::string g_szAppName;
 std::string g_szModsDir;
+std::string g_szAndroidDataDir;
 std::string g_szDataDir;
 std::string g_szCfgPath;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.4", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.5", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -42,8 +43,7 @@ ICFG* icfg = &icfgLocal;
 typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
-    std::filesystem::path filepath;
-    std::filesystem::path datapath = g_szDataDir + "/libAMLMod.so";
+    std::filesystem::path filepath, datapath = g_szDataDir + "/libAMLMod.so";
     ModInfo* pModInfo = nullptr;
     SpecificGameFn maybeINeedAGame = nullptr;
 	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
@@ -51,6 +51,8 @@ void LoadMods()
 		filepath = file.path();
 		if (filepath.extension() == ".so")
 		{
+            datapath = g_szDataDir + "/" + filepath.filename().c_str();
+
             fs::remove(datapath.string()); // Fix crash of fs::copy
  
             fs::copy(filepath.string(), datapath.string());
@@ -87,7 +89,7 @@ void LoadMods()
                 dlclose(handle);
             }
 
-            nextMod:
+          nextMod:
             fs::remove(datapath.string());
 		}
 	}
@@ -116,7 +118,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
        !HasPermissionGranted(env, appContext, "WRITE_EXTERNAL_STORAGE"))
     {
-        RequestPermissions(env, appContext); // Instead of appContext should be !!!ACTIVITY!!! <- hard to get without SMALI-Inject (just a smali hand-rewritten, lol)
+        // Instead of appContext should be !!!ACTIVITY!!! <- Hard to get without SMALI-Inject (just a smali hand-rewritten, lol)
+        RequestPermissions(env, appContext);
     }*/
 
     /* Internal Storage */
@@ -127,14 +130,16 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     std::transform(g_szAppName.begin(), g_szAppName.end(), g_szAppName.begin(), [](unsigned char c) { return std::tolower(c); });
     logger->Info("Determined app info: %s", g_szAppName.c_str());
 
-    /* Create a folder in /sdcard/Android/data/ */
+    /* Create a folder in /sdcard/Android/data/.../ */
     if(!fs::exists(g_szInternalStoragePath + "/Android/data/" + g_szAppName)) GetExternalFilesDir(env, appContext);
 
-    /* Create a mods folder in /Android/data/ */
+    /* Create a mods folder in /Android/data/.../ */
     g_szModsDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/mods/";
     fs::create_directories(g_szModsDir.c_str());
 
-    /* Create a configs folder in Android/data/ */
+    g_szAndroidDataDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/files/";
+
+    /* Create a configs folder in Android/data/.../ */
     g_szCfgPath = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/configs/";
     fs::create_directories(g_szCfgPath.c_str());
 
@@ -145,18 +150,22 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     cfg->Init();
     cfg->Bind("Author", "RusJJ aka [-=KILL MAN=-]");
     cfg->Bind("Version", modinfo->VersionString());
+    cfg->Bind("LaunchedTimeStamp", (int)time(NULL));
     cfg->Save();
 
     /* Mods? */
     logger->Info("Working with mods...");
     #ifdef __IL2CPPUTILS
+        logger->Info("IL2CPP: Attempting to initialize IL2CPP-Utils");
         IL2CPP::Func::HookFunctions();
     #endif
     LoadMods();
 
-    /* All mods loaded. We should check for dependencies! */
+    /* All mods are loaded now. We should check for dependencies! */
     logger->Info("Checking for dependencies...");
     modlist->ProcessDependencies();
+
+    /* All mods are sorted and should be loaded! */
     modlist->ProcessPreLoading();
     modlist->ProcessLoading();
 

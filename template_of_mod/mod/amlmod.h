@@ -97,7 +97,7 @@ public:
     inline unsigned short Minor() { return minor; }
     inline unsigned short Revision() { return revision; }
     inline unsigned short Build() { return build; }
-    inline void* Handle() { return handle; }
+    inline uintptr_t Handle() { return handle; }
 private:
     char szGUID[48];
     char szName[48];
@@ -107,7 +107,7 @@ private:
     unsigned short minor;
     unsigned short revision;
     unsigned short build;
-    void* handle;
+    uintptr_t handle;
     ModInfoDependency* dependencies;
 
     friend class ModsList;

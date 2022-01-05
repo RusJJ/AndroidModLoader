@@ -1,10 +1,14 @@
+#ifndef __MODSLIST_H
+#define __MODSLIST_H
+
 #include <vector>
 #include <mod/amlmod.h>
 
 class ModsList
 {
+// Functions
 public:
-    bool AddMod(ModInfo* modinfo, uintptr_t modhandle);
+    bool AddMod(ModInfo* modinfo, void* modhandle);
     bool RemoveMod(ModInfo* modinfo);
     bool RemoveMod(const char* szGUID);
     bool HasMod(const char* szGUID);
@@ -14,8 +18,14 @@ public:
     void ProcessLoading();
     void ProcessUnloading();
 
+// Callbacks
+public:
+    void OnInterfaceAdded(const char* name, const void* ptr);
+
 private:
     std::vector<ModInfo*> m_vecModInfo;
 };
 
 extern ModsList* modlist;
+
+#endif // __MODSLIST_H

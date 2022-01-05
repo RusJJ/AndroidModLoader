@@ -11,13 +11,13 @@
 class IAML
 {
 public:
-    /* AML 1.0.0.0 */
+    /* AML 1.0.0 */
     virtual const char* GetCurrentGame() = 0;
     virtual const char* GetConfigPath() = 0;
     virtual bool HasMod(const char* szGUID) = 0;
     virtual bool HasModOfVersion(const char* szGUID, const char* szVersion) = 0;
     virtual uintptr_t GetLib(const char* szLib) = 0;
-    virtual uintptr_t GetSym(void* handle, const char* sym) = 0;
+    virtual uintptr_t GetSym(uintptr_t handle, const char* sym) = 0;
     virtual void Hook(void* handle, void* fnAddress, void** orgFnAddress = nullptr) = 0;
     virtual void HookPLT(void* handle, void* fnAddress, void** orgFnAddress = nullptr) = 0;
     virtual int Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
@@ -26,9 +26,6 @@ public:
     virtual void PlaceNOP(uintptr_t addr, size_t count = 1) = 0; // Untested on ARMv8
     virtual void PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
     virtual void PlaceRET(uintptr_t addr) = 0; // Untested on ARMv8
-
-    /* AML 1.0.0.4 */
-    virtual const char* GetDataPath() = 0;
 };
 
 extern IAML* aml;

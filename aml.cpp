@@ -6,6 +6,7 @@
 extern std::string g_szAppName;
 extern std::string g_szCfgPath;
 extern std::string g_szDataDir;
+extern std::string g_szAndroidDataDir;
 const char* AML::GetCurrentGame()
 {
     return g_szAppName.c_str();
@@ -19,6 +20,11 @@ const char* AML::GetConfigPath()
 const char* AML::GetDataPath()
 {
     return g_szDataDir.c_str();
+}
+
+const char* AML::GetAndroidDataPath()
+{
+    return g_szAndroidDataDir.c_str();
 }
 
 bool AML::HasMod(const char* szGUID)
@@ -41,9 +47,9 @@ uintptr_t AML::GetSym(void* handle, const char* sym)
     return ARMPatch::getSym((uintptr_t)handle, sym);
 }
 
-void AML::Hook(void* handle, void* fnAddress, void** orgFnAddress)
+bool AML::Hook(void* handle, void* fnAddress, void** orgFnAddress)
 {
-    ARMPatch::hookInternal(handle, fnAddress, orgFnAddress);
+    return ARMPatch::hookInternal(handle, fnAddress, orgFnAddress);
 }
 
 void AML::HookPLT(void* handle, void* fnAddress, void** orgFnAddress)

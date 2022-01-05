@@ -12,8 +12,10 @@
 
 #ifdef __GNUC__
     #define ASM_NAKED __attribute__((naked))
+    #define EXPORT __attribute__((visibility("default")))
 #else
     #define ASM_NAKED __declspec(naked)
+    #define EXPORT
 #endif
 
 #define MYMOD(_guid, _name, _version, _author)                          \

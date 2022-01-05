@@ -18,7 +18,7 @@ public:
     virtual bool HasModOfVersion(const char* szGUID, const char* szVersion) = 0;
     virtual uintptr_t GetLib(const char* szLib) = 0;
     virtual uintptr_t GetSym(void* handle, const char* sym) = 0;
-    virtual void Hook(void* handle, void* fnAddress, void** orgFnAddress = nullptr) = 0;
+    virtual bool Hook(void* handle, void* fnAddress, void** orgFnAddress = nullptr) = 0; // AML 1.0.0.5: Returns true on success
     virtual void HookPLT(void* handle, void* fnAddress, void** orgFnAddress = nullptr) = 0;
     virtual int Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
     virtual void Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
@@ -28,7 +28,10 @@ public:
     virtual void PlaceRET(uintptr_t addr) = 0; // Untested on ARMv8
 
     /* AML 1.0.0.4 */
-    virtual const char* GetDataPath() = 0;
+    virtual const char* GetDataPath() = 0; // /data/data/.../*
+
+    /* AML 1.0.0.5 */
+    virtual const char* GetAndroidDataPath() = 0; // /sdcard/Android/data/.../files/*
 };
 
 extern IAML* aml;
