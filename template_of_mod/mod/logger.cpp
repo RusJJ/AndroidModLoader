@@ -1,5 +1,7 @@
 #ifndef DONT_USE_STB
-    #define STB_SPRINTF_IMPLEMENTATION
+    #ifndef DONT_IMPLEMENT_STB
+        #define STB_SPRINTF_IMPLEMENTATION
+    #endif
     #include <mod/thirdparty/stb_sprintf.h>
 
     #define vsnprintf stbsp_vsnprintf
