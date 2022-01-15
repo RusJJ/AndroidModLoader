@@ -4,7 +4,7 @@
 
 #include <mod/iaml.h>
 
-extern const char* g_szCfgPath;
+extern char g_szCfgPath[0xFF];
 
 void* CFG::InitIniPointer()
 {

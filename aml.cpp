@@ -2,9 +2,9 @@
 #include <ARMPatch.h>
 #include <modslist.h>
 
-extern const char g_szAppName[0xFF];
-extern const char g_szCfgPath[0xFF];
-extern const char g_szAndroidDataDir[0xFF];
+extern char g_szAppName[0xFF];
+extern char g_szCfgPath[0xFF];
+extern char g_szAndroidDataDir[0xFF];
 extern const char* g_szDataDir;
 const char* AML::GetCurrentGame()
 {
