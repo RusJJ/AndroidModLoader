@@ -43,9 +43,17 @@ ICFG* icfg = &icfgLocal;
 
 inline bool EndsWith(const char* base, const char* str)
 {
-    int blen = strlen(base);
-    int slen = strlen(str);
+    static int blen, slen;
+    blen = strlen(base);
+    slen = strlen(str);
     return (blen >= slen) && (!strcmp(base + blen - slen, str));
+}
+
+inline bool EndsWithSO(const char* base)
+{
+    static int blen;
+    blen = strlen(base);
+    return (blen >= 3) && (!strcmp(base + blen - 3, ".so"));
 }
 
 // Is this actually faster, bruh?
@@ -88,23 +96,25 @@ void LoadMods()
 {
     ModInfo* pModInfo = NULL;
     SpecificGameFn maybeINeedAGame = NULL;
+    GetModInfoFn modInfoFn = NULL;
 
     char buf[0xFF], dataBuf[0xFF];
-    DIR* dir; struct dirent *diread;
-    if ((dir = opendir(g_szModsDir)) != NULL)
+    DIR* dir = opendir(g_szModsDir);
+    if (dir != NULL)
     {
+        struct dirent *diread; void* handle;
         while ((diread = readdir(dir)) != NULL)
         {
-            if(!EndsWith(diread->d_name, ".so")) continue;
+            if(!EndsWithSO(diread->d_name)) continue;
 
-            snprintf(buf, sizeof(buf), "%s/%s", g_szModsDir, diread->d_name);
-            snprintf(dataBuf, sizeof(dataBuf), "%s/%s", g_szDataDir, diread->d_name);
-            remove(dataBuf);
+            sprintf(buf, "%s/%s", g_szModsDir, diread->d_name);
+            sprintf(dataBuf, "%s/%s", g_szDataDir, diread->d_name);
+            unlink(dataBuf);
             if(!CopyFileFaster(buf, dataBuf)) continue;
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
-            void* handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM!
-            GetModInfoFn modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
+            handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM!
+            modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
             if(modInfoFn != NULL)
             {
                 pModInfo = modInfoFn();
@@ -125,7 +135,7 @@ void LoadMods()
               nextMod:
                 dlclose(handle);
             }
-            remove(dataBuf);
+            //unlink(dataBuf);
         }
         closedir(dir);
     }
@@ -163,7 +173,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Internal Storage */
     jTmp = GetAbsolutePath(env, GetStorageDir(env));
     szTmp = env->GetStringUTFChars(jTmp, NULL);
-    snprintf(g_szInternalStoragePath, sizeof(g_szInternalStoragePath), "%s", szTmp);
+    sprintf(g_szInternalStoragePath, "%s", szTmp);
     env->ReleaseStringUTFChars(jTmp, szTmp);
 
     /* Package Name */
@@ -186,15 +196,15 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     else GetExternalFilesDir(env, appContext);
 
     /* Create "mods" folder in /Android/data/.../ */
-    snprintf(g_szModsDir, sizeof(g_szModsDir), "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
+    sprintf(g_szModsDir, "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szModsDir, 0700);
 
     /* Create "files" folder in /Android/data/.../ */
-    snprintf(g_szAndroidDataDir, sizeof(g_szAndroidDataDir), "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
+    sprintf(g_szAndroidDataDir, "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szAndroidDataDir, 0700); // Who knows, right?
 
     /* Create "configs" folder in /Android/data/.../ */
-    snprintf(g_szCfgPath, sizeof(g_szCfgPath), "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
+    sprintf(g_szCfgPath, "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szCfgPath, 0700);
 
     /* root/data/data Folder */
