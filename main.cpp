@@ -1,10 +1,14 @@
+#ifndef DONT_USE_STB
+    #include <mod/thirdparty/stb_sprintf.h>
+    #define sprintf stbsp_sprintf
+    #define snprintf stbsp_snprintf
+#endif
 #include <jnifn.h>
-#include <algorithm>
-#include <cctype>
+#include <unistd.h>
 #include <dirent.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <link.h>
+#include <sys/stat.h> // mkdir
+#include <sys/sendfile.h> // sendfile
+#include <fcntl.h> // "open" flags
 #include <dlfcn.h>
 
 #include <defines.h>
@@ -16,9 +20,9 @@
     #include <il2cpp/functions.h>
 #endif
 
-/* Should be after config.h in main.cpp */
+// Should be after config.h in main.cpp
 #include <icfg_desc.h>
-/* Should be after config.h in main.cpp */
+// Should be after config.h in main.cpp
 
 #include <interfaces.h>
 #include <modslist.h>
@@ -41,7 +45,26 @@ inline bool EndsWith(const char* base, const char* str)
 {
     int blen = strlen(base);
     int slen = strlen(str);
-    return (blen >= slen) && (0 == strcmp(base + blen - slen, str));
+    return (blen >= slen) && (!strcmp(base + blen - slen, str));
+}
+
+// Is this actually faster, bruh?
+inline bool CopyFileFaster(const char* file, const char* dest)
+{
+    static off_t off; struct stat statBuf;
+    int inFd = open(file, O_RDONLY);
+    if(inFd < 0) return false;
+    fstat(inFd, &statBuf);
+    int outFd = open(dest, O_WRONLY | O_CREAT, statBuf.st_mode);
+    if(outFd < 0)
+    {
+        close(inFd);
+        return false;
+    }
+    sendfile(outFd, inFd, &off, statBuf.st_size);
+    close(inFd);
+    close(outFd);
+    return true;
 }
 
 inline bool CopyFile(const char* file, const char* dest)
@@ -74,10 +97,11 @@ void LoadMods()
         {
             if(!EndsWith(diread->d_name, ".so")) continue;
 
-            sprintf(buf, "%s/%s", g_szModsDir, diread->d_name);
-            sprintf(dataBuf, "%s/%s", g_szDataDir, diread->d_name);
+            snprintf(buf, sizeof(buf), "%s/%s", g_szModsDir, diread->d_name);
+            snprintf(dataBuf, sizeof(dataBuf), "%s/%s", g_szDataDir, diread->d_name);
             remove(dataBuf);
-            if(!CopyFile(buf, dataBuf)) continue;
+            if(!CopyFileFaster(buf, dataBuf)) continue;
+            chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
             void* handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM!
             GetModInfoFn modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
@@ -139,9 +163,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Internal Storage */
     jTmp = GetAbsolutePath(env, GetStorageDir(env));
     szTmp = env->GetStringUTFChars(jTmp, NULL);
-    sprintf(g_szInternalStoragePath, "%s", szTmp);
+    snprintf(g_szInternalStoragePath, sizeof(g_szInternalStoragePath), "%s", szTmp);
     env->ReleaseStringUTFChars(jTmp, szTmp);
-
 
     /* Package Name */
     char i = 0;
@@ -157,21 +180,21 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
     /* Create a folder in /Android/data/.../ */
     char szBuf[0xFF];
-    sprintf(szBuf, "%s/Android/data/%s", g_szInternalStoragePath, g_szAppName);
+    snprintf(szBuf, sizeof(szBuf), "%s/Android/data/%s", g_szInternalStoragePath, g_szAppName);
     DIR* dir = opendir(szBuf);
     if(dir != NULL) closedir(dir);
     else GetExternalFilesDir(env, appContext);
 
     /* Create "mods" folder in /Android/data/.../ */
-    sprintf(g_szModsDir, "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
+    snprintf(g_szModsDir, sizeof(g_szModsDir), "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szModsDir, 0700);
 
     /* Create "files" folder in /Android/data/.../ */
-    sprintf(g_szAndroidDataDir, "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
+    snprintf(g_szAndroidDataDir, sizeof(g_szAndroidDataDir), "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szAndroidDataDir, 0700); // Who knows, right?
 
     /* Create "configs" folder in /Android/data/.../ */
-    sprintf(g_szCfgPath, "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
+    snprintf(g_szCfgPath, sizeof(g_szCfgPath), "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szCfgPath, 0700);
 
     /* root/data/data Folder */

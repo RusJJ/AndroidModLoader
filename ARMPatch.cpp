@@ -1,7 +1,4 @@
 #include "ARMPatch.h"
-#include <cstring>
-#include <cstdio>
-#include <cstdlib>
 #include <ctype.h>
 
 #ifdef __arm__

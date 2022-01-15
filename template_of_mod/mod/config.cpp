@@ -1,224 +1,62 @@
-#include "config.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <mod/logger.h>
+#ifndef DONT_USE_STB
+    #ifndef DONT_IMPLEMENT_STB
+        #define STB_SPRINTF_IMPLEMENTATION
+    #endif
+    #include <mod/thirdparty/stb_sprintf.h>
 
-#include "amlmod.h"
-#include "iaml.h"
-#if !defined(__AML) && defined(_ICFG)
-	ICFG* icfg;
-#else
-	#include <fstream>
-	#include "thirdparty/inipp.h"
+    #define vsnprintf stbsp_vsnprintf
 #endif
-#ifdef __AML
-	extern char g_szCfgPath[0xFF];
-#endif
+#include "logger.h"
+#include <android/log.h>
 
-
-
-extern ModInfo* modinfo;
-
-Config::Config(const char* szName)
+Logger::Logger()
 {
-#if !defined(__AML) && defined(_ICFG)
-	m_pICFG = (ICFG*)GetInterface("AMLConfig");
-	m_iniMyConfig = m_pICFG->InitIniPointer();
-#else
-	m_iniMyConfig = new inipp::Ini<char>();
-#endif
-	m_bInitialized = false;
-    m_szName = szName;
-
-	#ifndef __AML
-		Init();
-	#endif
+    m_szTag = "AML Mod";
 }
 
-void Config::Init()
+Logger* Logger::GetLogger()
 {
-	if(m_bInitialized) return;
-	m_bInitialized = true;
-	#if !defined(__AML) && defined(_ICFG)
-		m_pICFG->ParseInputStream(m_iniMyConfig, m_szName);
-	#else
-		char path[0xFF];
-		#ifdef __AML
-    		sprintf(path, "%s%s.ini", g_szCfgPath, m_szName);
-			std::ifstream cfgStream(path);
-		#else
-    		sprintf(path, "%s%s.ini", aml->GetConfigPath(), m_szName);
-			std::ifstream cfgStream(path);
-		#endif
-		if(cfgStream.is_open())
-		{
-			((inipp::Ini<char>*)m_iniMyConfig)->parse(cfgStream);
-		}
-		cfgStream.close();
-	#endif
+    return logger;
 }
 
-void Config::Save()
+void Logger::SetTag(const char* szTag)
 {
-	if(!m_bInitialized) return;
-	#if !defined(__AML) && defined(_ICFG)
-		m_pICFG->GenerateToOutputStream(m_iniMyConfig, m_szName);
-	#else
-		char path[0xFF];
-		#ifdef __AML
-    		sprintf(path, "%s%s.ini", g_szCfgPath, m_szName);
-			std::ofstream cfgStream(path);
-		#else
-    		sprintf(path, "%s%s.ini", aml->GetConfigPath(), m_szName);
-			std::ofstream cfgStream(path);
-		#endif
-		if(cfgStream.is_open())
-		{
-			((inipp::Ini<char>*)m_iniMyConfig)->generate(cfgStream);
-		}
-		cfgStream << "";
-		cfgStream.close();
-	#endif
+    m_szTag = szTag;
 }
 
-ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const char* szSection)
+void Logger::Info(const char* szMessage, ...)
 {
-	if(!m_bInitialized) return NULL;
-	ConfigEntry* pRet = new ConfigEntry;
-	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
-	const char* tryToGetValue;
-	#if !defined(__AML) && defined(_ICFG)
-		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-	#else
-		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
-	#endif
-	if(tryToGetValue[0] == '\0')
-		pRet->SetString(szDefaultValue);
-	else
-		pRet->SetString(tryToGetValue);
-	Save();
-	return pRet;
+    char buffer[384];
+    va_list args;
+    va_start(args, szMessage);
+    vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    __android_log_write(ANDROID_LOG_INFO, m_szTag, buffer);
+    va_end(args);
 }
 
-ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSection)
+void Logger::InfoV(const char* szMessage, va_list args)
 {
-	if(!m_bInitialized) return NULL;
-	ConfigEntry* pRet = new ConfigEntry;
-	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
-	const char* tryToGetValue;
-	#if !defined(__AML) && defined(_ICFG)
-		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-	#else
-		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
-	#endif
-	if(tryToGetValue[0] == '\0')
-		pRet->SetInt(nDefaultValue);
-	else
-		pRet->SetString(tryToGetValue);
-	Save();
-	return pRet;
+    char buffer[384];
+    vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    __android_log_write(ANDROID_LOG_INFO, m_szTag, buffer);
 }
 
-ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* szSection)
+void Logger::Error(const char* szMessage, ...)
 {
-	if(!m_bInitialized) return NULL;
-	ConfigEntry* pRet = new ConfigEntry;
-	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
-	const char* tryToGetValue;
-	#if !defined(__AML) && defined(_ICFG)
-		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-	#else
-		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
-	#endif
-	if(tryToGetValue[0] == '\0')
-		pRet->SetFloat(flDefaultValue);
-	else
-		pRet->SetString(tryToGetValue);
-	Save();
-	return pRet;
+    char buffer[384];
+    va_list args;
+    va_start(args, szMessage);
+    vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    __android_log_write(ANDROID_LOG_ERROR, m_szTag, buffer);
+    va_end(args);
 }
 
-ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szSection)
+void Logger::ErrorV(const char* szMessage, va_list args)
 {
-	if(!m_bInitialized) return NULL;
-	ConfigEntry* pRet = new ConfigEntry;
-	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
-	const char* tryToGetValue;
-	#if !defined(__AML) && defined(_ICFG)
-		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-	#else
-		tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
-	#endif
-	if(tryToGetValue[0] == '\0')
-		pRet->SetBool(bDefaultValue);
-	else
-		pRet->SetString(tryToGetValue);
-	Save();
-	return pRet;
+    char buffer[384];
+    vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    __android_log_write(ANDROID_LOG_ERROR, m_szTag, buffer);
 }
 
-void ConfigEntry::SetString(const char* newValue)
-{
-	m_szValue = newValue;
-	m_nIntegerValue = atoi(m_szValue);
-	m_fFloatValue = (float)atof(m_szValue);
-
-	#if !defined(__AML) && defined(_ICFG)
-		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-	#else
-		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
-	#endif
-}
-
-void ConfigEntry::SetFloat(float newValue)
-{
-	m_fFloatValue = newValue;
-    m_nIntegerValue = (int)newValue;
-    
-	char szVal[32];
-	sprintf(szVal, "%f", newValue);
-    m_szValue = szVal;
-
-	#if !defined(__AML) && defined(_ICFG)
-		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-	#else
-		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
-	#endif
-}
-
-void ConfigEntry::SetInt(int newValue)
-{
-	m_fFloatValue = (float)newValue;
-    m_nIntegerValue = newValue;
-    
-	char szVal[32];
-	sprintf(szVal, "%d", newValue);
-    m_szValue = szVal;
-
-	#if !defined(__AML) && defined(_ICFG)
-		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-	#else
-		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
-	#endif
-}
-
-void ConfigEntry::SetBool(bool newValue)
-{
-	m_fFloatValue = newValue?1.0f:0.0f;
-    m_nIntegerValue = newValue?1:0;
-    m_szValue = newValue?"1":"0";
-
-	#if !defined(__AML) && defined(_ICFG)
-		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-	#else
-		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
-	#endif
-}
+static Logger loggerLocal;
+Logger* logger = &loggerLocal;

@@ -1,6 +1,9 @@
+#ifndef DONT_USE_STB
+    #include <mod/thirdparty/stb_sprintf.h>
+    #define sprintf stbsp_sprintf
+    #define snprintf stbsp_snprintf
+#endif
 #include "config.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <mod/logger.h>
 
 #include "amlmod.h"
@@ -44,10 +47,10 @@ void Config::Init()
 	#else
 		char path[0xFF];
 		#ifdef __AML
-    		sprintf(path, "%s%s.ini", g_szCfgPath, m_szName);
+    		snprintf(path, sizeof(path), "%s%s.ini", g_szCfgPath, m_szName);
 			std::ifstream cfgStream(path);
 		#else
-    		sprintf(path, "%s%s.ini", aml->GetConfigPath(), m_szName);
+    		snprintf(path, sizeof(path), "%s%s.ini", aml->GetConfigPath(), m_szName);
 			std::ifstream cfgStream(path);
 		#endif
 		if(cfgStream.is_open())
@@ -66,10 +69,10 @@ void Config::Save()
 	#else
 		char path[0xFF];
 		#ifdef __AML
-    		sprintf(path, "%s%s.ini", g_szCfgPath, m_szName);
+    		snprintf(path, sizeof(path), "%s%s.ini", g_szCfgPath, m_szName);
 			std::ofstream cfgStream(path);
 		#else
-    		sprintf(path, "%s%s.ini", aml->GetConfigPath(), m_szName);
+    		snprintf(path, sizeof(path), "%s%s.ini", aml->GetConfigPath(), m_szName);
 			std::ofstream cfgStream(path);
 		#endif
 		if(cfgStream.is_open())
@@ -183,8 +186,8 @@ void ConfigEntry::SetFloat(float newValue)
 	m_fFloatValue = newValue;
     m_nIntegerValue = (int)newValue;
     
-	char szVal[32];
-	sprintf(szVal, "%f", newValue);
+    char szVal[32];
+    snprintf(szVal, sizeof(szVal), "%f", newValue);
     m_szValue = szVal;
 
 	#if !defined(__AML) && defined(_ICFG)
@@ -200,7 +203,7 @@ void ConfigEntry::SetInt(int newValue)
     m_nIntegerValue = newValue;
     
 	char szVal[32];
-	sprintf(szVal, "%d", newValue);
+	snprintf(szVal, sizeof(szVal), "%d", newValue);
     m_szValue = szVal;
 
 	#if !defined(__AML) && defined(_ICFG)
