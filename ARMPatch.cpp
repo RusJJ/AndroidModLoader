@@ -61,9 +61,15 @@ namespace ARMPatch
 		}
 		return address;
 	}
-	uintptr_t getSym(uintptr_t handle, const char* sym)
+	uintptr_t getSym(void* handle, const char* sym)
 	{
-		return (uintptr_t)dlsym((void*)handle, sym);
+		return (uintptr_t)dlsym(handle, sym);
+	}
+	uintptr_t getSym(uintptr_t libAddr, const char* sym)
+	{
+		Dl_info info;
+		if(dladdr((void*)libAddr, &info) == 0) return 0;
+		return (uintptr_t)dlsym(info.dli_fbase, sym);
 	}
 	int unprotect(uintptr_t addr, size_t len)
 	{
@@ -144,7 +150,7 @@ namespace ARMPatch
 			if (isxdigit(*input))
 			{
 				entry.bUnknown = false;
-				entry.nValue = (uint8_t)std::strtol(input, nullptr, 16);
+				entry.nValue = (uint8_t)std::strtol(input, NULL, 16);
 				input += 2;
 			}
 			else

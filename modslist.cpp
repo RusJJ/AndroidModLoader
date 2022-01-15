@@ -15,11 +15,11 @@ bool ModsList::AddMod(ModInfo* modinfo, void* modhandle)
 
     modinfo->handle = modhandle;
 
-    modinfo->dependencies = nullptr;
-    if(modhandle != nullptr)
+    modinfo->dependencies = NULL;
+    if(modhandle != NULL)
     {
         GetDependenciesListFn getDepList = (GetDependenciesListFn)dlsym(modhandle, "__GetDepsList");
-        if(getDepList != nullptr)
+        if(getDepList != NULL)
             modinfo->dependencies = getDepList();
     }
     
@@ -93,7 +93,7 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
 
     auto it = m_vecModInfo.begin();
     auto end = m_vecModInfo.end();
-    ModInfo* pInfo = nullptr;
+    ModInfo* pInfo = NULL;
     while( it != end )
     {
         pInfo = *it;
@@ -119,8 +119,8 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
 void ModsList::ProcessDependencies()
 {
     bool bRepeatDependencies = true;
-    ModInfoDependency* depList = nullptr;
-    ModInfo* pInfo = nullptr;
+    ModInfoDependency* depList = NULL;
+    ModInfo* pInfo = NULL;
     int i;
 
     while( bRepeatDependencies && m_vecModInfo.size() > 1 )
@@ -131,7 +131,7 @@ void ModsList::ProcessDependencies()
         while( it != end )
         {
             pInfo = *it;
-            if(pInfo->dependencies != nullptr)
+            if(pInfo->dependencies != NULL)
             {
                 depList = pInfo->dependencies;
                 for(i = 0; depList[i].szGUID[0] != '\0'; ++i)
@@ -147,7 +147,7 @@ void ModsList::ProcessDependencies()
                     }
                 }
                 if( bRepeatDependencies ) break;
-                pInfo->dependencies = nullptr; // Dont check that mod again if everything is ok...
+                pInfo->dependencies = NULL; // Dont check that mod again if everything is ok...
             }
             ++it;
         }
@@ -165,8 +165,8 @@ void ModsList::ProcessPreLoading()
         if((*it)->handle != 0)
         {
             onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModPreLoad");
-            if(onModLoadFn == nullptr) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z12OnModPreLoadv");
-            if(onModLoadFn != nullptr) onModLoadFn();
+            if(onModLoadFn == NULL) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z12OnModPreLoadv");
+            if(onModLoadFn != NULL) onModLoadFn();
         }
         ++it;
     }
@@ -181,8 +181,8 @@ void ModsList::ProcessLoading()
         if((*it)->handle != 0)
         {
             onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModLoad");
-            if(onModLoadFn == nullptr) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z9OnModLoadv");
-            if(onModLoadFn != nullptr) onModLoadFn();
+            if(onModLoadFn == NULL) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z9OnModLoadv");
+            if(onModLoadFn != NULL) onModLoadFn();
         }
         ++it;
     }
@@ -197,8 +197,8 @@ void ModsList::ProcessUnloading()
         if((*it)->handle != 0)
         {
             onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnModUnload");
-            if(onModLoadFn == nullptr) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z11OnModUnloadv");
-            if(onModLoadFn != nullptr) onModLoadFn();
+            if(onModLoadFn == NULL) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z11OnModUnloadv");
+            if(onModLoadFn != NULL) onModLoadFn();
         }
         ++it;
     }
@@ -214,8 +214,8 @@ void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
         if((*it)->handle != 0)
         {
             onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->handle), "OnInterfaceAdded");
-            if(onInterfaceAddedFn == nullptr) onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->handle), "_Z16OnInterfaceAddedPKcPKv");
-            if(onInterfaceAddedFn != nullptr) onInterfaceAddedFn(name, ptr);
+            if(onInterfaceAddedFn == NULL) onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->handle), "_Z16OnInterfaceAddedPKcPKv");
+            if(onInterfaceAddedFn != NULL) onInterfaceAddedFn(name, ptr);
         }
         ++it;
     }
@@ -231,8 +231,8 @@ void ModsList::OnAllModsLoaded()
         if((*it)->handle != 0)
         {
             onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnAllModsLoaded");
-            if(onModsLoadedFn == nullptr) onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z16OnAllModsLoadedv");
-            if(onModsLoadedFn != nullptr) onModsLoadedFn();
+            if(onModsLoadedFn == NULL) onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z16OnAllModsLoadedv");
+            if(onModsLoadedFn != NULL) onModsLoadedFn();
         }
         ++it;
     }

@@ -44,10 +44,17 @@ namespace ARMPatch
 	uintptr_t getLibLength(const char* soLib);
 	/*
 		Get library's function address by symbol (__unwind???)
-		handle - handle of a library (getLib for example)
+		handle - HANDLE (NOTICE THIS!!!) of a library (u can obtain it using dlopen)
 		sym - name of a function
 	*/
-	uintptr_t getSym(uintptr_t handle, const char* sym);
+	uintptr_t getSym(void* handle, const char* sym);
+	/*
+		Get library's function address by symbol (__unwind???)
+		libAddr - ADDRESS (NOTICE THIS!!!) of a library (u can obtain it using getLib)
+		sym - name of a function
+		@XMDS requested this
+	*/
+	uintptr_t getSym(uintptr_t libAddr, const char* sym);
 	
 	/*
 		Reprotect memory to allow reading/writing/executing

@@ -78,7 +78,7 @@ void Config::Save()
 
 ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const char* szSection)
 {
-	if(!m_bInitialized) return nullptr;
+	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
@@ -99,7 +99,7 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
 
 ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSection)
 {
-	if(!m_bInitialized) return nullptr;
+	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
@@ -120,7 +120,7 @@ ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSe
 
 ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* szSection)
 {
-	if(!m_bInitialized) return nullptr;
+	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
@@ -141,7 +141,7 @@ ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* s
 
 ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szSection)
 {
-	if(!m_bInitialized) return nullptr;
+	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;

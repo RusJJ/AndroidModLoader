@@ -8,7 +8,7 @@ static std::map<std::string, void*> g_hInterfacesMap;
 
 void InterfaceSys::Register(std::string szInterfaceName, void* pInterfacePointer)
 {
-	if(pInterfacePointer == nullptr)
+	if(pInterfacePointer == NULL)
 	{
 		logger->Error("Failed to add interface %s to list because it's NULL!", szInterfaceName.c_str());
 		return;
@@ -35,7 +35,7 @@ void* InterfaceSys::Get(std::string szInterfaceName)
 		}
 		++it;
 	}
-	return nullptr;
+	return NULL;
 }
 
 static InterfaceSys interfacesLocal;

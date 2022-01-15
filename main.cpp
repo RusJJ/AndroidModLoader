@@ -44,8 +44,8 @@ typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
     std::filesystem::path filepath, datapath = g_szDataDir + "/libAMLMod.so";
-    ModInfo* pModInfo = nullptr;
-    SpecificGameFn maybeINeedAGame = nullptr;
+    ModInfo* pModInfo = NULL;
+    SpecificGameFn maybeINeedAGame = NULL;
 	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
 	{
 		filepath = file.path();
@@ -61,19 +61,13 @@ void LoadMods()
             void* handle = dlopen(datapath.string().c_str(), RTLD_NOW); // Load it to RAM!
             
             GetModInfoFn modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
-            if(modInfoFn != nullptr)
+            if(modInfoFn != NULL)
             {
                 pModInfo = modInfoFn();
                 maybeINeedAGame = (SpecificGameFn)dlsym(handle, "__INeedASpecificGame");
-                if(maybeINeedAGame != nullptr && strcmp(maybeINeedAGame(), g_szAppName.c_str()) != 0)
+                if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), g_szAppName.c_str()) != 0)
                 {
                     logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
-                    dlclose(handle);
-                    goto nextMod;
-                }
-                if(dlsym(handle, "OnModPreLoad") == nullptr && dlsym(handle, "OnModLoad") == nullptr)
-                {
-                    logger->Error("Mod (GUID %s) has no EntryPoint!", pModInfo->GUID());
                     dlclose(handle);
                     goto nextMod;
                 }
@@ -104,7 +98,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     modlist->AddMod(modinfo, 0);
 
     /* JNI Environment */
-    JNIEnv* env = nullptr;
+    JNIEnv* env = NULL;
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     {
         logger->Error("Cannot get JNI Environment!");
