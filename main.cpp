@@ -2,12 +2,11 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <link.h>
 #include <dlfcn.h>
-#include <filesystem>
-namespace fs = std::filesystem;
 
 #include <defines.h>
 #include <mod/amlmod.h>
@@ -39,27 +38,49 @@ Config* cfg = &cfgLocal;
 static CFG icfgLocal;
 ICFG* icfg = &icfgLocal;
 
+inline bool EndsWith(const char* base, const char* str)
+{
+    int blen = strlen(base);
+    int slen = strlen(str);
+    return (blen >= slen) && (0 == strcmp(base + blen - slen, str));
+}
+
+inline bool CopyFile(const char* file, const char* dest)
+{
+    FILE* source = fopen(file, "r");
+    if(source == NULL) return false;
+    FILE* target = fopen(dest, "w");
+    if(target == NULL) 
+    {
+        fclose(source);
+        return false;
+    }
+    while(!feof(source)) fputc(fgetc(source), target);
+    fclose(source);
+    fclose(target);
+    return true;
+}
 
 typedef const char* (*SpecificGameFn)();
 void LoadMods()
 {
-    std::filesystem::path filepath, datapath = g_szDataDir + "/libAMLMod.so";
     ModInfo* pModInfo = NULL;
     SpecificGameFn maybeINeedAGame = NULL;
-	for (const auto& file : fs::recursive_directory_iterator(g_szModsDir.c_str()))
-	{
-		filepath = file.path();
-		if (filepath.extension() == ".so")
-		{
-            datapath = g_szDataDir + "/" + filepath.filename().c_str();
 
-            fs::remove(datapath.string()); // Fix crash of fs::copy
- 
-            fs::copy(filepath.string(), datapath.string());
-            chmod(datapath.string().c_str(), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
+    char buf[0xFF], dataBuf[0xFF];
+    DIR* dir; struct dirent *diread;
+    if ((dir = opendir(g_szModsDir.c_str())) != NULL)
+    {
+        while ((diread = readdir(dir)) != NULL)
+        {
+            if(!EndsWith(diread->d_name, ".so")) continue;
 
-            void* handle = dlopen(datapath.string().c_str(), RTLD_NOW); // Load it to RAM!
-            
+            sprintf(buf, "%s/%s", g_szModsDir.c_str(), diread->d_name);
+            sprintf(dataBuf, "%s/%s", g_szDataDir.c_str(), diread->d_name);
+            remove(dataBuf);
+            if(!CopyFile(buf, dataBuf)) continue;
+
+            void* handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM!
             GetModInfoFn modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
             if(modInfoFn != NULL)
             {
@@ -68,25 +89,23 @@ void LoadMods()
                 if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), g_szAppName.c_str()) != 0)
                 {
                     logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
-                    dlclose(handle);
                     goto nextMod;
                 }
                 if(!modlist->AddMod(pModInfo, handle))
                 {
                     logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
-                    dlclose(handle);
                     goto nextMod;
                 }
             }
             else
             {
+              nextMod:
                 dlclose(handle);
             }
-
-          nextMod:
-            fs::remove(datapath.string());
-		}
-	}
+            remove(dataBuf);
+        }
+        closedir(dir);
+    }
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
@@ -125,28 +144,30 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     logger->Info("Determined app info: %s", g_szAppName.c_str());
 
     /* Create a folder in /Android/data/.../ */
-    if(!fs::exists(g_szInternalStoragePath + "/Android/data/" + g_szAppName)) GetExternalFilesDir(env, appContext);
+    DIR* dir = opendir((g_szInternalStoragePath + "/Android/data/" + g_szAppName).c_str());
+    if(dir != NULL) closedir(dir);
+    else GetExternalFilesDir(env, appContext);
 
     /* Create "mods" folder in /Android/data/.../ */
     g_szModsDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/mods/";
-    fs::create_directories(g_szModsDir.c_str());
+    mkdir(g_szModsDir.c_str(), 0700);
 
     /* Create "files" folder in /Android/data/.../ */
     g_szAndroidDataDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/files/";
-    fs::create_directories(g_szAndroidDataDir.c_str()); // Who knows, right?
+    mkdir(g_szAndroidDataDir.c_str(), 0700); // Who knows, right?
 
     /* Create "configs" folder in /Android/data/.../ */
     g_szCfgPath = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/configs/";
-    fs::create_directories(g_szCfgPath.c_str());
+    mkdir(g_szCfgPath.c_str(), 0700);
 
     /* root/data/data Folder */
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
 
     /* AML Config (unused currently) */
     cfg->Init();
-    cfg->Bind("Author", "RusJJ aka [-=KILL MAN=-]");
-    cfg->Bind("Version", modinfo->VersionString());
-    cfg->Bind("LaunchedTimeStamp", (int)time(NULL));
+    cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
+    cfg->Bind("Version", "")->SetString(modinfo->VersionString());
+    cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
     cfg->Save();
 
     /* Mods? */
@@ -164,7 +185,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* All mods are sorted and should be loaded! */
     modlist->ProcessPreLoading();
     modlist->ProcessLoading();
-
     modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
 
