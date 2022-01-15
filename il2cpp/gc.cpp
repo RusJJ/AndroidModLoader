@@ -1,5 +1,5 @@
 #include <cstdio>
-#include <string>
+#include <cstring>
 
 namespace IL2CPP::GC
 {

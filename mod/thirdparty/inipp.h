@@ -34,7 +34,7 @@ SOFTWARE.
 #include <map>
 #include <memory>
 #include <sstream>
-#include <string>
+#include <cstring>
 
 namespace inipp {
 

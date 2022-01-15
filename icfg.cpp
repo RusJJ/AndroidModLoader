@@ -4,18 +4,24 @@
 
 #include <mod/iaml.h>
 
-extern std::string g_szCfgPath;
+extern const char* g_szCfgPath;
 
 void* CFG::InitIniPointer()
 {
     return new inipp::Ini<char>();
 }
 void CFG::ParseInputStream(void* iniPointer, const char* szFilename)
-{	std::ifstream cfgStream((g_szCfgPath + szFilename + ".ini").c_str());
+{
+    char path[0xFF];
+    sprintf(path, "%s%s.ini", g_szCfgPath, szFilename);
+    std::ifstream cfgStream(path);
     ((inipp::Ini<char>*)iniPointer)->parse(cfgStream);
 }
 void CFG::GenerateToOutputStream(void* iniPointer, const char* szFilename)
-{	std::ofstream cfgStream((g_szCfgPath + szFilename + ".ini").c_str());
+{
+    char path[0xFF];
+    sprintf(path, "%s%s.ini", g_szCfgPath, szFilename);
+    std::ofstream cfgStream(path);
     ((inipp::Ini<char>*)iniPointer)->generate(cfgStream);
 }
 const char* CFG::GetValueFrom(void* iniPointer, const char* szSection, const char* szKey)

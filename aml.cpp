@@ -1,30 +1,29 @@
 #include <aml.h>
 #include <ARMPatch.h>
 #include <modslist.h>
-#include <string>
 
-extern std::string g_szAppName;
-extern std::string g_szCfgPath;
-extern std::string g_szDataDir;
-extern std::string g_szAndroidDataDir;
+extern const char g_szAppName[0xFF];
+extern const char g_szCfgPath[0xFF];
+extern const char g_szAndroidDataDir[0xFF];
+extern const char* g_szDataDir;
 const char* AML::GetCurrentGame()
 {
-    return g_szAppName.c_str();
+    return g_szAppName;
 }
 
 const char* AML::GetConfigPath()
 {
-    return g_szCfgPath.c_str();
+    return g_szCfgPath;
 }
 
 const char* AML::GetDataPath()
 {
-    return g_szDataDir.c_str();
+    return g_szDataDir;
 }
 
 const char* AML::GetAndroidDataPath()
 {
-    return g_szAndroidDataDir.c_str();
+    return g_szAndroidDataDir;
 }
 
 bool AML::HasMod(const char* szGUID)

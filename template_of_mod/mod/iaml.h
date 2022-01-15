@@ -32,6 +32,7 @@ public:
 
     /* AML 1.0.0.5 */
     virtual const char* GetAndroidDataPath() = 0; // /sdcard/Android/data/.../files/*
+    virtual uintptr_t GetSym(uintptr_t libAddr, const char* sym) = 0; // An additional func but it uses ADDRESS instead of HANDLE
 };
 
 extern IAML* aml;

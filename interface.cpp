@@ -1,35 +1,36 @@
+#include <map>
+#include <jni.h>
 #include "interfaces.h"
 #include "mod/logger.h"
-#include <jni.h>
 #define _IAML // Do not include "interface" twice!
 #include "modslist.h"
 
-static std::map<std::string, void*> g_hInterfacesMap;
+static std::map<const char*, void*> g_hInterfacesMap;
 
-void InterfaceSys::Register(std::string szInterfaceName, void* pInterfacePointer)
+void InterfaceSys::Register(const char* szInterfaceName, void* pInterfacePointer)
 {
 	if(pInterfacePointer == NULL)
 	{
-		logger->Error("Failed to add interface %s to list because it's NULL!", szInterfaceName.c_str());
+		logger->Error("Failed to add interface %s to list because it's NULL!", szInterfaceName);
 		return;
 	}
-	auto ret = g_hInterfacesMap.insert(std::pair<std::string, void*>(szInterfaceName, pInterfacePointer));
+	auto ret = g_hInterfacesMap.insert(std::pair<const char*, void*>(szInterfaceName, pInterfacePointer));
 	if(!ret.second)
 	{
-		logger->Error("Failed to add interface %s to list!", szInterfaceName.c_str());
+		logger->Error("Failed to add interface %s to list!", szInterfaceName);
 		return;
 	}
-	modlist->OnInterfaceAdded(szInterfaceName.c_str(), pInterfacePointer);
+	modlist->OnInterfaceAdded(szInterfaceName, pInterfacePointer);
 }
 
-void* InterfaceSys::Get(std::string szInterfaceName)
+void* InterfaceSys::Get(const char* szInterfaceName)
 {
 	auto it = g_hInterfacesMap.begin();
-	auto it_end = g_hInterfacesMap.end();
+	auto end = g_hInterfacesMap.end();
 
-	while (it != it_end)
+	while (it != end)
 	{
-		if (it->first == szInterfaceName)
+		if (!strcmp(it->first, szInterfaceName))
 		{
 			return (it->second);
 		}

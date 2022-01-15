@@ -14,7 +14,6 @@ bool ModsList::AddMod(ModInfo* modinfo, void* modhandle)
     }
 
     modinfo->handle = modhandle;
-
     modinfo->dependencies = NULL;
     if(modhandle != NULL)
     {
@@ -119,11 +118,11 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
 void ModsList::ProcessDependencies()
 {
     bool bRepeatDependencies = true;
+    int i;
     ModInfoDependency* depList = NULL;
     ModInfo* pInfo = NULL;
-    int i;
 
-    while( bRepeatDependencies && m_vecModInfo.size() > 1 )
+    while( bRepeatDependencies && m_vecModInfo.size() >= 1 )
     {
         bRepeatDependencies = false;
         auto it = modlist->m_vecModInfo.begin();

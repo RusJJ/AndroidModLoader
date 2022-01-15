@@ -1,7 +1,6 @@
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
 #include <mod/logger.h>
 
 #include "amlmod.h"
@@ -13,7 +12,7 @@
 	#include "thirdparty/inipp.h"
 #endif
 #ifdef __AML
-	extern std::string g_szCfgPath;
+	extern char g_szCfgPath[0xFF];
 #endif
 
 
@@ -43,10 +42,13 @@ void Config::Init()
 	#if !defined(__AML) && defined(_ICFG)
 		m_pICFG->ParseInputStream(m_iniMyConfig, m_szName);
 	#else
+		char path[0xFF];
 		#ifdef __AML
-			std::ifstream cfgStream((g_szCfgPath + m_szName + ".ini").c_str());
+    		sprintf(path, "%s%s.ini", g_szCfgPath, m_szName);
+			std::ifstream cfgStream(path);
 		#else
-			std::ifstream cfgStream((std::string(aml->GetConfigPath()) + m_szName + ".ini").c_str());
+    		sprintf(path, "%s%s.ini", aml->GetConfigPath(), m_szName);
+			std::ifstream cfgStream(path);
 		#endif
 		if(cfgStream.is_open())
 		{
@@ -62,10 +64,13 @@ void Config::Save()
 	#if !defined(__AML) && defined(_ICFG)
 		m_pICFG->GenerateToOutputStream(m_iniMyConfig, m_szName);
 	#else
+		char path[0xFF];
 		#ifdef __AML
-			std::ofstream cfgStream((g_szCfgPath + m_szName + ".ini").c_str());
+    		sprintf(path, "%s%s.ini", g_szCfgPath, m_szName);
+			std::ofstream cfgStream(path);
 		#else
-			std::ofstream cfgStream((std::string(aml->GetConfigPath()) + m_szName + ".ini").c_str());
+    		sprintf(path, "%s%s.ini", aml->GetConfigPath(), m_szName);
+			std::ofstream cfgStream(path);
 		#endif
 		if(cfgStream.is_open())
 		{

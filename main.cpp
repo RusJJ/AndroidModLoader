@@ -1,7 +1,6 @@
 #include <jnifn.h>
 #include <algorithm>
 #include <cctype>
-#include <string>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -24,12 +23,12 @@
 #include <interfaces.h>
 #include <modslist.h>
 
-std::string g_szInternalStoragePath;
-std::string g_szAppName;
-std::string g_szModsDir;
-std::string g_szAndroidDataDir;
-std::string g_szDataDir;
-std::string g_szCfgPath;
+char g_szInternalStoragePath[0xFF] = {0};
+char g_szAppName[0xFF];
+char g_szModsDir[0xFF];
+char g_szAndroidDataDir[0xFF];
+const char* g_szDataDir;
+char g_szCfgPath[0xFF];
 
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.5", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
@@ -69,14 +68,14 @@ void LoadMods()
 
     char buf[0xFF], dataBuf[0xFF];
     DIR* dir; struct dirent *diread;
-    if ((dir = opendir(g_szModsDir.c_str())) != NULL)
+    if ((dir = opendir(g_szModsDir)) != NULL)
     {
         while ((diread = readdir(dir)) != NULL)
         {
             if(!EndsWith(diread->d_name, ".so")) continue;
 
-            sprintf(buf, "%s/%s", g_szModsDir.c_str(), diread->d_name);
-            sprintf(dataBuf, "%s/%s", g_szDataDir.c_str(), diread->d_name);
+            sprintf(buf, "%s/%s", g_szModsDir, diread->d_name);
+            sprintf(dataBuf, "%s/%s", g_szDataDir, diread->d_name);
             remove(dataBuf);
             if(!CopyFile(buf, dataBuf)) continue;
 
@@ -86,7 +85,7 @@ void LoadMods()
             {
                 pModInfo = modInfoFn();
                 maybeINeedAGame = (SpecificGameFn)dlsym(handle, "__INeedASpecificGame");
-                if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), g_szAppName.c_str()) != 0)
+                if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), g_szAppName) != 0)
                 {
                     logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
                     goto nextMod;
@@ -111,10 +110,7 @@ void LoadMods()
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
-    
-    interfaces->Register("AMLInterface", aml);
-    interfaces->Register("AMLConfig", icfg);
-    modlist->AddMod(modinfo, 0);
+    const char* szTmp; jstring jTmp;
 
     /* JNI Environment */
     JNIEnv* env = NULL;
@@ -123,6 +119,11 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         logger->Error("Cannot get JNI Environment!");
         return -1;
     }
+
+    /* Must Have for mods */    
+    interfaces->Register("AMLInterface", aml);
+    interfaces->Register("AMLConfig", icfg);
+    modlist->AddMod(modinfo, 0);
 
     /* Application Context */
     jobject appContext = GetGlobalContext(env);
@@ -136,29 +137,42 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     }*/
 
     /* Internal Storage */
-    g_szInternalStoragePath = env->GetStringUTFChars(GetAbsolutePath(env, GetStorageDir(env)), NULL);
+    jTmp = GetAbsolutePath(env, GetStorageDir(env));
+    szTmp = env->GetStringUTFChars(jTmp, NULL);
+    sprintf(g_szInternalStoragePath, "%s", szTmp);
+    env->ReleaseStringUTFChars(jTmp, szTmp);
+
 
     /* Package Name */
-    g_szAppName = env->GetStringUTFChars(GetPackageName(env, appContext), NULL);
-    std::transform(g_szAppName.begin(), g_szAppName.end(), g_szAppName.begin(), [](unsigned char c) { return std::tolower(c); });
-    logger->Info("Determined app info: %s", g_szAppName.c_str());
+    char i = 0;
+    jTmp = GetPackageName(env, appContext);
+    szTmp = env->GetStringUTFChars(jTmp, NULL);
+    while(szTmp[i] != 0 && i < 0xFF)
+    {
+        g_szAppName[i] = tolower(szTmp[i]);
+        ++i;
+    } g_szAppName[i] = 0;
+    env->ReleaseStringUTFChars(jTmp, szTmp);
+    logger->Info("Determined app info: %s", g_szAppName);
 
     /* Create a folder in /Android/data/.../ */
-    DIR* dir = opendir((g_szInternalStoragePath + "/Android/data/" + g_szAppName).c_str());
+    char szBuf[0xFF];
+    sprintf(szBuf, "%s/Android/data/%s", g_szInternalStoragePath, g_szAppName);
+    DIR* dir = opendir(szBuf);
     if(dir != NULL) closedir(dir);
     else GetExternalFilesDir(env, appContext);
 
     /* Create "mods" folder in /Android/data/.../ */
-    g_szModsDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/mods/";
-    mkdir(g_szModsDir.c_str(), 0700);
+    sprintf(g_szModsDir, "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
+    mkdir(g_szModsDir, 0700);
 
     /* Create "files" folder in /Android/data/.../ */
-    g_szAndroidDataDir = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/files/";
-    mkdir(g_szAndroidDataDir.c_str(), 0700); // Who knows, right?
+    sprintf(g_szAndroidDataDir, "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
+    mkdir(g_szAndroidDataDir, 0700); // Who knows, right?
 
     /* Create "configs" folder in /Android/data/.../ */
-    g_szCfgPath = g_szInternalStoragePath + "/Android/data/" + g_szAppName + "/configs/";
-    mkdir(g_szCfgPath.c_str(), 0700);
+    sprintf(g_szCfgPath, "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
+    mkdir(g_szCfgPath, 0700);
 
     /* root/data/data Folder */
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);

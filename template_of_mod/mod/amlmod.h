@@ -3,7 +3,8 @@
 
 #include "iaml.h"
 #include <stdio.h>
-#include <string>
+#include <ctype.h>
+#include <cstring>
 
 #ifdef __clang__
     #define TARGET_ARM __attribute__((target("no-thumb-mode")))
