@@ -47,10 +47,10 @@ void Config::Init()
 	#else
 		char path[0xFF];
 		#ifdef __AML
-    		snprintf(path, sizeof(path), "%s%s.ini", g_szCfgPath, m_szName);
+    		snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, m_szName);
 			std::ifstream cfgStream(path);
 		#else
-    		snprintf(path, sizeof(path), "%s%s.ini", aml->GetConfigPath(), m_szName);
+    		snprintf(path, sizeof(path), "%s/%s.ini", aml->GetConfigPath(), m_szName);
 			std::ifstream cfgStream(path);
 		#endif
 		if(cfgStream.is_open())
@@ -69,10 +69,10 @@ void Config::Save()
 	#else
 		char path[0xFF];
 		#ifdef __AML
-    		snprintf(path, sizeof(path), "%s%s.ini", g_szCfgPath, m_szName);
+    		snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, m_szName);
 			std::ofstream cfgStream(path);
 		#else
-    		snprintf(path, sizeof(path), "%s%s.ini", aml->GetConfigPath(), m_szName);
+    		snprintf(path, sizeof(path), "%s/%s.ini", aml->GetConfigPath(), m_szName);
 			std::ofstream cfgStream(path);
 		#endif
 		if(cfgStream.is_open())

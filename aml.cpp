@@ -1,6 +1,6 @@
-#include <aml.h>
+#include <include/aml.h>
 #include <ARMPatch.h>
-#include <modslist.h>
+#include <include/modslist.h>
 
 extern char g_szAppName[0xFF];
 extern char g_szCfgPath[0xFF];

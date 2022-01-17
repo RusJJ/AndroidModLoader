@@ -18,14 +18,14 @@ void* CFG::InitIniPointer()
 void CFG::ParseInputStream(void* iniPointer, const char* szFilename)
 {
     char path[0xFF];
-    snprintf(path, sizeof(path), "%s%s.ini", g_szCfgPath, szFilename);
+    snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, szFilename);
     std::ifstream cfgStream(path);
     ((inipp::Ini<char>*)iniPointer)->parse(cfgStream);
 }
 void CFG::GenerateToOutputStream(void* iniPointer, const char* szFilename)
 {
     char path[0xFF];
-    snprintf(path, sizeof(path), "%s%s.ini", g_szCfgPath, szFilename);
+    snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, szFilename);
     std::ofstream cfgStream(path);
     ((inipp::Ini<char>*)iniPointer)->generate(cfgStream);
 }

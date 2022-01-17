@@ -3,7 +3,7 @@
     #define sprintf stbsp_sprintf
     #define snprintf stbsp_snprintf
 #endif
-#include <jnifn.h>
+#include <include/jnifn.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h> // mkdir
@@ -11,7 +11,7 @@
 #include <fcntl.h> // "open" flags
 #include <dlfcn.h>
 
-#include <defines.h>
+#include <include/defines.h>
 #include <mod/amlmod.h>
 #include <mod/logger.h>
 #include <mod/config.h>
@@ -24,8 +24,8 @@
 #include <icfg_desc.h>
 // Should be after config.h in main.cpp
 
-#include <interfaces.h>
-#include <modslist.h>
+#include <include/interfaces.h>
+#include <include/modslist.h>
 
 char g_szInternalStoragePath[0xFF] = {0};
 char g_szAppName[0xFF];
@@ -41,27 +41,35 @@ Config* cfg = &cfgLocal;
 static CFG icfgLocal;
 ICFG* icfg = &icfgLocal;
 
+inline size_t __strlen(const char *str)
+{
+    const char* s = str;
+    while(*s) ++s;
+    return (s - str);
+}
+
 inline bool EndsWith(const char* base, const char* str)
 {
     static int blen, slen;
-    blen = strlen(base);
-    slen = strlen(str);
+    blen = __strlen(base);
+    slen = __strlen(str);
     return (blen >= slen) && (!strcmp(base + blen - slen, str));
 }
 
 inline bool EndsWithSO(const char* base)
 {
     static int blen;
-    blen = strlen(base);
+    blen = __strlen(base);
     return (blen >= 3) && (!strcmp(base + blen - 3, ".so"));
 }
 
 // Is this actually faster, bruh?
+// P.S. Yeah, it is!
 inline bool CopyFileFaster(const char* file, const char* dest)
 {
-    static off_t off; struct stat statBuf;
     int inFd = open(file, O_RDONLY);
     if(inFd < 0) return false;
+    struct stat statBuf;
     fstat(inFd, &statBuf);
     int outFd = open(dest, O_WRONLY | O_CREAT, statBuf.st_mode);
     if(outFd < 0)
@@ -69,7 +77,12 @@ inline bool CopyFileFaster(const char* file, const char* dest)
         close(inFd);
         return false;
     }
-    sendfile(outFd, inFd, &off, statBuf.st_size);
+    if(sendfile(outFd, inFd, NULL, statBuf.st_size) < 0)
+    {
+        close(inFd);
+        close(outFd);
+        return false;
+    }
     close(inFd);
     close(outFd);
     return true;
@@ -102,15 +115,24 @@ void LoadMods()
     DIR* dir = opendir(g_szModsDir);
     if (dir != NULL)
     {
+        logger->Info("Opening %s", g_szModsDir);
         struct dirent *diread; void* handle;
         while ((diread = readdir(dir)) != NULL)
         {
-            if(!EndsWithSO(diread->d_name)) continue;
-
+            if(diread->d_name[0] == '.') continue; // Skip . and ..
+            if(!EndsWithSO(diread->d_name))
+            {
+                logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
+                continue;
+            }
             sprintf(buf, "%s/%s", g_szModsDir, diread->d_name);
             sprintf(dataBuf, "%s/%s", g_szDataDir, diread->d_name);
             unlink(dataBuf);
-            if(!CopyFileFaster(buf, dataBuf)) continue;
+            if(!CopyFileFaster(buf, dataBuf))
+            {
+                logger->Error("File %s is failed to be copied! :(", diread->d_name);
+                continue;
+            }
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
             handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM!
@@ -129,6 +151,7 @@ void LoadMods()
                     logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
                     goto nextMod;
                 }
+                logger->Info("Mod (GUID %s) has been preloaded...", pModInfo->GUID());
             }
             else
             {
@@ -138,6 +161,10 @@ void LoadMods()
             //unlink(dataBuf);
         }
         closedir(dir);
+    }
+    else
+    {
+        logger->Error("Failed to init mods: DIR IS NOT OPEN");
     }
 }
 
@@ -190,22 +217,22 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
     /* Create a folder in /Android/data/.../ */
     char szBuf[0xFF];
-    snprintf(szBuf, sizeof(szBuf), "%s/Android/data/%s", g_szInternalStoragePath, g_szAppName);
+    snprintf(szBuf, sizeof(szBuf), "%s/Android/data/%s/", g_szInternalStoragePath, g_szAppName);
     DIR* dir = opendir(szBuf);
     if(dir != NULL) closedir(dir);
     else GetExternalFilesDir(env, appContext);
 
     /* Create "mods" folder in /Android/data/.../ */
     sprintf(g_szModsDir, "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
-    mkdir(g_szModsDir, 0700);
+    mkdir(g_szModsDir, 0777);
 
     /* Create "files" folder in /Android/data/.../ */
     sprintf(g_szAndroidDataDir, "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
-    mkdir(g_szAndroidDataDir, 0700); // Who knows, right?
+    mkdir(g_szAndroidDataDir, 0777); // Who knows, right?
 
     /* Create "configs" folder in /Android/data/.../ */
     sprintf(g_szCfgPath, "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
-    mkdir(g_szCfgPath, 0700);
+    mkdir(g_szCfgPath, 0777);
 
     /* root/data/data Folder */
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);

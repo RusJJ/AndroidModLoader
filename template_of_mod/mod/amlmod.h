@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <cstring>
+#include <stdlib.h>
 
 #ifdef __clang__
     #define TARGET_ARM __attribute__((target("no-thumb-mode")))
@@ -49,7 +50,6 @@
 #define END_DEPLIST()                                                   \
     {"", ""} };                                                         \
     extern "C" ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
-
 
 
 struct ModInfoDependency

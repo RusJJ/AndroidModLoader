@@ -1,4 +1,4 @@
-#include <modslist.h>
+#include <include/modslist.h>
 #include <mod/logger.h>
 #include <dlfcn.h>
 

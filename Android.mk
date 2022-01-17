@@ -25,7 +25,7 @@ LOCAL_CPP_EXTENSION := .cpp .cc
 LOCAL_SHARED_LIBRARIES := armpatch
 LOCAL_MODULE    := AML
 LOCAL_SRC_FILES := main.cpp interface.cpp aml.cpp modslist.cpp icfg.cpp mod/logger.cpp mod/config.cpp
-LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17
+LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17 -I./include
 LOCAL_C_INCLUDES += ./include
 LOCAL_LDLIBS += -llog -ldl
 # Uncomment these two lines to add IL2CPP support! (NOT WORKING)
