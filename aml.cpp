@@ -91,5 +91,30 @@ void AML::PlaceRET(uintptr_t addr)
     ARMPatch::RET(addr);
 }
 
+uintptr_t AML::GetLibLength(const char* szLib)
+{
+    return ARMPatch::getLibLength(szLib);
+}
+
+void AML::Redirect(uintptr_t addr, uintptr_t to)
+{
+    ARMPatch::redirect(addr, to);
+}
+
+void AML::PlaceBLX(uintptr_t addr, uintptr_t dest)
+{
+    ARMPatch::BLX(addr, dest);
+}
+
+uintptr_t AML::PatternScan(const char* pattern, const char* soLib)
+{
+    return ARMPatch::getAddressFromPattern(pattern, soLib);
+}
+
+uintptr_t AML::PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen)
+{
+    return ARMPatch::getAddressFromPattern(pattern, libStart, scanLen);
+}
+
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;

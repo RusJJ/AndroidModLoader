@@ -14,29 +14,39 @@ public:
     /* AML 1.0.0.0 */
     virtual const char* GetCurrentGame() = 0;
     virtual const char* GetConfigPath() = 0;
-    virtual bool HasMod(const char* szGUID) = 0;
-    virtual bool HasModOfVersion(const char* szGUID, const char* szVersion) = 0;
-    virtual uintptr_t GetLib(const char* szLib) = 0;
-    virtual uintptr_t GetSym(void* handle, const char* sym) = 0;
-    virtual bool Hook(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0; // AML 1.0.0.5: Returns true on success
-    virtual void HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
-    virtual int Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
-    virtual void Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
-    virtual void Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
-    virtual void PlaceNOP(uintptr_t addr, size_t count = 1) = 0; // Untested on ARMv8
-    virtual void PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
-    virtual void PlaceRET(uintptr_t addr) = 0; // Untested on ARMv8
+    virtual bool        HasMod(const char* szGUID) = 0;
+    virtual bool        HasModOfVersion(const char* szGUID, const char* szVersion) = 0;
+    virtual uintptr_t   GetLib(const char* szLib) = 0;
+    virtual uintptr_t   GetSym(void* handle, const char* sym) = 0;
+    virtual bool        Hook(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0; // AML 1.0.0.5: Returns true on success
+    virtual void        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
+    virtual int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
+    virtual void        Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
+    virtual void        Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
+    virtual void        PlaceNOP(uintptr_t addr, size_t count = 1) = 0; // Untested on ARMv8
+    virtual void        PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
+    virtual void        PlaceRET(uintptr_t addr) = 0; // Untested on ARMv8
 
     /* AML 1.0.0.4 */
     virtual const char* GetDataPath() = 0; // /data/data/.../*
 
     /* AML 1.0.0.5 */
     virtual const char* GetAndroidDataPath() = 0; // /sdcard/Android/data/.../files/*
-    virtual uintptr_t GetSym(uintptr_t libAddr, const char* sym) = 0; // An additional func but it uses ADDRESS instead of HANDLE
+    virtual uintptr_t   GetSym(uintptr_t libAddr, const char* sym) = 0; // An additional func but it uses ADDRESS instead of a HANDLE
+
+    /* AML 1.0.0.6 */
+    virtual uintptr_t   GetLibLength(const char* szLib) = 0;
+    virtual void        Redirect(uintptr_t addr, uintptr_t to) = 0; // Move directly to "to" from "addr" with the same stack
+    virtual void        PlaceBLX(uintptr_t addr, uintptr_t dest) = 0; // Not on ARMv8
+    virtual uintptr_t   PatternScan(const char* pattern, const char* soLib) = 0;
+    virtual uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen) = 0;
 };
 
 extern IAML* aml;
 inline IAML* GetAMLInterface() { return aml; }
+
+/* Do not use big conversions */
+#define SET_TO(__a1, __a2) *(void**)&(__a1) = (void*)(__a2)
 
 /* Unprotect that memory chunk for making changes */
 #define UNPROT(_addr, ...)                                      \

@@ -34,7 +34,7 @@ char g_szAndroidDataDir[0xFF];
 const char* g_szDataDir;
 char g_szCfgPath[0xFF];
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.5", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.6", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -127,8 +127,11 @@ void LoadMods()
             }
             sprintf(buf, "%s/%s", g_szModsDir, diread->d_name);
             sprintf(dataBuf, "%s/%s", g_szDataDir, diread->d_name);
-            unlink(dataBuf);
-            if(!CopyFileFaster(buf, dataBuf))
+            //unlink(dataBuf);
+            chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
+            int removeStatus = remove(dataBuf);
+            if(removeStatus != 0) logger->Error("Failed to remove temporary file! This may broke the mod loading! Error %d", removeStatus);
+            if(!CopyFileFaster(buf, dataBuf) && !CopyFile(buf, dataBuf))
             {
                 logger->Error("File %s is failed to be copied! :(", diread->d_name);
                 continue;
@@ -188,6 +191,11 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
     /* Application Context */
     jobject appContext = GetGlobalContext(env);
+    if(appContext == NULL)
+    {
+        logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into main game library!");
+        return JNI_VERSION_1_6;
+    }
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
