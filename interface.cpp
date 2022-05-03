@@ -1,9 +1,9 @@
 #include <map>
 #include <jni.h>
-#include "interfaces.h"
+#include "include/interfaces.h"
 #include "mod/logger.h"
 #define _IAML // Do not include "interface" twice!
-#include "modslist.h"
+#include "include/modslist.h"
 
 static std::map<const char*, void*> g_hInterfacesMap;
 
