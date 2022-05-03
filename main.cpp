@@ -130,7 +130,7 @@ void LoadMods()
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
-            if(removeStatus != 0) logger->Error("Failed to remove temporary file! This may broke the mod loading! Error %d", removeStatus);
+            if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
             if(!CopyFileFaster(buf, dataBuf) && !CopyFile(buf, dataBuf))
             {
                 logger->Error("File %s is failed to be copied! :(", diread->d_name);
@@ -161,13 +161,13 @@ void LoadMods()
               nextMod:
                 dlclose(handle);
             }
-            //unlink(dataBuf);
+            unlink(dataBuf);
         }
         closedir(dir);
     }
     else
     {
-        logger->Error("Failed to init mods: DIR IS NOT OPEN");
+        logger->Error("Failed to load mods: DIR IS NOT OPEN");
     }
 }
 
@@ -193,7 +193,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     jobject appContext = GetGlobalContext(env);
     if(appContext == NULL)
     {
-        logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into main game library!");
+        logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
         return JNI_VERSION_1_6;
     }
 

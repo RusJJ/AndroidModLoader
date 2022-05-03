@@ -26,6 +26,7 @@ public:
     /* AML 1.0.0.6 */
     uintptr_t   GetLibLength(const char* szLib);
     void        Redirect(uintptr_t addr, uintptr_t to);
+    void        PlaceBL(uintptr_t addr, uintptr_t dest);
     void        PlaceBLX(uintptr_t addr, uintptr_t dest);
     uintptr_t   PatternScan(const char* pattern, const char* soLib);
     uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen);

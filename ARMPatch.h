@@ -100,7 +100,14 @@ namespace ARMPatch
         addr - where to put
         dest - Jump to what?
     */
-    void JMP(uintptr_t addr, uintptr_t dest);
+    void B(uintptr_t addr, uintptr_t dest);
+    
+    /*
+        Place BL instruction (reprotects it)
+        addr - where to put
+        dest - Jump to what?
+    */
+    void BL(uintptr_t addr, uintptr_t dest);
     
     /*
         Place BLX instruction (reprotects it)

@@ -83,7 +83,7 @@ void AML::PlaceNOP(uintptr_t addr, size_t count)
 
 void AML::PlaceJMP(uintptr_t addr, uintptr_t dest)
 {
-    ARMPatch::JMP(addr, dest);
+    ARMPatch::B(addr, dest);
 }
 
 void AML::PlaceRET(uintptr_t addr)
@@ -99,6 +99,11 @@ uintptr_t AML::GetLibLength(const char* szLib)
 void AML::Redirect(uintptr_t addr, uintptr_t to)
 {
     ARMPatch::redirect(addr, to);
+}
+
+void AML::PlaceBL(uintptr_t addr, uintptr_t dest)
+{
+    ARMPatch::BL(addr, dest);
 }
 
 void AML::PlaceBLX(uintptr_t addr, uintptr_t dest)

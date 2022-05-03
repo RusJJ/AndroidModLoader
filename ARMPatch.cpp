@@ -82,17 +82,23 @@ namespace ARMPatch
         }
         cacheflush(CLEAR_BIT0(addr), CLEAR_BIT0(addr) + count * 2, 0);
     }
-    void JMP(uintptr_t addr, uintptr_t dest)
+    void B(uintptr_t addr, uintptr_t dest) // B instruction
     {
         uint32_t newDest = ((dest - addr - 4) >> 12) & 0x7FF | 0xF000 |
                            ((((dest - addr - 4) >> 1) & 0x7FF | 0xB800) << 16);
-        write(addr, (uintptr_t)&newDest, 4);
+        write(addr, (uintptr_t)&newDest, sizeof(uintptr_t));
     }
-    void BLX(uintptr_t addr, uintptr_t dest)
+    void BL(uintptr_t addr, uintptr_t dest) // BL instruction
     {
         uint32_t newDest = ((dest - addr - 4) >> 12) & 0x7FF | 0xF000 |
                            ((((dest - addr - 4) >> 1) & 0x7FF | 0xF800) << 16);
-        write(addr, (uintptr_t)&newDest, 4);
+        write(addr, (uintptr_t)&newDest, sizeof(uintptr_t));
+    }
+    void BLX(uintptr_t addr, uintptr_t dest) // BLX instruction
+    {
+        uint32_t newDest = ((dest - addr - 4) >> 12) & 0x7FF | 0xF000 |
+                           ((((dest - addr - 4) >> 1) & 0x7FF | 0xE800) << 16);
+        write(addr, (uintptr_t)&newDest, sizeof(uintptr_t));
     }
     void RET(uintptr_t addr)
     {

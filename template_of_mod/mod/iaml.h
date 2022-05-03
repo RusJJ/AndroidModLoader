@@ -4,6 +4,8 @@
 #include "interface.h"
 #include <stdint.h>
 
+#define PlaceB PlaceJMP
+
 #ifndef PAGE_SIZE
     #define PAGE_SIZE 4096
 #endif
@@ -36,8 +38,9 @@ public:
 
     /* AML 1.0.0.6 */
     virtual uintptr_t   GetLibLength(const char* szLib) = 0;
-    virtual void        Redirect(uintptr_t addr, uintptr_t to) = 0; // Move directly to "to" from "addr" with the same stack
-    virtual void        PlaceBLX(uintptr_t addr, uintptr_t dest) = 0; // Not on ARMv8
+    virtual void        Redirect(uintptr_t addr, uintptr_t to) = 0; // Move directly to "to" from "addr" with the same stack (not on ARMv8 ?)
+    virtual void        PlaceBL(uintptr_t addr, uintptr_t dest) = 0;
+    virtual void        PlaceBLX(uintptr_t addr, uintptr_t dest) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, const char* soLib) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen) = 0;
 };
