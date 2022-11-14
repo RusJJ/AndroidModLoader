@@ -1,14 +1,21 @@
 #include <include/aml.h>
 #include <ARMPatch.h>
+#include <vtable_hooker.h>
 #include <include/modslist.h>
 
-extern char g_szAppName[0xFF];
+extern char g_szAppName[0xFF], g_szFakeAppName[0xFF];
 extern char g_szCfgPath[0xFF];
 extern char g_szAndroidDataDir[0xFF];
 extern const char* g_szDataDir;
+
+inline bool HasFakeAppName()
+{
+    return (g_szFakeAppName[0] != 0 && strlen(g_szFakeAppName) > 5);
+}
+
 const char* AML::GetCurrentGame()
 {
-    return g_szAppName;
+    return HasFakeAppName() ? g_szFakeAppName : g_szAppName;
 }
 
 const char* AML::GetConfigPath()
@@ -119,6 +126,21 @@ uintptr_t AML::PatternScan(const char* pattern, const char* soLib)
 uintptr_t AML::PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen)
 {
     return ARMPatch::getAddressFromPattern(pattern, libStart, scanLen);
+}
+
+void AML::HookVtableFunc(void* ptr, unsigned int funcNum, void* func, void** original, bool instantiate)
+{
+    HookVtableFunc(ptr, funcNum, func, original, instantiate);
+}
+
+bool AML::IsGameFaked()
+{
+    return HasFakeAppName();
+}
+
+const char* AML::GetRealCurrentGame()
+{
+    return g_szAppName;
 }
 
 static AML amlLocal;

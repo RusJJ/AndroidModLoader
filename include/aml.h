@@ -30,4 +30,8 @@ public:
     void        PlaceBLX(uintptr_t addr, uintptr_t dest);
     uintptr_t   PatternScan(const char* pattern, const char* soLib);
     uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
+    /* AML 1.0.1 */
+    void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false);
+    bool        IsGameFaked();
+    const char* GetRealCurrentGame();
 };

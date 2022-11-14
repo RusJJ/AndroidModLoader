@@ -98,14 +98,14 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
         pInfo = *it;
         if(!strcmp(pInfo->szGUID, szGUID))
         {
-            if(pInfo->major > major) return true;
-            if(pInfo->major == major)
+            if(pInfo->version.major > major) return true;
+            if(pInfo->version.major == major)
             {
-                if(pInfo->minor > minor) return true;
-                if(pInfo->minor == minor)
+                if(pInfo->version.minor > minor) return true;
+                if(pInfo->version.minor == minor)
                 {
-                    if(pInfo->revision > revision) return true;
-                    if(pInfo->revision == revision && pInfo->build >= build) return true;
+                    if(pInfo->version.revision > revision) return true;
+                    if(pInfo->version.revision == revision && pInfo->version.build >= build) return true;
                 }
             }
             return false;

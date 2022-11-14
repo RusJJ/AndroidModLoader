@@ -4,11 +4,18 @@
 #include "interface.h"
 #include <stdint.h>
 
+// Because the name was changed to be correct
 #define PlaceB PlaceJMP
 
 #ifndef PAGE_SIZE
     #define PAGE_SIZE 4096
 #endif
+
+enum eManifestPermissions
+{
+    P_READ_EXTERNAL_STORAGE = 0,
+    P_WRITE_EXTERNAL_STORAGE,
+};
 
 class IAML
 {
@@ -43,6 +50,11 @@ public:
     virtual void        PlaceBLX(uintptr_t addr, uintptr_t dest) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, const char* soLib) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen) = 0;
+    
+    /* AML 1.0.1 */
+    virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false) = 0;
+    virtual bool        IsGameFaked() = 0;
+    virtual const char* GetRealCurrentGame() = 0;
 };
 
 extern IAML* aml;
