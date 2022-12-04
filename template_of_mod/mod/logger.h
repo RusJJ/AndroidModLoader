@@ -2,6 +2,7 @@
 #define _LOGGER_H
 
 #include <stdio.h>
+#define TMPBUF_SIZE 768
 
 enum eLogPrio
 {
