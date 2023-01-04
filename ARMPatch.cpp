@@ -128,11 +128,7 @@ namespace ARMPatch
     {
         if (addr == NULL || func == NULL || addr == func) return false;
         unprotect((uintptr_t)addr);
-        #ifdef __arm__
-            return MSHookFunction(addr, func, original);
-        #elif defined __aarch64__
-            return A64HookFunction(addr, func, original);
-        #endif
+        return shadowhook_hook_func_addr(addr, func, original) == NULL ? false : true;
     }
     void hookPLTInternal(void* addr, void* func, void** original)
     {

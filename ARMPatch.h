@@ -3,16 +3,7 @@
 #include <dlfcn.h>
 #include <sys/mman.h>
 
-#ifdef __arm__
-    extern "C" bool MSHookFunction(void* symbol, void* replace, void** result);
-	#define CLEAR_BIT0(addr) (addr & 0xFFFFFFFE)
-#elif defined __aarch64__
-    extern "C" bool A64HookFunction(void *const symbol, void *const replace, void **result);
-    #define cacheflush(c, n, zeroarg) __builtin___clear_cache((char*)(c), (char*)(n))
-	#define CLEAR_BIT0(addr) (addr & 0xFFFFFFFFFFFFFFFE)
-#else
-    #error This lib is supposed to work on ARM only!
-#endif
+extern "C" void *shadowhook_hook_func_addr(void *func_addr, void *new_addr, void **orig_addr);
 
 /* Just a hook declaration */
 #define DECL_HOOK(_ret, _name, ...)                             \
