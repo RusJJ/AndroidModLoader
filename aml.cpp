@@ -45,17 +45,17 @@ bool AML::HasModOfVersion(const char* szGUID, const char* szVersion)
 
 uintptr_t AML::GetLib(const char* szLib)
 {
-    return ARMPatch::getLib(szLib);
+    return ARMPatch::GetLib(szLib);
 }
 
 uintptr_t AML::GetSym(void* handle, const char* sym)
 {
-    return ARMPatch::getSym(handle, sym);
+    return ARMPatch::GetSym(handle, sym);
 }
 
 uintptr_t AML::GetSym(uintptr_t libAddr, const char* sym)
 {
-    return ARMPatch::getSym(libAddr, sym);
+    return ARMPatch::GetSym(libAddr, sym);
 }
 
 bool AML::Hook(void* handle, void* fnAddress, void** orgFnAddress)
@@ -70,62 +70,62 @@ void AML::HookPLT(void* handle, void* fnAddress, void** orgFnAddress)
 
 int AML::Unprot(uintptr_t handle, size_t len)
 {
-    return ARMPatch::unprotect(handle, len);
+    return ARMPatch::Unprotect(handle, len);
 }
 
 void AML::Write(uintptr_t dest, uintptr_t src, size_t size)
 {
-    ARMPatch::write(dest, src, size);
+    ARMPatch::Write(dest, src, size);
 }
 
 void AML::Read(uintptr_t src, uintptr_t dest, size_t size)
 {
-    ARMPatch::read(src, dest, size);
+    ARMPatch::Read(src, dest, size);
 }
 
 void AML::PlaceNOP(uintptr_t addr, size_t count)
 {
-    ARMPatch::NOP(addr, count);
+    ARMPatch::WriteNOP(addr, count);
 }
 
 void AML::PlaceJMP(uintptr_t addr, uintptr_t dest)
 {
-    ARMPatch::B(addr, dest);
+    ARMPatch::WriteB(addr, dest);
 }
 
 void AML::PlaceRET(uintptr_t addr)
 {
-    ARMPatch::RET(addr);
+    ARMPatch::WriteRET(addr);
 }
 
 uintptr_t AML::GetLibLength(const char* szLib)
 {
-    return ARMPatch::getLibLength(szLib);
+    return ARMPatch::GetLibLength(szLib);
 }
 
 void AML::Redirect(uintptr_t addr, uintptr_t to)
 {
-    ARMPatch::redirect(addr, to);
+    ARMPatch::Redirect(addr, to);
 }
 
 void AML::PlaceBL(uintptr_t addr, uintptr_t dest)
 {
-    ARMPatch::BL(addr, dest);
+    ARMPatch::WriteBL(addr, dest);
 }
 
 void AML::PlaceBLX(uintptr_t addr, uintptr_t dest)
 {
-    ARMPatch::BLX(addr, dest);
+    ARMPatch::WriteBLX(addr, dest);
 }
 
 uintptr_t AML::PatternScan(const char* pattern, const char* soLib)
 {
-    return ARMPatch::getAddressFromPattern(pattern, soLib);
+    return ARMPatch::GetAddressFromPattern(pattern, soLib);
 }
 
 uintptr_t AML::PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen)
 {
-    return ARMPatch::getAddressFromPattern(pattern, libStart, scanLen);
+    return ARMPatch::GetAddressFromPattern(pattern, libStart, scanLen);
 }
 
 void AML::HookVtableFunc(void* ptr, unsigned int funcNum, void* func, void** original, bool instantiate)

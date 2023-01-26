@@ -1,13 +1,14 @@
+#include $(call all-subdir-makefiles)
+
 LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := substrate
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
-	LOCAL_SRC_FILES := libsubstrate-armv7a_Cydia.a # Cydia Substrate
-	#LOCAL_SRC_FILES := libsubstrate-armv7a_Inline.a # Android Inline Hook by ele7enxxh (you can hook one function ONLY ONCE (hope im not wrong))
+	LOCAL_SRC_FILES := armpatch_src/libsubstrate-armv7a_Cydia.a # Cydia Substrate
 else
 	ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
-		LOCAL_SRC_FILES := libsubstrate-armv8a.a # And64InlineHook
+		LOCAL_SRC_FILES := armpatch_src/libsubstrate-armv8a.a # And64InlineHook
 	endif
 endif
 include $(PREBUILT_STATIC_LIBRARY)
@@ -16,7 +17,7 @@ include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cpp .cc
 LOCAL_SHARED_LIBRARIES := substrate
 LOCAL_MODULE    := armpatch
-LOCAL_SRC_FILES := ARMPatch.cpp
+LOCAL_SRC_FILES := armpatch_src/ARMPatch.cpp
 LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG
 include $(BUILD_STATIC_LIBRARY)
 
