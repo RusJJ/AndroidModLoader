@@ -3,10 +3,11 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_MODULE := substrate
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
-	LOCAL_SRC_FILES := libsubstrate-armv7a_ShadowHook.a # https://github.com/bytedance/android-inline-hook
+	LOCAL_SRC_FILES := libsubstrate-armv7a_Cydia.a # Cydia Substrate
+	#LOCAL_SRC_FILES := libsubstrate-armv7a_Inline.a # Android Inline Hook by ele7enxxh (you can hook one function ONLY ONCE (hope im not wrong))
 else
 	ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
-		LOCAL_SRC_FILES := libsubstrate-armv8a_ShadowHook.a # https://github.com/bytedance/android-inline-hook
+		LOCAL_SRC_FILES := libsubstrate-armv8a.a # And64InlineHook
 	endif
 endif
 include $(PREBUILT_STATIC_LIBRARY)
