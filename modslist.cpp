@@ -230,7 +230,7 @@ void ModsList::OnAllModsLoaded()
         if((*it)->handle != 0)
         {
             onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "OnAllModsLoaded");
-            if(onModsLoadedFn == NULL) onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z16OnAllModsLoadedv");
+            if(onModsLoadedFn == NULL) onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->handle), "_Z15OnAllModsLoadedv");
             if(onModsLoadedFn != NULL) onModsLoadedFn();
         }
         ++it;

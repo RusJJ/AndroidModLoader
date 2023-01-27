@@ -21,6 +21,7 @@
 
 
 extern ModInfo* modinfo;
+ConfigEntry* Config::pLastEntry = NULL;
 
 Config::Config(const char* szName)
 {
@@ -31,6 +32,7 @@ Config::Config(const char* szName)
 	m_iniMyConfig = new inipp::Ini<char>();
 #endif
 	m_bInitialized = false;
+    m_bValueChanged = false;
     m_szName = szName;
 
 	#ifndef __AML
@@ -42,6 +44,7 @@ void Config::Init()
 {
 	if(m_bInitialized) return;
 	m_bInitialized = true;
+    
 	#if !defined(__AML) && defined(_ICFG)
 		m_pICFG->ParseInputStream(m_iniMyConfig, m_szName);
 	#else
@@ -63,7 +66,9 @@ void Config::Init()
 
 void Config::Save()
 {
-	if(!m_bInitialized) return;
+	if(!m_bInitialized || !m_bValueChanged) return;
+    
+    m_bValueChanged = false;
 	#if !defined(__AML) && defined(_ICFG)
 		m_pICFG->GenerateToOutputStream(m_iniMyConfig, m_szName);
 	#else
@@ -102,6 +107,7 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
 	else
 		pRet->SetString(tryToGetValue);
 	Save();
+    pLastEntry = pRet;
 	return pRet;
 }
 
@@ -123,6 +129,7 @@ ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSe
 	else
 		pRet->SetString(tryToGetValue);
 	Save();
+    pLastEntry = pRet;
 	return pRet;
 }
 
@@ -144,6 +151,7 @@ ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* s
 	else
 		pRet->SetString(tryToGetValue);
 	Save();
+    pLastEntry = pRet;
 	return pRet;
 }
 
@@ -165,14 +173,19 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 	else
 		pRet->SetString(tryToGetValue);
 	Save();
+    pLastEntry = pRet;
 	return pRet;
 }
 
 void ConfigEntry::SetString(const char* newValue)
 {
+    //if(m_szValue != NULL && !strcmp(newValue, m_szValue)) return;
+    
 	m_szValue = newValue;
 	m_nIntegerValue = atoi(m_szValue);
 	m_fFloatValue = (float)atof(m_szValue);
+    
+    m_pBoundCfg->m_bValueChanged = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
@@ -183,12 +196,16 @@ void ConfigEntry::SetString(const char* newValue)
 
 void ConfigEntry::SetFloat(float newValue)
 {
+    if(m_fFloatValue == newValue) return;
+    
 	m_fFloatValue = newValue;
     m_nIntegerValue = (int)newValue;
     
     char szVal[32];
     snprintf(szVal, sizeof(szVal), "%f", newValue);
     m_szValue = szVal;
+    
+    m_pBoundCfg->m_bValueChanged = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
@@ -199,12 +216,16 @@ void ConfigEntry::SetFloat(float newValue)
 
 void ConfigEntry::SetInt(int newValue)
 {
+    if(m_nIntegerValue == newValue) return;
+    
 	m_fFloatValue = (float)newValue;
     m_nIntegerValue = newValue;
     
 	char szVal[32];
 	snprintf(szVal, sizeof(szVal), "%d", newValue);
     m_szValue = szVal;
+    
+    m_pBoundCfg->m_bValueChanged = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
@@ -215,9 +236,13 @@ void ConfigEntry::SetInt(int newValue)
 
 void ConfigEntry::SetBool(bool newValue)
 {
+    if(m_nIntegerValue == (int)newValue) return;
+    
 	m_fFloatValue = newValue?1.0f:0.0f;
     m_nIntegerValue = newValue?1:0;
     m_szValue = newValue?"1":"0";
+    
+    m_pBoundCfg->m_bValueChanged = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);

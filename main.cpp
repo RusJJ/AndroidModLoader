@@ -137,7 +137,7 @@ void LoadMods(const char* path)
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
-            if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
+            //if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
             if(!CopyFileFaster(buf, dataBuf) && !CopyFile(buf, dataBuf))
             {
                 logger->Error("File %s is failed to be copied! :(", diread->d_name);
@@ -168,7 +168,9 @@ void LoadMods(const char* path)
               nextMod:
                 dlclose(handle);
             }
-            unlink(dataBuf);
+            //unlink(dataBuf);
+            removeStatus = remove(dataBuf);
+            if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
         }
         closedir(dir);
     }
@@ -252,7 +254,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* root/data/data Folder */
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
 
-    /* AML Config (unused currently) */
+    /* AML Config */
+    logger->Info("Reading config...");
     cfg->Init();
     cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
     cfg->Bind("Version", "")->SetString(modinfo->VersionString());
@@ -262,6 +265,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     const char* szInternalModsDir = cfg->Bind("InternalModsFolder", "AMLMods")->GetString();
     sprintf(g_szInternalModsDir, "%s/%s/%s", g_szInternalStoragePath, szInternalModsDir, g_szAppName);
     bool internalModsPriority = cfg->Bind("InternalModsFirst", true)->GetBool();
+    logger->ToggleOutput(cfg->Bind("EnableLogcats", true)->GetBool());
     cfg->Save();
     
     if(HasFakeAppName())

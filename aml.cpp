@@ -1,5 +1,5 @@
 #include <include/aml.h>
-#include <ARMPatch.h>
+#include <armpatch_src/ARMPatch.h>
 #include <vtable_hooker.h>
 #include <include/modslist.h>
 

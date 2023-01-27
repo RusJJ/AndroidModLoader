@@ -17,6 +17,7 @@ public:
     ConfigEntry* Bind(const char* szKey, float flDefaultValue, const char* szSection = "Preferences");
     ConfigEntry* Bind(const char* szKey, bool bDefaultValue, const char* szSection = "Preferences");
     static Config* GetConfig();
+    static ConfigEntry* pLastEntry;
 private:
     bool m_bInitialized;
     const char* m_szName;
@@ -26,6 +27,8 @@ private:
     /* Built-in optimizer think he's best! Ha-ha... Not funny. It's 3AM... */
     ICFG* m_pICFG;
 #endif
+    
+    bool m_bValueChanged;
     friend class ConfigEntry;
 };
 
