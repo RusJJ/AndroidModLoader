@@ -179,7 +179,7 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 
 void ConfigEntry::SetString(const char* newValue)
 {
-    //if(m_szValue != NULL && !strcmp(newValue, m_szValue)) return;
+    if(m_szValue != NULL && !strcmp(newValue, m_szValue)) return;
     
 	m_szValue = newValue;
 	m_nIntegerValue = atoi(m_szValue);

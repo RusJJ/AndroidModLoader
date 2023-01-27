@@ -35,6 +35,7 @@ private:
 class ConfigEntry
 {
 public:
+    ConfigEntry() : m_szValue(NULL) {}
     void SetString(const char* newValue);
     inline const char* GetString() { return m_szValue; }
     void SetFloat(float newValue);
