@@ -129,7 +129,8 @@ void LoadMods(const char* path)
             if(diread->d_name[0] == '.') continue; // Skip . and ..
             if(!EndsWithSO(diread->d_name))
             {
-                logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
+                // Useless info for us!
+                //logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
                 continue;
             }
             sprintf(buf, "%s/%s", path, diread->d_name);
@@ -267,11 +268,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     bool internalModsPriority = cfg->Bind("InternalModsFirst", true)->GetBool();
     logger->ToggleOutput(cfg->Bind("EnableLogcats", true)->GetBool());
     cfg->Save();
-    
-    if(HasFakeAppName())
-    {
-        logger->Info("We are liars, aren't we? ;p");
-    }
 
     /* Mods? */
     logger->Info("Working with mods...");

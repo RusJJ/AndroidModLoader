@@ -1,6 +1,8 @@
 #ifndef _CONFIG
 #define _CONFIG
 
+#define VALUE_BUFFER_C 512
+
 /* Is not required. Can be used only for a smaller size of mod (~480kb savings) */
 #include "icfg.h"
 
@@ -16,6 +18,8 @@ public:
     ConfigEntry* Bind(const char* szKey, int nDefaultValue, const char* szSection = "Preferences");
     ConfigEntry* Bind(const char* szKey, float flDefaultValue, const char* szSection = "Preferences");
     ConfigEntry* Bind(const char* szKey, bool bDefaultValue, const char* szSection = "Preferences");
+    inline bool IsValueChanged() { return m_bValueChanged; }
+    
     static Config* GetConfig();
     static ConfigEntry* pLastEntry;
 private:
@@ -29,13 +33,14 @@ private:
 #endif
     
     bool m_bValueChanged;
+    
     friend class ConfigEntry;
 };
 
 class ConfigEntry
 {
 public:
-    ConfigEntry() : m_szValue(NULL) {}
+    ConfigEntry() : m_szValue("") {}
     void SetString(const char* newValue);
     inline const char* GetString() { return m_szValue; }
     void SetFloat(float newValue);
@@ -48,9 +53,10 @@ private:
     Config* m_pBoundCfg;
     const char* m_szMySection;
     const char* m_szMyKey;
-    const char* m_szValue;
     float m_fFloatValue;
     int m_nIntegerValue;
+    char m_szValue[VALUE_BUFFER_C];
+    char m_szDefaultValue[VALUE_BUFFER_C];
 
     friend class Config;
 };

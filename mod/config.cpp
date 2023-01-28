@@ -18,7 +18,10 @@
 	extern char g_szCfgPath[0xFF];
 #endif
 
-
+inline bool str_equal(const char* str1, const char* str2) { 
+     for ( ; *str1 == *str2 && *str1 != '\0'; ++str1, ++str2 ); 
+         return *str2 == *str1; 
+ }
 
 extern ModInfo* modinfo;
 ConfigEntry* Config::pLastEntry = NULL;
@@ -96,6 +99,7 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
 	pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szDefaultValue, szDefaultValue, sizeof(pRet->m_szDefaultValue));
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
 		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
@@ -105,7 +109,11 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
 	if(tryToGetValue[0] == '\0')
 		pRet->SetString(szDefaultValue);
 	else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
 		pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
 	Save();
     pLastEntry = pRet;
 	return pRet;
@@ -126,8 +134,12 @@ ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSe
 	#endif
 	if(tryToGetValue[0] == '\0')
 		pRet->SetInt(nDefaultValue);
-	else
-		pRet->SetString(tryToGetValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
 	Save();
     pLastEntry = pRet;
 	return pRet;
@@ -148,8 +160,12 @@ ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* s
 	#endif
 	if(tryToGetValue[0] == '\0')
 		pRet->SetFloat(flDefaultValue);
-	else
-		pRet->SetString(tryToGetValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
 	Save();
     pLastEntry = pRet;
 	return pRet;
@@ -170,8 +186,12 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 	#endif
 	if(tryToGetValue[0] == '\0')
 		pRet->SetBool(bDefaultValue);
-	else
-		pRet->SetString(tryToGetValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
 	Save();
     pLastEntry = pRet;
 	return pRet;
@@ -179,9 +199,12 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 
 void ConfigEntry::SetString(const char* newValue)
 {
-    if(m_szValue != NULL && !strcmp(newValue, m_szValue)) return;
+    size_t len = strlen(newValue);
+    logger->Info("%s | %s >>> %d %d", m_szValue, newValue, strncmp(newValue, m_szValue, len > sizeof(m_szValue) ? len : sizeof(m_szValue)), (int)str_equal(newValue, m_szValue));
+    //if(m_szValue != 0 && !strncmp(newValue, m_szValue, len > sizeof(m_szValue) ? len : sizeof(m_szValue))) return;
+    if(str_equal(newValue, m_szValue)) return;
     
-	m_szValue = newValue;
+    strncpy(m_szValue, newValue, sizeof(m_szValue)-1); m_szValue[sizeof(m_szValue)-1] = 0;
 	m_nIntegerValue = atoi(m_szValue);
 	m_fFloatValue = (float)atof(m_szValue);
     
@@ -200,10 +223,7 @@ void ConfigEntry::SetFloat(float newValue)
     
 	m_fFloatValue = newValue;
     m_nIntegerValue = (int)newValue;
-    
-    char szVal[32];
-    snprintf(szVal, sizeof(szVal), "%f", newValue);
-    m_szValue = szVal;
+    snprintf(m_szValue, sizeof(m_szValue), "%f", newValue);
     
     m_pBoundCfg->m_bValueChanged = true;
 
@@ -220,10 +240,7 @@ void ConfigEntry::SetInt(int newValue)
     
 	m_fFloatValue = (float)newValue;
     m_nIntegerValue = newValue;
-    
-	char szVal[32];
-	snprintf(szVal, sizeof(szVal), "%d", newValue);
-    m_szValue = szVal;
+	snprintf(m_szValue, sizeof(m_szValue), "%d", newValue);
     
     m_pBoundCfg->m_bValueChanged = true;
 
@@ -240,7 +257,7 @@ void ConfigEntry::SetBool(bool newValue)
     
 	m_fFloatValue = newValue?1.0f:0.0f;
     m_nIntegerValue = newValue?1:0;
-    m_szValue = newValue?"1":"0";
+    m_szValue[0] = newValue ? '1' : '0'; m_szValue[1] = 0;
     
     m_pBoundCfg->m_bValueChanged = true;
 

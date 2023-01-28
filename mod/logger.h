@@ -31,6 +31,7 @@ public:
     void InfoV(const char* szMessage, va_list args);
     void Error(const char* szMessage, ...);
     void ErrorV(const char* szMessage, va_list args);
+    inline bool HasOutput() { return m_bEnabled; }
     static Logger* GetLogger();
 private:
     const char* m_szTag;
