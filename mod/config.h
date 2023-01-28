@@ -8,6 +8,14 @@
 
 class ConfigEntry;
 
+struct rgba_t
+{
+    union {
+        struct { unsigned char r,g,b,a; };
+        unsigned int value;
+    };
+};
+
 class Config
 {
 public:
@@ -22,6 +30,7 @@ public:
     
     static Config* GetConfig();
     static ConfigEntry* pLastEntry;
+    
 private:
     bool m_bInitialized;
     const char* m_szName;
@@ -40,7 +49,7 @@ private:
 class ConfigEntry
 {
 public:
-    ConfigEntry() : m_szValue("") {}
+    ConfigEntry() : m_szValue(""), m_szDefaultValue("") {}
     void SetString(const char* newValue);
     inline const char* GetString() { return m_szValue; }
     void SetFloat(float newValue);
@@ -49,6 +58,9 @@ public:
     inline bool GetBool() { return m_nIntegerValue; }
     void SetInt(int newValue);
     inline int GetInt() { return m_nIntegerValue; }
+    inline void Reset() { SetString(m_szDefaultValue); }
+    rgba_t ParseColor();
+    
 private:
     Config* m_pBoundCfg;
     const char* m_szMySection;

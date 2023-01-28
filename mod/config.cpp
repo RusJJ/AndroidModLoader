@@ -126,6 +126,7 @@ ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSe
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
 	pRet->m_szMyKey = szKey;
+    snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d", nDefaultValue);
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
 		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
@@ -152,6 +153,7 @@ ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* s
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
 	pRet->m_szMyKey = szKey;
+    snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%f", flDefaultValue);
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
 		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
@@ -178,6 +180,7 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 	pRet->m_pBoundCfg = this;
 	pRet->m_szMySection = szSection;
 	pRet->m_szMyKey = szKey;
+    pRet->m_szDefaultValue[0] = bDefaultValue ? '1' : '0'; pRet->m_szDefaultValue[1] = 0;
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
 		tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
@@ -199,9 +202,6 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 
 void ConfigEntry::SetString(const char* newValue)
 {
-    size_t len = strlen(newValue);
-    logger->Info("%s | %s >>> %d %d", m_szValue, newValue, strncmp(newValue, m_szValue, len > sizeof(m_szValue) ? len : sizeof(m_szValue)), (int)str_equal(newValue, m_szValue));
-    //if(m_szValue != 0 && !strncmp(newValue, m_szValue, len > sizeof(m_szValue) ? len : sizeof(m_szValue))) return;
     if(str_equal(newValue, m_szValue)) return;
     
     strncpy(m_szValue, newValue, sizeof(m_szValue)-1); m_szValue[sizeof(m_szValue)-1] = 0;
@@ -266,4 +266,19 @@ void ConfigEntry::SetBool(bool newValue)
 	#else
 		((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
 	#endif
+}
+
+inline bool IsRGBValue(int value) { return value >= 0 && value <= 255; }
+rgba_t ConfigEntry::ParseColor()
+{
+    int r, g, b, a, sscanfed = sscanf(m_szValue, "%d %d %d %d", &r, &g, &b, &a);
+    if(sscanfed == 4 && IsRGBValue(r) && IsRGBValue(g) && IsRGBValue(b) && IsRGBValue(a))
+    {
+        rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,(unsigned char)a};
+    }
+    else if(sscanfed == 3 && IsRGBValue(r) && IsRGBValue(g) && IsRGBValue(b))
+    {
+        rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,255};
+    }
+    return rgba_t{255,255,255,255};
 }
