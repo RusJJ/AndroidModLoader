@@ -143,5 +143,15 @@ const char* AML::GetRealCurrentGame()
     return g_szAppName;
 }
 
+void* AML::GetLibHandle(const char* soLib)
+{
+    return ARMPatch::GetLibHandle(soLib);
+}
+
+void* AML::GetLibHandle(uintptr_t addr)
+{
+    return ARMPatch::GetLibHandle(addr);
+}
+
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;

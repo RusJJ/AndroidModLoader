@@ -34,4 +34,6 @@ public:
     void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false);
     bool        IsGameFaked();
     const char* GetRealCurrentGame();
+    void*       GetLibHandle(const char* soLib);
+    void*       GetLibHandle(uintptr_t addr);
 };

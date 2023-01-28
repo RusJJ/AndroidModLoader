@@ -55,6 +55,8 @@ public:
     virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false) = 0;
     virtual bool        IsGameFaked() = 0;
     virtual const char* GetRealCurrentGame() = 0;
+    virtual void*       GetLibHandle(const char* soLib) = 0;
+    virtual void*       GetLibHandle(uintptr_t addr) = 0;
 };
 
 extern IAML* aml;
