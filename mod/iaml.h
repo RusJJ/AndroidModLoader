@@ -32,9 +32,9 @@ public:
     virtual int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
     virtual void        Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
     virtual void        Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
-    virtual void        PlaceNOP(uintptr_t addr, size_t count = 1) = 0; // Untested on ARMv8
+    virtual void        PlaceNOP(uintptr_t addr, size_t count = 1) = 0;
     virtual void        PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
-    virtual void        PlaceRET(uintptr_t addr) = 0; // Untested on ARMv8
+    virtual void        PlaceRET(uintptr_t addr) = 0;
 
     /* AML 1.0.0.4 */
     virtual const char* GetDataPath() = 0; // /data/data/.../*
@@ -52,6 +52,7 @@ public:
     virtual uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen) = 0;
     
     /* AML 1.0.1 */
+    virtual const char* GetFeatures() = 0;
     virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false) = 0;
     virtual bool        IsGameFaked() = 0;
     virtual const char* GetRealCurrentGame() = 0;

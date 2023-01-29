@@ -11,6 +11,7 @@
 #include <fcntl.h> // "open" flags
 #include <dlfcn.h>
 
+#include <include/aml.h>
 #include <include/defines.h>
 #include <mod/amlmod.h>
 #include <mod/logger.h>
@@ -259,6 +260,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     logger->Info("Reading config...");
     cfg->Init();
     cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
+    cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg");
+    bool bHasChangedCfgAuthor = cfg->IsValueChanged();
     cfg->Bind("Version", "")->SetString(modinfo->VersionString());
     cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
     const char* szFakeAppName = cfg->Bind("FakePackageName", "")->GetString();
@@ -281,6 +284,17 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* All mods are loaded now. We should check for dependencies! */
     logger->Info("Checking for dependencies...");
     modlist->ProcessDependencies();
+    
+    /* Process features */
+    #ifdef __XDL
+        g_pAML->AddFeature("XDL");
+    #endif
+    #ifdef __IL2CPPUTILS
+        g_pAML->AddFeature("IL2CPP");
+    #endif
+    if(g_pAML->IsGameFaked()) g_pAML->AddFeature("FAKEGAME");
+    if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER");
+    if(!logger->HasOutput()) g_pAML->AddFeature("NOLOGGING");
 
     /* All mods are sorted and should be loaded! */
     modlist->ProcessPreLoading();

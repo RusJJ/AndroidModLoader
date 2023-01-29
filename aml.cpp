@@ -3,6 +3,7 @@
 #include <vtable_hooker.h>
 #include <include/modslist.h>
 
+char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
 extern char g_szAppName[0xFF], g_szFakeAppName[0xFF];
 extern char g_szCfgPath[0xFF];
 extern char g_szAndroidDataDir[0xFF];
@@ -128,6 +129,17 @@ uintptr_t AML::PatternScan(const char* pattern, uintptr_t libStart, uintptr_t sc
     return ARMPatch::GetAddressFromPattern(pattern, libStart, scanLen);
 }
 
+const char* AML::GetFeatures()
+{
+    return g_szAMLFeatures;
+}
+
+void AML::AddFeature(const char* f)
+{
+    strcat(g_szAMLFeatures, f);
+    strcat(g_szAMLFeatures, " ");
+}
+
 void AML::HookVtableFunc(void* ptr, unsigned int funcNum, void* func, void** original, bool instantiate)
 {
     HookVtableFunc(ptr, funcNum, func, original, instantiate);
@@ -155,3 +167,4 @@ void* AML::GetLibHandle(uintptr_t addr)
 
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;
+AML* g_pAML = &amlLocal;

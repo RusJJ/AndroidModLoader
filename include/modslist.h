@@ -17,6 +17,7 @@ public:
     void ProcessPreLoading();
     void ProcessLoading();
     void ProcessUnloading();
+    inline int GetModsNum() { return m_vecModInfo.size(); }
 
 // Callbacks
 public:
