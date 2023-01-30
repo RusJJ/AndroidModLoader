@@ -129,6 +129,11 @@ uintptr_t AML::PatternScan(const char* pattern, uintptr_t libStart, uintptr_t sc
     return ARMPatch::GetAddressFromPattern(pattern, libStart, scanLen);
 }
 
+void AML::PatchForThumb(bool forThumb)
+{
+    ARMPatch::bThumbMode = forThumb;
+}
+
 const char* AML::GetFeatures()
 {
     return g_szAMLFeatures;

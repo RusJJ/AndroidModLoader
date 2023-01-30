@@ -52,6 +52,7 @@ public:
     virtual uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen) = 0;
     
     /* AML 1.0.1 */
+    virtual void        PatchForThumb(bool forThumb) = 0;
     virtual const char* GetFeatures() = 0;
     virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false) = 0;
     virtual bool        IsGameFaked() = 0;
