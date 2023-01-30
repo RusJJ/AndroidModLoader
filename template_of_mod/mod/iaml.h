@@ -32,9 +32,9 @@ public:
     virtual int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
     virtual void        Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
     virtual void        Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
-    virtual void        PlaceNOP(uintptr_t addr, size_t count = 1) = 0;
-    virtual void        PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
-    virtual void        PlaceRET(uintptr_t addr) = 0;
+    virtual int         PlaceNOP(uintptr_t addr, size_t count = 1) = 0;
+    virtual int         PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
+    virtual int         PlaceRET(uintptr_t addr) = 0;
 
     /* AML 1.0.0.4 */
     virtual const char* GetDataPath() = 0; // /data/data/.../*
@@ -45,7 +45,7 @@ public:
 
     /* AML 1.0.0.6 */
     virtual uintptr_t   GetLibLength(const char* szLib) = 0;
-    virtual void        Redirect(uintptr_t addr, uintptr_t to) = 0; // Move directly to "to" from "addr" with the same stack (not on ARMv8 ?)
+    virtual int         Redirect(uintptr_t addr, uintptr_t to) = 0; // Move directly to "to" from "addr" with the same stack (not on ARMv8 ?)
     virtual void        PlaceBL(uintptr_t addr, uintptr_t dest) = 0;
     virtual void        PlaceBLX(uintptr_t addr, uintptr_t dest) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, const char* soLib) = 0;
@@ -64,6 +64,7 @@ public:
     // So no need to check for their availability
     virtual bool        IsCorrectXDLHandle(void* ptr) = 0;
     virtual uintptr_t   GetLibXDL(void* ptr) = 0;
+    virtual uintptr_t   GetAddrBaseXDL(uintptr_t addr) = 0;
     virtual size_t      GetSymSizeXDL(void* ptr) = 0;
     virtual const char* GetSymNameXDL(void* ptr) = 0;
 };
