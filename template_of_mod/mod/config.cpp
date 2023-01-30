@@ -269,16 +269,30 @@ void ConfigEntry::SetBool(bool newValue)
 }
 
 inline bool IsRGBValue(int value) { return value >= 0 && value <= 255; }
+inline bool IsRGBFloatValue(float value) { return value >= 0 && value <= 1; }
 rgba_t ConfigEntry::ParseColor()
 {
     int r, g, b, a, sscanfed = sscanf(m_szValue, "%d %d %d %d", &r, &g, &b, &a);
     if(sscanfed == 4 && IsRGBValue(r) && IsRGBValue(g) && IsRGBValue(b) && IsRGBValue(a))
     {
-        rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,(unsigned char)a};
+        return rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,(unsigned char)a};
     }
     else if(sscanfed == 3 && IsRGBValue(r) && IsRGBValue(g) && IsRGBValue(b))
     {
-        rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,255};
+        return rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,255};
+    }
+    else
+    {
+        float fr, fg, fb, fa;
+        sscanfed = sscanf(m_szValue, "%f %f %f %f", &fr, &fg, &fb, &fa);
+        if(sscanfed == 4 && IsRGBFloatValue(r) && IsRGBFloatValue(g) && IsRGBFloatValue(b) && IsRGBFloatValue(a))
+        {
+            return rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),(unsigned char)(255*fa)};
+        }
+        else if(sscanfed == 3 && IsRGBFloatValue(r) && IsRGBFloatValue(g) && IsRGBFloatValue(b))
+        {
+            return rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),255};
+        }
     }
     return rgba_t{255,255,255,255};
 }
