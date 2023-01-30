@@ -165,6 +165,26 @@ void* AML::GetLibHandle(uintptr_t addr)
     return ARMPatch::GetLibHandle(addr);
 }
 
+bool AML::IsCorrectXDLHandle(void* ptr)
+{
+    return ARMPatch::IsCorrectXDLHandle(ptr);
+}
+
+uintptr_t AML::GetLibXDL(void* ptr)
+{
+    return ARMPatch::GetLibXDL(ptr);
+}
+
+size_t AML::GetSymSizeXDL(void* ptr)
+{
+    return ARMPatch::GetSymSizeXDL(ptr);
+}
+
+const char* AML::GetSymNameXDL(void* ptr)
+{
+    return ARMPatch::GetSymNameXDL(ptr);
+}
+
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;
 AML* g_pAML = &amlLocal;

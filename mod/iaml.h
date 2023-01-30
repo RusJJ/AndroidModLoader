@@ -58,6 +58,13 @@ public:
     virtual const char* GetRealCurrentGame() = 0;
     virtual void*       GetLibHandle(const char* soLib) = 0;
     virtual void*       GetLibHandle(uintptr_t addr) = 0;
+    // xDL (will return 0 if xDL is not used)
+    // These functions always exists
+    // So no need to check for their availability
+    virtual bool        IsCorrectXDLHandle(void* ptr) = 0;
+    virtual uintptr_t   GetLibXDL(void* ptr) = 0;
+    virtual size_t      GetSymSizeXDL(void* ptr) = 0;
+    virtual const char* GetSymNameXDL(void* ptr) = 0;
 };
 
 extern IAML* aml;

@@ -38,6 +38,11 @@ public:
     const char* GetRealCurrentGame();
     void*       GetLibHandle(const char* soLib);
     void*       GetLibHandle(uintptr_t addr);
+    // xDL
+    bool        IsCorrectXDLHandle(void* ptr);
+    uintptr_t   GetLibXDL(void* ptr);
+    size_t      GetSymSizeXDL(void* ptr);
+    const char* GetSymNameXDL(void* ptr);
 };
 
 extern char g_szAMLFeatures[1024];
