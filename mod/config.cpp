@@ -296,3 +296,21 @@ rgba_t ConfigEntry::ParseColor()
     }
     return rgba_t{255,255,255,255};
 }
+
+void ConfigEntry::SetColor(rgba_t clr, bool asFloat)
+{
+    m_nIntegerValue = (int)clr.r;
+    m_fFloatValue = (float)clr.r;
+    if(asFloat) snprintf(m_szValue, sizeof(m_szValue), "%.3f %.3f %.3f %.3f", (int)(clr.r/255.0f), (int)(clr.g/255.0f), (int)(clr.b/255.0f), (int)(clr.a/255.0f));
+    else snprintf(m_szValue, sizeof(m_szValue), "%d %d %d %d", (int)clr.r, (int)clr.g, (int)clr.b, (int)clr.a);
+    
+    // Kinda expensive to parse the color every time
+    // Why do you may want it to be changed automatically anyway?
+    m_pBoundCfg->m_bValueChanged = true;
+
+    #if !defined(__AML) && defined(_ICFG)
+        m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
+    #else
+        ((inipp::Ini<char>*)(m_pBoundCfg->m_iniMyConfig))->sections[m_szMySection][m_szMyKey] = m_szValue;
+	#endif
+}

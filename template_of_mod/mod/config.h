@@ -60,6 +60,7 @@ public:
     inline int GetInt() { return m_nIntegerValue; }
     inline void Reset() { SetString(m_szDefaultValue); }
     rgba_t ParseColor();
+    void SetColor(rgba_t clr, bool asFloat = false);
     
 private:
     Config* m_pBoundCfg;
