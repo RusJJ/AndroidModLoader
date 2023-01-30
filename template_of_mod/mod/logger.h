@@ -21,6 +21,7 @@ class Logger
 {
 public:
     Logger();
+    void ToggleOutput(bool enabled);
     void SetTag(const char* szTag);
     void Print(eLogPrio prio, const char* szMessage, ...);
     void PrintV(eLogPrio prio, const char* szMessage, va_list args);
@@ -30,9 +31,11 @@ public:
     void InfoV(const char* szMessage, va_list args);
     void Error(const char* szMessage, ...);
     void ErrorV(const char* szMessage, va_list args);
+    inline bool HasOutput() { return m_bEnabled; }
     static Logger* GetLogger();
 private:
     const char* m_szTag;
+    bool m_bEnabled;
 };
 extern Logger* logger;
 

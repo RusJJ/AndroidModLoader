@@ -15,7 +15,7 @@ enum eManifestPermissions
 {
     P_READ_EXTERNAL_STORAGE = 0,
     P_WRITE_EXTERNAL_STORAGE,
-};
+}; // Unused
 
 class IAML
 {

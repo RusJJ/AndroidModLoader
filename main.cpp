@@ -28,14 +28,14 @@
 #include <include/interfaces.h>
 #include <include/modslist.h>
 
-char g_szInternalStoragePath[0xFF] = {0};
-char g_szAppName[0xFF],
-     g_szFakeAppName[0xFF];
-char g_szModsDir[0xFF],
-     g_szInternalModsDir[0xFF];
-char g_szAndroidDataDir[0xFF];
+char g_szInternalStoragePath[0xFF],
+     g_szAppName[0xFF],
+     g_szFakeAppName[0xFF],
+     g_szModsDir[0xFF],
+     g_szInternalModsDir[0xFF],
+     g_szAndroidDataDir[0xFF],
+     g_szCfgPath[0xFF];
 const char* g_szDataDir;
-char g_szCfgPath[0xFF];
 
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.1", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
@@ -260,16 +260,24 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     logger->Info("Reading config...");
     cfg->Init();
     cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
+    delete Config::pLastEntry; // Do a clean-up
     cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg");
+    delete Config::pLastEntry; // Do a clean-up
     bool bHasChangedCfgAuthor = cfg->IsValueChanged();
     cfg->Bind("Version", "")->SetString(modinfo->VersionString());
+    delete Config::pLastEntry; // Do a clean-up
     cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
+    delete Config::pLastEntry; // Do a clean-up
     const char* szFakeAppName = cfg->Bind("FakePackageName", "")->GetString();
+    delete Config::pLastEntry; // Do a clean-up
     strcpy(g_szFakeAppName, szFakeAppName);
     const char* szInternalModsDir = cfg->Bind("InternalModsFolder", "AMLMods")->GetString();
+    delete Config::pLastEntry; // Do a clean-up
     sprintf(g_szInternalModsDir, "%s/%s/%s", g_szInternalStoragePath, szInternalModsDir, g_szAppName);
     bool internalModsPriority = cfg->Bind("InternalModsFirst", true)->GetBool();
+    delete Config::pLastEntry; // Do a clean-up
     logger->ToggleOutput(cfg->Bind("EnableLogcats", true)->GetBool());
+    delete Config::pLastEntry; // Do a clean-up
     cfg->Save();
 
     /* Mods? */

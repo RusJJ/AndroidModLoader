@@ -4,11 +4,18 @@
 #include "interface.h"
 #include <stdint.h>
 
+// Because the name was changed to be correct
 #define PlaceB PlaceJMP
 
 #ifndef PAGE_SIZE
     #define PAGE_SIZE 4096
 #endif
+
+enum eManifestPermissions
+{
+    P_READ_EXTERNAL_STORAGE = 0,
+    P_WRITE_EXTERNAL_STORAGE,
+}; // Unused
 
 class IAML
 {
@@ -25,9 +32,9 @@ public:
     virtual int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
     virtual void        Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
     virtual void        Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
-    virtual void        PlaceNOP(uintptr_t addr, size_t count = 1) = 0; // Untested on ARMv8
+    virtual void        PlaceNOP(uintptr_t addr, size_t count = 1) = 0;
     virtual void        PlaceJMP(uintptr_t addr, uintptr_t dest) = 0; // Untested on ARMv8
-    virtual void        PlaceRET(uintptr_t addr) = 0; // Untested on ARMv8
+    virtual void        PlaceRET(uintptr_t addr) = 0;
 
     /* AML 1.0.0.4 */
     virtual const char* GetDataPath() = 0; // /data/data/.../*
@@ -43,6 +50,14 @@ public:
     virtual void        PlaceBLX(uintptr_t addr, uintptr_t dest) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, const char* soLib) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen) = 0;
+    
+    /* AML 1.0.1 */
+    virtual const char* GetFeatures() = 0;
+    virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false) = 0;
+    virtual bool        IsGameFaked() = 0;
+    virtual const char* GetRealCurrentGame() = 0;
+    virtual void*       GetLibHandle(const char* soLib) = 0;
+    virtual void*       GetLibHandle(uintptr_t addr) = 0;
 };
 
 extern IAML* aml;
