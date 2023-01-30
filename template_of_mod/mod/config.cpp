@@ -200,6 +200,114 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 	return pRet;
 }
 
+ConfigEntry* Config::BindOnce(const char* szKey, const char* szDefaultValue, const char* szSection)
+{
+    if(!m_bInitialized) return NULL;
+    ConfigEntry entry; ConfigEntry* pRet = &entry;
+    pRet->m_pBoundCfg = this;
+    pRet->m_szMySection = szSection;
+    pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szDefaultValue, szDefaultValue, sizeof(pRet->m_szDefaultValue));
+    const char* tryToGetValue;
+    #if !defined(__AML) && defined(_ICFG)
+        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+    #else
+        tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+    #endif
+    if(tryToGetValue[0] == '\0')
+        pRet->SetString(szDefaultValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
+    Save();
+    pLastEntry = pRet; // Unsafe!
+    return pRet;
+}
+
+ConfigEntry* Config::BindOnce(const char* szKey, int nDefaultValue, const char* szSection)
+{
+    if(!m_bInitialized) return NULL;
+    ConfigEntry entry; ConfigEntry* pRet = &entry;
+    pRet->m_pBoundCfg = this;
+    pRet->m_szMySection = szSection;
+    pRet->m_szMyKey = szKey;
+    snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d", nDefaultValue);
+    const char* tryToGetValue;
+    #if !defined(__AML) && defined(_ICFG)
+        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+    #else
+        tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+    #endif
+    if(tryToGetValue[0] == '\0')
+        pRet->SetInt(nDefaultValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
+    Save();
+    pLastEntry = pRet; // Unsafe!
+    return pRet;
+}
+
+ConfigEntry* Config::BindOnce(const char* szKey, float flDefaultValue, const char* szSection)
+{
+    if(!m_bInitialized) return NULL;
+    ConfigEntry entry; ConfigEntry* pRet = &entry;
+    pRet->m_pBoundCfg = this;
+    pRet->m_szMySection = szSection;
+    pRet->m_szMyKey = szKey;
+    snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%f", flDefaultValue);
+    const char* tryToGetValue;
+    #if !defined(__AML) && defined(_ICFG)
+        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+    #else
+        tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+    #endif
+    if(tryToGetValue[0] == '\0')
+        pRet->SetFloat(flDefaultValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
+    Save();
+    pLastEntry = pRet; // Unsafe!
+    return pRet;
+}
+
+ConfigEntry* Config::BindOnce(const char* szKey, bool bDefaultValue, const char* szSection)
+{
+    if(!m_bInitialized) return NULL;
+    ConfigEntry entry; ConfigEntry* pRet = &entry;
+    pRet->m_pBoundCfg = this;
+    pRet->m_szMySection = szSection;
+    pRet->m_szMyKey = szKey;
+    pRet->m_szDefaultValue[0] = bDefaultValue ? '1' : '0'; pRet->m_szDefaultValue[1] = 0;
+    const char* tryToGetValue;
+    #if !defined(__AML) && defined(_ICFG)
+        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+    #else
+        tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
+    #endif
+    if(tryToGetValue[0] == '\0')
+        pRet->SetBool(bDefaultValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
+    Save();
+    pLastEntry = pRet; // Unsafe!
+    return pRet;
+}
+
 void ConfigEntry::SetString(const char* newValue)
 {
     if(str_equal(newValue, m_szValue)) return;

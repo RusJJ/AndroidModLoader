@@ -259,25 +259,17 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* AML Config */
     logger->Info("Reading config...");
     cfg->Init();
-    cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
-    delete Config::pLastEntry; // Do a clean-up
-    cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg");
-    delete Config::pLastEntry; // Do a clean-up
+    cfg->BindOnce("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
+    cfg->BindOnce("Discord", "")->SetString("https://discord.gg/2MY7W39kBg");
     bool bHasChangedCfgAuthor = cfg->IsValueChanged();
-    cfg->Bind("Version", "")->SetString(modinfo->VersionString());
-    delete Config::pLastEntry; // Do a clean-up
-    cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
-    delete Config::pLastEntry; // Do a clean-up
-    const char* szFakeAppName = cfg->Bind("FakePackageName", "")->GetString();
-    delete Config::pLastEntry; // Do a clean-up
+    cfg->BindOnce("Version", "")->SetString(modinfo->VersionString());
+    cfg->BindOnce("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
+    const char* szFakeAppName = cfg->BindOnce("FakePackageName", "")->GetString();
     strcpy(g_szFakeAppName, szFakeAppName);
-    const char* szInternalModsDir = cfg->Bind("InternalModsFolder", "AMLMods")->GetString();
-    delete Config::pLastEntry; // Do a clean-up
+    const char* szInternalModsDir = cfg->BindOnce("InternalModsFolder", "AMLMods")->GetString();
     sprintf(g_szInternalModsDir, "%s/%s/%s", g_szInternalStoragePath, szInternalModsDir, g_szAppName);
-    bool internalModsPriority = cfg->Bind("InternalModsFirst", true)->GetBool();
-    delete Config::pLastEntry; // Do a clean-up
-    logger->ToggleOutput(cfg->Bind("EnableLogcats", true)->GetBool());
-    delete Config::pLastEntry; // Do a clean-up
+    bool internalModsPriority = cfg->BindOnce("InternalModsFirst", true)->GetBool();
+    logger->ToggleOutput(cfg->BindOnce("EnableLogcats", true)->GetBool());
     cfg->Save();
 
     /* Mods? */
