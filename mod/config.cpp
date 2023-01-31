@@ -18,9 +18,9 @@
 	extern char g_szCfgPath[0xFF];
 #endif
 
-inline bool str_equal(const char* str1, const char* str2) { 
-     for ( ; *str1 == *str2 && *str1 != '\0'; ++str1, ++str2 ); 
-         return *str2 == *str1; 
+inline bool str_equal(const char* str1, const char* str2) { 
+     for ( ; *str1 == *str2 && *str1 != '\0'; ++str1, ++str2 ); 
+         return *str2 == *str1; 
  }
 
 extern ModInfo* modinfo;
@@ -325,6 +325,11 @@ void ConfigEntry::SetString(const char* newValue)
 	#endif
 }
 
+void ConfigEntry::GetString(char* str, size_t len)
+{
+    strncpy(str, GetString(), len);
+}
+
 void ConfigEntry::SetFloat(float newValue)
 {
     if(m_fFloatValue == newValue) return;
@@ -409,7 +414,7 @@ void ConfigEntry::SetColor(rgba_t clr, bool asFloat)
 {
     m_nIntegerValue = (int)clr.r;
     m_fFloatValue = (float)clr.r;
-    if(asFloat) snprintf(m_szValue, sizeof(m_szValue), "%.3f %.3f %.3f %.3f", (int)(clr.r/255.0f), (int)(clr.g/255.0f), (int)(clr.b/255.0f), (int)(clr.a/255.0f));
+    if(asFloat) snprintf(m_szValue, sizeof(m_szValue), "%.3f %.3f %.3f %.3f", (float)(clr.r/255.0f), (float)(clr.g/255.0f), (float)(clr.b/255.0f), (float)(clr.a/255.0f));
     else snprintf(m_szValue, sizeof(m_szValue), "%d %d %d %d", (int)clr.r, (int)clr.g, (int)clr.b, (int)clr.a);
     
     // Kinda expensive to parse the color every time

@@ -60,6 +60,7 @@ public:
     ConfigEntry() : m_szValue(""), m_szDefaultValue("") {}
     void SetString(const char* newValue);
     inline const char* GetString() { return m_szValue; }
+    void GetString(char* str, size_t len);
     void SetFloat(float newValue);
     inline float GetFloat() { return m_fFloatValue; }
     void SetBool(bool newValue);
