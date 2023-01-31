@@ -57,7 +57,7 @@ private:
 class ConfigEntry
 {
 public:
-    ConfigEntry() : m_szValue(""), m_szDefaultValue("") {}
+    ConfigEntry() : m_bLoadedData(false), m_szValue(""), m_szDefaultValue("") {}
     void SetString(const char* newValue);
     inline const char* GetString() { return m_szValue; }
     void GetString(char* str, size_t len);
@@ -73,6 +73,7 @@ public:
     
 private:
     Config* m_pBoundCfg;
+    bool m_bLoadedData;
     const char* m_szMySection;
     const char* m_szMyKey;
     float m_fFloatValue;

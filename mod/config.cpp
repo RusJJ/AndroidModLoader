@@ -296,7 +296,9 @@ ConfigEntry* Config::BindOnce(const char* szKey, bool bDefaultValue, const char*
         tryToGetValue = ((inipp::Ini<char>*)m_iniMyConfig)->sections[szSection][szKey].c_str();
     #endif
     if(tryToGetValue[0] == '\0')
+    {
         pRet->SetBool(bDefaultValue);
+    }
     else
     {
         bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
@@ -310,13 +312,14 @@ ConfigEntry* Config::BindOnce(const char* szKey, bool bDefaultValue, const char*
 
 void ConfigEntry::SetString(const char* newValue)
 {
-    if(str_equal(newValue, m_szValue)) return;
+    if(m_bLoadedData && str_equal(newValue, m_szValue)) return;
     
     strncpy(m_szValue, newValue, sizeof(m_szValue)-1); m_szValue[sizeof(m_szValue)-1] = 0;
 	m_nIntegerValue = atoi(m_szValue);
 	m_fFloatValue = (float)atof(m_szValue);
     
     m_pBoundCfg->m_bValueChanged = true;
+    m_bLoadedData = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
@@ -332,13 +335,14 @@ void ConfigEntry::GetString(char* str, size_t len)
 
 void ConfigEntry::SetFloat(float newValue)
 {
-    if(m_fFloatValue == newValue) return;
+    if(m_bLoadedData && m_fFloatValue == newValue) return;
     
 	m_fFloatValue = newValue;
     m_nIntegerValue = (int)newValue;
     snprintf(m_szValue, sizeof(m_szValue), "%f", newValue);
     
     m_pBoundCfg->m_bValueChanged = true;
+    m_bLoadedData = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
@@ -349,13 +353,14 @@ void ConfigEntry::SetFloat(float newValue)
 
 void ConfigEntry::SetInt(int newValue)
 {
-    if(m_nIntegerValue == newValue) return;
+    if(m_bLoadedData && m_nIntegerValue == newValue) return;
     
 	m_fFloatValue = (float)newValue;
     m_nIntegerValue = newValue;
 	snprintf(m_szValue, sizeof(m_szValue), "%d", newValue);
     
     m_pBoundCfg->m_bValueChanged = true;
+    m_bLoadedData = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
@@ -366,13 +371,14 @@ void ConfigEntry::SetInt(int newValue)
 
 void ConfigEntry::SetBool(bool newValue)
 {
-    if(m_nIntegerValue == (int)newValue) return;
+    if(m_bLoadedData && m_nIntegerValue == newValue?1:0) return;
     
 	m_fFloatValue = newValue?1.0f:0.0f;
     m_nIntegerValue = newValue?1:0;
     m_szValue[0] = newValue ? '1' : '0'; m_szValue[1] = 0;
     
     m_pBoundCfg->m_bValueChanged = true;
+    m_bLoadedData = true;
 
 	#if !defined(__AML) && defined(_ICFG)
 		m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
@@ -420,6 +426,7 @@ void ConfigEntry::SetColor(rgba_t clr, bool asFloat)
     // Kinda expensive to parse the color every time
     // Why do you may want it to be changed automatically anyway?
     m_pBoundCfg->m_bValueChanged = true;
+    m_bLoadedData = true;
 
     #if !defined(__AML) && defined(_ICFG)
         m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
