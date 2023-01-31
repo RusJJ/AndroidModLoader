@@ -45,10 +45,10 @@ inline jstring GetAndroidPermission(JNIEnv* env, const char* szPermissionName)
     return (jstring)env->GetStaticObjectField(ClassManifestPermission, lid_PERM);
 }
 
-/*inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szPermissionName)
+inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szPermissionName)
 {
     jclass ClassPackageManager = env->FindClass("android/content/pm/PackageManager");
-    bool result = false;
+    //bool result = false;
     jstring ls_PERM = GetAndroidPermission(env, szPermissionName);
     jfieldID lid_PERMISSION_GRANTED = env->GetStaticFieldID(ClassPackageManager, "PERMISSION_GRANTED", "I");
     jint PERMISSION_GRANTED = jint(-1);
@@ -58,7 +58,7 @@ inline jstring GetAndroidPermission(JNIEnv* env, const char* szPermissionName)
     return (int_result == PERMISSION_GRANTED);
 }
 
-inline void RequestPermissions(JNIEnv* env, jobject jActivity)
+/*inline void RequestPermissions(JNIEnv* env, jobject jActivity)
 {
     jobjectArray perm_array = env->NewObjectArray(2, env->FindClass("java/lang/String"), env->NewStringUTF(""));
     env->SetObjectArrayElement(perm_array, 0, GetAndroidPermission(env, "READ_EXTERNAL_STORAGE"));

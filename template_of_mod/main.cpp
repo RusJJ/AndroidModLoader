@@ -27,10 +27,17 @@ extern "C" void OnModLoad()
     else
     {
         logger->Error("MyGame mod is not loaded :(");
+        return; // Do not load our mod?
     }
 
     pCfgMyBestEntry = cfg->Bind("mySetting", "DefaultValue is 0?", "MyUniqueSection");
     pCfgMyBestEntry->SetString("DefaultValue is unchanged");
     pCfgMyBestEntry->SetInt(1);
-    cfg->Save();
+    pCfgMyBestEntry->Reset();
+    delete pCfgMyBestEntry; // Clean-up memory
+    
+    bool bEnabled = cfg->Bind("Enable", true)->GetBool();
+    delete Config::pLastEntry; // Clean-up of the latest ConfigEntry*
+    
+    cfg->Save(); // Will only save if something was changed
 }

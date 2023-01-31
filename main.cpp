@@ -11,6 +11,7 @@
 #include <fcntl.h> // "open" flags
 #include <dlfcn.h>
 
+#include <include/aml.h>
 #include <include/defines.h>
 #include <mod/amlmod.h>
 #include <mod/logger.h>
@@ -27,19 +28,20 @@
 #include <include/interfaces.h>
 #include <include/modslist.h>
 
-char g_szInternalStoragePath[0xFF] = {0};
-char g_szAppName[0xFF];
-char g_szModsDir[0xFF];
-char g_szAndroidDataDir[0xFF];
+char g_szInternalStoragePath[0xFF],
+     g_szAppName[0xFF],
+     g_szFakeAppName[0xFF],
+     g_szModsDir[0xFF],
+     g_szInternalModsDir[0xFF],
+     g_szAndroidDataDir[0xFF],
+     g_szCfgPath[0xFF];
 const char* g_szDataDir;
-char g_szCfgPath[0xFF];
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.0.6", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.1", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
-static CFG icfgLocal;
-ICFG* icfg = &icfgLocal;
+static CFG icfgLocal; ICFG* icfg = &icfgLocal;
 
 inline size_t __strlen(const char *str)
 {
@@ -51,15 +53,15 @@ inline size_t __strlen(const char *str)
 inline bool EndsWith(const char* base, const char* str)
 {
     static int blen, slen;
-    blen = __strlen(base);
-    slen = __strlen(str);
+    blen = strlen(base);
+    slen = strlen(str);
     return (blen >= slen) && (!strcmp(base + blen - slen, str));
 }
 
 inline bool EndsWithSO(const char* base)
 {
     static int blen;
-    blen = __strlen(base);
+    blen = strlen(base);
     return (blen >= 3) && (!strcmp(base + blen - 3, ".so"));
 }
 
@@ -104,33 +106,40 @@ inline bool CopyFile(const char* file, const char* dest)
     return true;
 }
 
+inline bool HasFakeAppName()
+{
+    return (g_szFakeAppName[0] != 0 && strlen(g_szFakeAppName) > 5);
+}
+
 typedef const char* (*SpecificGameFn)();
-void LoadMods()
+void LoadMods(const char* path)
 {
     ModInfo* pModInfo = NULL;
     SpecificGameFn maybeINeedAGame = NULL;
     GetModInfoFn modInfoFn = NULL;
 
     char buf[0xFF], dataBuf[0xFF];
-    DIR* dir = opendir(g_szModsDir);
+    DIR* dir = opendir(path);
     if (dir != NULL)
     {
-        logger->Info("Opening %s", g_szModsDir);
+        logger->Info("Opening %s", path);
         struct dirent *diread; void* handle;
+        const char* gameName = HasFakeAppName() ? g_szFakeAppName : g_szAppName;
         while ((diread = readdir(dir)) != NULL)
         {
             if(diread->d_name[0] == '.') continue; // Skip . and ..
             if(!EndsWithSO(diread->d_name))
             {
-                logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
+                // Useless info for us!
+                //logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
                 continue;
             }
-            sprintf(buf, "%s/%s", g_szModsDir, diread->d_name);
+            sprintf(buf, "%s/%s", path, diread->d_name);
             sprintf(dataBuf, "%s/%s", g_szDataDir, diread->d_name);
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
-            if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
+            //if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
             if(!CopyFileFaster(buf, dataBuf) && !CopyFile(buf, dataBuf))
             {
                 logger->Error("File %s is failed to be copied! :(", diread->d_name);
@@ -144,7 +153,7 @@ void LoadMods()
             {
                 pModInfo = modInfoFn();
                 maybeINeedAGame = (SpecificGameFn)dlsym(handle, "__INeedASpecificGame");
-                if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), g_szAppName) != 0)
+                if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), gameName) != 0)
                 {
                     logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
                     goto nextMod;
@@ -161,7 +170,9 @@ void LoadMods()
               nextMod:
                 dlclose(handle);
             }
-            unlink(dataBuf);
+            //unlink(dataBuf);
+            removeStatus = remove(dataBuf);
+            if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
         }
         closedir(dir);
     }
@@ -184,11 +195,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         return -1;
     }
 
-    /* Must Have for mods */    
-    interfaces->Register("AMLInterface", aml);
-    interfaces->Register("AMLConfig", icfg);
-    modlist->AddMod(modinfo, 0);
-
     /* Application Context */
     jobject appContext = GetGlobalContext(env);
     if(appContext == NULL)
@@ -196,6 +202,11 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
         return JNI_VERSION_1_6;
     }
+
+    /* Must Have for mods */    
+    interfaces->Register("AMLInterface", aml);
+    interfaces->Register("AMLConfig", icfg);
+    modlist->AddMod(modinfo, 0);
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
@@ -245,11 +256,20 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* root/data/data Folder */
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
 
-    /* AML Config (unused currently) */
+    /* AML Config */
+    logger->Info("Reading config...");
     cfg->Init();
-    cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
-    cfg->Bind("Version", "")->SetString(modinfo->VersionString());
-    cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
+    cfg->BindOnce("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
+    cfg->BindOnce("Discord", "")->SetString("https://discord.gg/2MY7W39kBg");
+    bool bHasChangedCfgAuthor = cfg->IsValueChanged();
+    cfg->BindOnce("Version", "")->SetString(modinfo->VersionString());
+    cfg->BindOnce("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
+    const char* szFakeAppName = cfg->BindOnce("FakePackageName", "")->GetString();
+    strcpy(g_szFakeAppName, szFakeAppName);
+    const char* szInternalModsDir = cfg->BindOnce("InternalModsFolder", "AMLMods")->GetString();
+    sprintf(g_szInternalModsDir, "%s/%s/%s", g_szInternalStoragePath, szInternalModsDir, g_szAppName);
+    bool internalModsPriority = cfg->BindOnce("InternalModsFirst", true)->GetBool();
+    logger->ToggleOutput(cfg->BindOnce("EnableLogcats", true)->GetBool());
     cfg->Save();
 
     /* Mods? */
@@ -258,11 +278,23 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         logger->Info("IL2CPP: Attempting to initialize IL2CPP-Utils");
         IL2CPP::Func::HookFunctions();
     #endif
-    LoadMods();
+    LoadMods(internalModsPriority ? g_szInternalModsDir : g_szModsDir);
+    LoadMods(internalModsPriority ? g_szModsDir : g_szInternalModsDir);
 
     /* All mods are loaded now. We should check for dependencies! */
     logger->Info("Checking for dependencies...");
     modlist->ProcessDependencies();
+    
+    /* Process features */
+    #ifdef __XDL
+        g_pAML->AddFeature("XDL");
+    #endif
+    #ifdef __IL2CPPUTILS
+        g_pAML->AddFeature("IL2CPP");
+    #endif
+    if(g_pAML->IsGameFaked()) g_pAML->AddFeature("FAKEGAME");
+    if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER");
+    if(!logger->HasOutput()) g_pAML->AddFeature("NOLOGGING");
 
     /* All mods are sorted and should be loaded! */
     modlist->ProcessPreLoading();
