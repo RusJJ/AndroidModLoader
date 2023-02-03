@@ -97,8 +97,8 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
 	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     strncpy(pRet->m_szDefaultValue, szDefaultValue, sizeof(pRet->m_szDefaultValue));
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
@@ -124,8 +124,8 @@ ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSe
 	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d", nDefaultValue);
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
@@ -151,8 +151,8 @@ ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* s
 	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%f", flDefaultValue);
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
@@ -178,8 +178,8 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 	if(!m_bInitialized) return NULL;
 	ConfigEntry* pRet = new ConfigEntry;
 	pRet->m_pBoundCfg = this;
-	pRet->m_szMySection = szSection;
-	pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     pRet->m_szDefaultValue[0] = bDefaultValue ? '1' : '0'; pRet->m_szDefaultValue[1] = 0;
 	const char* tryToGetValue;
 	#if !defined(__AML) && defined(_ICFG)
@@ -205,8 +205,8 @@ ConfigEntry* Config::BindOnce(const char* szKey, const char* szDefaultValue, con
     if(!m_bInitialized) return NULL;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
-    pRet->m_szMySection = szSection;
-    pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     strncpy(pRet->m_szDefaultValue, szDefaultValue, sizeof(pRet->m_szDefaultValue));
     const char* tryToGetValue;
     #if !defined(__AML) && defined(_ICFG)
@@ -232,8 +232,8 @@ ConfigEntry* Config::BindOnce(const char* szKey, int nDefaultValue, const char* 
     if(!m_bInitialized) return NULL;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
-    pRet->m_szMySection = szSection;
-    pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d", nDefaultValue);
     const char* tryToGetValue;
     #if !defined(__AML) && defined(_ICFG)
@@ -259,8 +259,8 @@ ConfigEntry* Config::BindOnce(const char* szKey, float flDefaultValue, const cha
     if(!m_bInitialized) return NULL;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
-    pRet->m_szMySection = szSection;
-    pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%f", flDefaultValue);
     const char* tryToGetValue;
     #if !defined(__AML) && defined(_ICFG)
@@ -286,8 +286,8 @@ ConfigEntry* Config::BindOnce(const char* szKey, bool bDefaultValue, const char*
     if(!m_bInitialized) return NULL;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
-    pRet->m_szMySection = szSection;
-    pRet->m_szMyKey = szKey;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     pRet->m_szDefaultValue[0] = bDefaultValue ? '1' : '0'; pRet->m_szDefaultValue[1] = 0;
     const char* tryToGetValue;
     #if !defined(__AML) && defined(_ICFG)

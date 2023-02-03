@@ -1,7 +1,8 @@
 #ifndef _CONFIG
 #define _CONFIG
 
-#define VALUE_BUFFER_C 512
+#define KEY_SECTION_BUFFER_C 64
+#define VALUE_BUFFER_C 256
 
 /* Is not required. Can be used only for a smaller size of mod (~480kb savings) */
 #include "icfg.h"
@@ -74,8 +75,8 @@ public:
 private:
     Config* m_pBoundCfg;
     bool m_bLoadedData;
-    const char* m_szMySection;
-    const char* m_szMyKey;
+    char m_szMySection[KEY_SECTION_BUFFER_C];
+    char m_szMyKey[KEY_SECTION_BUFFER_C];
     float m_fFloatValue;
     int m_nIntegerValue;
     char m_szValue[VALUE_BUFFER_C];
