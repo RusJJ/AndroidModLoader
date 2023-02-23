@@ -195,6 +195,18 @@ const char* AML::GetSymNameXDL(void* ptr)
     return ARMPatch::GetSymNameXDL(ptr);
 }
 
+extern jobject appContext;
+extern JNIEnv* env;
+JNIEnv* AML::GetJNIEnvironment()
+{
+    return env;
+}
+
+jobject AML::GetAppContextObject()
+{
+    return appContext;
+}
+
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;
 AML* g_pAML = &amlLocal;

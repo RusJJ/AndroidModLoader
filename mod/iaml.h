@@ -2,6 +2,7 @@
 #define _IAML
 
 #include "interface.h"
+#include <jni.h>
 #include <stdint.h>
 
 // Because the name was changed to be correct
@@ -67,6 +68,10 @@ public:
     virtual uintptr_t   GetAddrBaseXDL(uintptr_t addr) = 0;
     virtual size_t      GetSymSizeXDL(void* ptr) = 0;
     virtual const char* GetSymNameXDL(void* ptr) = 0;
+    
+    /* AML 1.0.2 */
+    virtual JNIEnv*     GetJNIEnvironment() = 0;
+    virtual jobject     GetAppContextObject() = 0;
 };
 
 extern IAML* aml;

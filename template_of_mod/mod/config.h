@@ -2,7 +2,7 @@
 #define _CONFIG
 
 #define KEY_SECTION_BUFFER_C 64
-#define VALUE_BUFFER_C 256
+#define VALUE_BUFFER_C 384
 
 /* Is not required. Can be used only for a smaller size of mod (~480kb savings) */
 #include "icfg.h"

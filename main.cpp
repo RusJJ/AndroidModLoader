@@ -10,6 +10,7 @@
 #include <sys/sendfile.h> // sendfile
 #include <fcntl.h> // "open" flags
 #include <dlfcn.h>
+#include <signal.h>
 
 #include <include/aml.h>
 #include <include/defines.h>
@@ -37,7 +38,10 @@ char g_szInternalStoragePath[256],
      g_szCfgPath[256];
 const char* g_szDataDir;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.1", "RusJJ aka [-=KILL MAN=-]");
+jobject appContext;
+JNIEnv* env;
+
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.2", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -188,7 +192,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     const char* szTmp; jstring jTmp;
 
     /* JNI Environment */
-    JNIEnv* env = NULL;
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     {
         logger->Error("Cannot get JNI Environment!");
@@ -196,7 +199,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     }
 
     /* Application Context */
-    jobject appContext = GetGlobalContext(env);
+    appContext = GetGlobalContext(env);
     if(appContext == NULL)
     {
         logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
@@ -300,11 +303,13 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
 
+    /* Return the value it needs */
     return JNI_VERSION_1_6;
 }
 
 JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
 {
     /* Not sure if it'll work... */
-    modlist->ProcessUnloading();
+    /* It worked once, lol */
+    //modlist->ProcessUnloading();
 }
