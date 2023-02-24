@@ -67,9 +67,8 @@ static inline void ProcessLine(ModDesc* d, char* data)
 {
     char left[64], middle[64], right[64];
     int scanned = sscanf(data, "%[^:]:%[^:]:%[^\n]", left, middle, right);
-    //if(scanned < 3) return;
-    
-    if(!strncmp(left, "myself", 6) || !strcmp(left, d->info->GUID()))
+    if(scanned < 3) return;
+    else if(!strncmp(left, "myself", 6) || !strcmp(left, d->info->GUID()))
     {
         if(!modlist->HasModOfBiggerVersion(d->info->GUID(), middle))
         {
@@ -77,8 +76,13 @@ static inline void ProcessLine(ModDesc* d, char* data)
             DownloadFile(right, d->szLibPath);
         }
     }
-    
-    logger->Info("line: %s<>%s<>%s", left, middle, right);
+    else
+    {
+        // files
+        // 1: filepath (relative to files folder)
+        // 2: checksum (MD5?)
+        // 3: URL
+    }
 }
 void ProcessData(ModDesc* d)
 {

@@ -46,7 +46,7 @@ public:
     size_t      GetSymSizeXDL(void* ptr);
     const char* GetSymNameXDL(void* ptr);
     /* AML 1.0.2 */
-    void        ShowToast(const char* txt, int msDuration = 3000);
+    void        ShowToast(int msDuration, const char* fmt, ...);
     int         GetModsLoadedCount();
     JNIEnv*     GetJNIEnvironment();
     jobject     GetAppContextObject();

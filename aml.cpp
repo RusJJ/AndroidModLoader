@@ -198,9 +198,14 @@ const char* AML::GetSymNameXDL(void* ptr)
     return ARMPatch::GetSymNameXDL(ptr);
 }
 
-void AML::ShowToast(const char* txt, int msDuration)
+void AML::ShowToast(int msDuration, const char* fmt, ...)
 {
+    char txt[2048];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(txt, sizeof(txt), fmt, args);
     ShowToastMessage(env, appContext, txt, msDuration);
+    va_end(args);
 }
 
 int AML::GetModsLoadedCount()

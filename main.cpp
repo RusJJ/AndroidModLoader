@@ -306,7 +306,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     InitCURL();
     modlist->ProcessUpdater();
     logger->Info("Mods were updated!");
-
+    
     /* Return the value it needs */
     return JNI_VERSION_1_6;
 }
