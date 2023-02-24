@@ -49,6 +49,7 @@ public:
     void        ShowToast(int msDuration, const char* fmt, ...);
     void        DownloadFile(const char* url, const char* saveto);
     void        DownloadFileToData(const char* url, char* out, size_t outLen);
+    void        FileMD5(const char* path, char* out);
     int         GetModsLoadedCount();
     JNIEnv*     GetJNIEnvironment();
     jobject     GetAppContextObject();

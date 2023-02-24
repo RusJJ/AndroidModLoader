@@ -3,6 +3,7 @@
 #include <vtable_hooker.h>
 #include <modslist.h>
 #include <libcurl/curl.h>
+#include <openssl/md5.h>
 #include <stdio.h>
 #include <jnifn.h>
 
@@ -253,6 +254,44 @@ void AML::DownloadFileToData(const char* url, char* out, size_t outLen)
     curl_easy_perform(curl);
     
     maxsizeof = 0;
+}
+
+void AML::FileMD5(const char* path, char* out)
+{
+    FILE *file;
+    MD5_CTX md5Context;
+    unsigned char md5Digest[MD5_DIGEST_LENGTH];
+    unsigned int i;
+    out[0] = 0;
+
+    // Open file for reading
+    file = fopen(path, "rb");
+    if(!file) return;
+
+    // Initialize MD5 context
+    MD5_Init(&md5Context);
+
+    // Read file contents and update MD5 context
+    unsigned char buffer[1024];
+    size_t bytesRead;
+    while((bytesRead = fread(buffer, 1, sizeof(buffer), file))) {
+        MD5_Update(&md5Context, buffer, bytesRead);
+    }
+
+    // Finalize MD5 context and get hash value
+    MD5_Final(md5Digest, &md5Context);
+
+    // Save MD5 hash value as hexadecimal string
+    char hex[3];
+    for(i = 0; i < 16; i++)
+    {
+        sprintf(hex, "%02x", md5Digest[i]);
+        strcat(out, hex);
+    }
+    out[16] = 0;
+
+    // Close file
+    fclose(file);
 }
 
 int AML::GetModsLoadedCount()

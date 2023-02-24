@@ -265,7 +265,7 @@ void ModsList::ProcessUpdater()
             if(updaterFn != NULL)
             {
                 const char* url = updaterFn();
-                logger->Info("url=%s", url);
+                //logger->Info("url=%s", url);
                 CURLcode res = DownloadFileToData(url);
                 if(res != CURLE_OK)
                 {

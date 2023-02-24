@@ -12,15 +12,18 @@ void InitCURL()
 
 CURL* curl = NULL;
 char szFileData[FILE_DATA_SIZE] = {0};
+size_t nReadedBytes = 0;
 
 static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
 {
     FILE* file = (FILE*)userdata;
     size_t written = fwrite(buffer, size, nmemb, file);
+    logger->Info("%s %d %d %d", "", size, nmemb, written);
     return written;
 }
 static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userdata)
 {
+    nReadedBytes = nmemb;
     return snprintf(szFileData, FILE_DATA_SIZE, "%s", buffer);
 }
 
@@ -28,14 +31,19 @@ CURLcode DownloadFile(const char* url, const char* path)
 {
     if(!curl) return CURLE_FAILED_INIT;
     
+    //if(remove(path) != -1) return DownloadFile(url, path);
+    //return CURLE_WRITE_ERROR;
+    
     FILE* file = fopen(path, "wb");
     if(!file) return CURLE_WRITE_ERROR;
     
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
     
     CURLcode res = curl_easy_perform(curl);
+    logger->Info("DownloadFile %d", res);
     fclose(file);
     return res;
 }
@@ -53,6 +61,10 @@ CURLcode DownloadFileToData(const char* url)
     return res;
 }
 
+inline bool str_equal(const char* str1, const char* str2) { 
+    for ( ; *str1 == *str2 && *str1 != 0; ++str1, ++str2 ); 
+        return *str2 == *str1; 
+}
 extern bool g_bShowUpdatedToast;
 static inline void ProcessLine(ModDesc* d, char* data)
 {
@@ -76,10 +88,33 @@ static inline void ProcessLine(ModDesc* d, char* data)
     }
     else
     {
+        
+        return; // Whats freakin wrong with that??????
+        // If the file exists, DownloadFile IS RETURNING NO RESOLVED NAME
+        
+        
         // files
         // 1: filepath (relative to files folder)
         // 2: checksum (MD5?)
         // 3: URL
+        
+        char md5[17] {0};
+        char filepath[256];
+        snprintf(filepath, sizeof(filepath), "%s/%s", aml->GetAndroidDataPath(), left);
+        aml->FileMD5(filepath, md5);
+        
+        //if(!md5[0]) return;
+        
+        if(md5[0] == 0 || !str_equal(md5, middle))
+        {
+            //DownloadFile(right, filepath);
+            DownloadFileToData(right);
+            FILE* file = fopen(filepath, "wb");
+            if(!file) return;
+            
+            fwrite(szFileData, 1, nReadedBytes, file);
+            fclose(file);
+        }
     }
 }
 void ProcessData(ModDesc* d)

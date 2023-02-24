@@ -49,7 +49,7 @@ include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := curl
-LOCAL_SHARED_LIBRARIES := libz crypto ssl
+LOCAL_SHARED_LIBRARIES := ssl
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
     LOCAL_SRC_FILES := libcurl/armv7a/libcurl.a
 else
