@@ -3,7 +3,7 @@
     #define sprintf stbsp_sprintf
     #define snprintf stbsp_snprintf
 #endif
-#include <include/jnifn.h>
+#include <jnifn.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h> // mkdir
@@ -26,9 +26,10 @@
 #include <icfg_desc.h>
 // Should be after config.h in main.cpp
 
-#include <include/interfaces.h>
-#include <include/modslist.h>
+#include <interfaces.h>
+#include <modslist.h>
 
+bool g_bShowUpdatedToast;
 char g_szInternalStoragePath[256],
      g_szAppName[256],
      g_szFakeAppName[256],
@@ -272,6 +273,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     snprintf(g_szInternalModsDir, sizeof(g_szInternalModsDir), "%s/%s/%s", g_szInternalStoragePath, cfg->BindOnce("InternalModsFolder", "AMLMods")->GetString(), g_szAppName);
     bool internalModsPriority = cfg->BindOnce("InternalModsFirst", true)->GetBool();
     logger->ToggleOutput(cfg->BindOnce("EnableLogcats", true)->GetBool());
+    bool bEnableUpdater = cfg->BindOnce("EnableUpdater", true)->GetBool();
+    g_bShowUpdatedToast = cfg->BindOnce("ShowUpdaterToast", true)->GetBool();
     cfg->Save();
 
     /* Mods? */
@@ -297,15 +300,19 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(g_pAML->IsGameFaked()) g_pAML->AddFeature("FAKEGAME");
     if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER");
     if(!logger->HasOutput()) g_pAML->AddFeature("NOLOGGING");
+    if(bEnableUpdater) g_pAML->AddFeature("UPDATER");
 
     /* All mods are sorted and should be loaded! */
     modlist->ProcessPreLoading();
     modlist->ProcessLoading();
     modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
-    InitCURL();
-    modlist->ProcessUpdater();
-    logger->Info("Mods were updated!");
+    if(bEnableUpdater)
+    {
+        InitCURL();
+        modlist->ProcessUpdater();
+        logger->Info("Mods were updated!");
+    }
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;

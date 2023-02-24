@@ -13,7 +13,6 @@ void InitCURL()
 CURL* curl = NULL;
 char szFileData[FILE_DATA_SIZE] = {0};
 
-
 static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
 {
     FILE* file = (FILE*)userdata;
@@ -27,11 +26,7 @@ static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userd
 
 CURLcode DownloadFile(const char* url, const char* path)
 {
-    //return CURLE_FAILED_INIT;
-    if(!curl)
-    {
-        return CURLE_FAILED_INIT;
-    }
+    if(!curl) return CURLE_FAILED_INIT;
     
     FILE* file = fopen(path, "wb");
     if(!file) return CURLE_WRITE_ERROR;
@@ -47,13 +42,8 @@ CURLcode DownloadFile(const char* url, const char* path)
 
 CURLcode DownloadFileToData(const char* url)
 {
-    //return CURLE_FAILED_INIT;
-    if(!curl)
-    {
-        return CURLE_FAILED_INIT;
-    }
+    if(!curl) return CURLE_FAILED_INIT;
     
-    //logger->Info("[cURL] Reading %s", url);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
@@ -63,17 +53,25 @@ CURLcode DownloadFileToData(const char* url)
     return res;
 }
 
+extern bool g_bShowUpdatedToast;
 static inline void ProcessLine(ModDesc* d, char* data)
 {
-    char left[64], middle[64], right[64];
+    char left[64], middle[64], right[128];
     int scanned = sscanf(data, "%[^:]:%[^:]:%[^\n]", left, middle, right);
     if(scanned < 3) return;
     else if(!strncmp(left, "myself", 6) || !strcmp(left, d->info->GUID()))
     {
         if(!modlist->HasModOfBiggerVersion(d->info->GUID(), middle))
         {
-            logger->Info("DownloadFile(%s, %s)", right, d->szLibPath);
-            DownloadFile(right, d->szLibPath);
+            //logger->Info("DownloadFile(%s, %s)", right, d->szLibPath);
+            if(DownloadFile(right, d->szLibPath) == CURLE_OK)
+            {
+                if(g_bShowUpdatedToast) aml->ShowToast(1000, "Mod %s has been updated!\nRestart the game to load new mods.", d->info->Name());
+            }
+            else
+            {
+                if(g_bShowUpdatedToast) aml->ShowToast(1000, "Mod %s has failed to update!", d->info->Name());
+            }
         }
     }
     else
