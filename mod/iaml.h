@@ -71,6 +71,8 @@ public:
     
     /* AML 1.0.2 */
     virtual void        ShowToast(int msDuration, const char* fmt, ...) = 0;
+    virtual void        DownloadFile(const char* url, const char* saveto) = 0;
+    virtual void        DownloadFileToData(const char* url, char* out, size_t outLen) = 0;
     virtual int         GetModsLoadedCount() = 0;
     virtual JNIEnv*     GetJNIEnvironment() = 0;
     virtual jobject     GetAppContextObject() = 0;

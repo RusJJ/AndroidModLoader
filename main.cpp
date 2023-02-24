@@ -29,7 +29,7 @@
 #include <interfaces.h>
 #include <modslist.h>
 
-bool g_bShowUpdatedToast;
+bool g_bShowUpdatedToast, g_bEnableFileDownloads;
 char g_szInternalStoragePath[256],
      g_szAppName[256],
      g_szFakeAppName[256],
@@ -212,6 +212,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
     modlist->AddMod(modinfo, 0, NULL);
+    InitCURL();
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
@@ -275,6 +276,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     logger->ToggleOutput(cfg->BindOnce("EnableLogcats", true)->GetBool());
     bool bEnableUpdater = cfg->BindOnce("EnableUpdater", true)->GetBool();
     g_bShowUpdatedToast = cfg->BindOnce("ShowUpdaterToast", true)->GetBool();
+    g_bEnableFileDownloads = cfg->BindOnce("EnableModFileDownloads", true)->GetBool();
     cfg->Save();
 
     /* Mods? */
@@ -303,16 +305,15 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(bEnableUpdater) g_pAML->AddFeature("UPDATER");
 
     /* All mods are sorted and should be loaded! */
+    if(bEnableUpdater)
+    {
+        modlist->ProcessUpdater();
+        logger->Info("Mods were updated!");
+    }
     modlist->ProcessPreLoading();
     modlist->ProcessLoading();
     modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
-    if(bEnableUpdater)
-    {
-        InitCURL();
-        modlist->ProcessUpdater();
-        logger->Info("Mods were updated!");
-    }
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;

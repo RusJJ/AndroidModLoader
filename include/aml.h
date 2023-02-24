@@ -47,6 +47,8 @@ public:
     const char* GetSymNameXDL(void* ptr);
     /* AML 1.0.2 */
     void        ShowToast(int msDuration, const char* fmt, ...);
+    void        DownloadFile(const char* url, const char* saveto);
+    void        DownloadFileToData(const char* url, char* out, size_t outLen);
     int         GetModsLoadedCount();
     JNIEnv*     GetJNIEnvironment();
     jobject     GetAppContextObject();

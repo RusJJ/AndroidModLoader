@@ -2,6 +2,8 @@
 #include <armpatch_src/ARMPatch.h>
 #include <vtable_hooker.h>
 #include <modslist.h>
+#include <libcurl/curl.h>
+#include <stdio.h>
 #include <jnifn.h>
 
 char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
@@ -11,6 +13,8 @@ extern char g_szAndroidDataDir[0xFF];
 extern const char* g_szDataDir;
 extern jobject appContext;
 extern JNIEnv* env;
+extern bool g_bEnableFileDownloads;
+extern CURL* curl;
 
 inline bool HasFakeAppName()
 {
@@ -206,6 +210,49 @@ void AML::ShowToast(int msDuration, const char* fmt, ...)
     vsnprintf(txt, sizeof(txt), fmt, args);
     ShowToastMessage(env, appContext, txt, msDuration);
     va_end(args);
+}
+
+static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
+{
+    FILE* file = (FILE*)userdata;
+    size_t written = fwrite(buffer, size, nmemb, file);
+    return written;
+}
+void AML::DownloadFile(const char* url, const char* saveto)
+{
+    if(!g_bEnableFileDownloads) return;
+    
+    if(!curl) return;
+    
+    FILE* file = fopen(saveto, "wb");
+    if(!file) return;
+    
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+    
+    curl_easy_perform(curl);
+    fclose(file);
+}
+
+size_t maxsizeof = 0;
+static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userdata)
+{
+    return snprintf((char*)userdata, maxsizeof, "%s", buffer);
+}
+void AML::DownloadFileToData(const char* url, char* out, size_t outLen)
+{
+    if(!g_bEnableFileDownloads) return;
+    if(!curl) return;
+    
+    maxsizeof = outLen;
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, out);
+    
+    curl_easy_perform(curl);
+    
+    maxsizeof = 0;
 }
 
 int AML::GetModsLoadedCount()
