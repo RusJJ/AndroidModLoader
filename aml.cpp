@@ -222,8 +222,8 @@ static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userd
 void AML::DownloadFile(const char* url, const char* saveto)
 {
     if(!g_bEnableFileDownloads) return;
-    
     if(!curl) return;
+    curl_easy_reset(curl);
     
     FILE* file = fopen(saveto, "wb");
     if(!file) return;
@@ -245,6 +245,7 @@ void AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 {
     if(!g_bEnableFileDownloads) return;
     if(!curl) return;
+    curl_easy_reset(curl);
     
     maxsizeof = outLen;
     curl_easy_setopt(curl, CURLOPT_URL, url);

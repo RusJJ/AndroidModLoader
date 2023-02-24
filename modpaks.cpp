@@ -30,6 +30,7 @@ static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userd
 CURLcode DownloadFile(const char* url, const char* path)
 {
     if(!curl) return CURLE_FAILED_INIT;
+    curl_easy_reset(curl);
     
     //if(remove(path) != -1) return DownloadFile(url, path);
     //return CURLE_WRITE_ERROR;
@@ -51,6 +52,7 @@ CURLcode DownloadFile(const char* url, const char* path)
 CURLcode DownloadFileToData(const char* url)
 {
     if(!curl) return CURLE_FAILED_INIT;
+    curl_easy_reset(curl);
     
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
