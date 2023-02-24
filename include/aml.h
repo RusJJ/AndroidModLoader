@@ -45,6 +45,11 @@ public:
     uintptr_t   GetAddrBaseXDL(uintptr_t addr);
     size_t      GetSymSizeXDL(void* ptr);
     const char* GetSymNameXDL(void* ptr);
+    /* AML 1.0.2 */
+    void        ShowToast(const char* txt, int msDuration = 3000);
+    int         GetModsLoadedCount();
+    JNIEnv*     GetJNIEnvironment();
+    jobject     GetAppContextObject();
 };
 
 extern char g_szAMLFeatures[1024];

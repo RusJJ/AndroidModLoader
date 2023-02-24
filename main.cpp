@@ -10,10 +10,10 @@
 #include <sys/sendfile.h> // sendfile
 #include <fcntl.h> // "open" flags
 #include <dlfcn.h>
-#include <signal.h>
 
-#include <include/aml.h>
-#include <include/defines.h>
+#include <aml.h>
+#include <defines.h>
+#include <modpaks.h>
 #include <mod/amlmod.h>
 #include <mod/logger.h>
 #include <mod/config.h>
@@ -162,12 +162,13 @@ void LoadMods(const char* path)
                     logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
                     goto nextMod;
                 }
-                if(!modlist->AddMod(pModInfo, handle))
+                if(!modlist->AddMod(pModInfo, handle, buf))
                 {
                     logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
                     goto nextMod;
                 }
-                logger->Info("Mod (GUID %s) has been preloaded...", pModInfo->GUID());
+                
+                logger->Info("Mod (GUID %s) has been processed...", pModInfo->GUID());
             }
             else
             {
@@ -209,7 +210,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Must Have for mods */    
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
-    modlist->AddMod(modinfo, 0);
+    modlist->AddMod(modinfo, 0, NULL);
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
@@ -302,6 +303,9 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     modlist->ProcessLoading();
     modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
+    InitCURL();
+    modlist->ProcessUpdater();
+    logger->Info("Mods were updated!");
 
     /* Return the value it needs */
     return JNI_VERSION_1_6;

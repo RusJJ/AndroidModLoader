@@ -1,13 +1,16 @@
-#include <include/aml.h>
+#include <aml.h>
 #include <armpatch_src/ARMPatch.h>
 #include <vtable_hooker.h>
-#include <include/modslist.h>
+#include <modslist.h>
+#include <jnifn.h>
 
 char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
 extern char g_szAppName[0xFF], g_szFakeAppName[0xFF];
 extern char g_szCfgPath[0xFF];
 extern char g_szAndroidDataDir[0xFF];
 extern const char* g_szDataDir;
+extern jobject appContext;
+extern JNIEnv* env;
 
 inline bool HasFakeAppName()
 {
@@ -195,8 +198,16 @@ const char* AML::GetSymNameXDL(void* ptr)
     return ARMPatch::GetSymNameXDL(ptr);
 }
 
-extern jobject appContext;
-extern JNIEnv* env;
+void AML::ShowToast(const char* txt, int msDuration)
+{
+    ShowToastMessage(env, appContext, txt, msDuration);
+}
+
+int AML::GetModsLoadedCount()
+{
+    return modlist->GetModsNum();
+}
+
 JNIEnv* AML::GetJNIEnvironment()
 {
     return env;

@@ -51,7 +51,8 @@
     {"", ""} };                                                         \
     extern "C" ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
 
-
+    
+    
 struct ModInfoDependency
 {
     const char* szGUID;

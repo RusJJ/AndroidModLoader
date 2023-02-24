@@ -70,6 +70,8 @@ public:
     virtual const char* GetSymNameXDL(void* ptr) = 0;
     
     /* AML 1.0.2 */
+    virtual void        ShowToast(const char* txt, int msDuration = 3000) = 0;
+    virtual int         GetModsLoadedCount() = 0;
     virtual JNIEnv*     GetJNIEnvironment() = 0;
     virtual jobject     GetAppContextObject() = 0;
 };

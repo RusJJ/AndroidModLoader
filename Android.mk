@@ -5,11 +5,57 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_MODULE := substrate
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
-	LOCAL_SRC_FILES := armpatch_src/libsubstrate-armv7a_Cydia.a # Cydia Substrate
+    LOCAL_SRC_FILES := armpatch_src/libsubstrate-armv7a_Cydia.a # Cydia Substrate
+else
+    ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
+        LOCAL_SRC_FILES := armpatch_src/libsubstrate-armv8a.a # And64InlineHook
+    endif
+endif
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libz
+ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
+	LOCAL_SRC_FILES := libcurl/armv7a/libz.a
 else
 	ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
-		LOCAL_SRC_FILES := armpatch_src/libsubstrate-armv8a.a # And64InlineHook
+		LOCAL_SRC_FILES := libcurl/armv8a/libz.a
 	endif
+endif
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := crypto
+ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
+    LOCAL_SRC_FILES := libcurl/armv7a/libcrypto.a
+else
+    ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
+        LOCAL_SRC_FILES := libcurl/armv8a/libcrypto.a
+    endif
+endif
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := ssl
+LOCAL_SHARED_LIBRARIES := libz crypto
+ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
+    LOCAL_SRC_FILES := libcurl/armv7a/libssl.a
+else
+    ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
+        LOCAL_SRC_FILES := libcurl/armv8a/libssl.a
+    endif
+endif
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := curl
+LOCAL_SHARED_LIBRARIES := libz crypto ssl
+ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
+    LOCAL_SRC_FILES := libcurl/armv7a/libcurl.a
+else
+    ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
+        LOCAL_SRC_FILES := libcurl/armv8a/libcurl.a
+    endif
 endif
 include $(PREBUILT_STATIC_LIBRARY)
 
@@ -31,9 +77,9 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION := .cpp .cc
-LOCAL_SHARED_LIBRARIES := armpatch
+LOCAL_SHARED_LIBRARIES := armpatch curl
 LOCAL_MODULE    := AML
-LOCAL_SRC_FILES := main.cpp interface.cpp aml.cpp \
+LOCAL_SRC_FILES := main.cpp interface.cpp aml.cpp modpaks.cpp \
                    modslist.cpp icfg.cpp vtable_hooker.cpp \
                    mod/logger.cpp mod/config.cpp
 

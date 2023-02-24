@@ -77,3 +77,18 @@ inline jobject GetStorageDir(JNIEnv* env) // /storage/emulated/0 instead of /sdc
     jclass classEnvironment = env->FindClass("android/os/Environment");
     return (jstring)env->CallStaticObjectMethod(classEnvironment, env->GetStaticMethodID(classEnvironment, "getExternalStorageDirectory", "()Ljava/io/File;"));
 }
+
+inline void ShowToastMessage(JNIEnv* env, jobject jActivity, const char* txt, int msDuration)
+{
+    jclass ToastClass = env->FindClass("android/widget/Toast");
+    jmethodID makeTextMethodID = env->GetStaticMethodID(ToastClass, "makeText", "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;");
+    jmethodID showMethodID = env->GetMethodID(ToastClass, "show", "()V");
+
+    jstring message = env->NewStringUTF(txt);
+    jint duration = msDuration; // can be Toast.LENGTH_SHORT or Toast.LENGTH_LONG
+
+    jobject toast = env->CallStaticObjectMethod(ToastClass, makeTextMethodID, jActivity, message, duration);
+    env->CallVoidMethod(toast, showMethodID);
+    
+    env->DeleteLocalRef(message);
+}
