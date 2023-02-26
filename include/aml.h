@@ -46,13 +46,15 @@ public:
     size_t      GetSymSizeXDL(void* ptr);
     const char* GetSymNameXDL(void* ptr);
     /* AML 1.0.2 */
-    void        ShowToast(int msDuration, const char* fmt, ...);
-    void        DownloadFile(const char* url, const char* saveto);
-    void        DownloadFileToData(const char* url, char* out, size_t outLen);
-    void        FileMD5(const char* path, char* out);
+    void        ShowToast(bool longerDuration, const char* fmt, ...);
+    bool        DownloadFile(const char* url, const char* saveto);
+    bool        DownloadFileToData(const char* url, char* out, size_t outLen);
+    void        FileMD5(const char* path, char* out, size_t out_len);
     int         GetModsLoadedCount();
     JNIEnv*     GetJNIEnvironment();
     jobject     GetAppContextObject();
+    /* AML 1.0.2.1 */
+    bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion);
 };
 
 extern char g_szAMLFeatures[1024];

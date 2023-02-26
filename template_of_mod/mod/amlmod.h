@@ -52,6 +52,14 @@
     extern "C" ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
 
     
+
+#define MINIMUM_MD5_BUF_SIZE 33
+    
+struct MemChunk_t
+{
+    char* out;
+    size_t out_len;
+};
     
 struct ModInfoDependency
 {

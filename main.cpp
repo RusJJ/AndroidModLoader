@@ -29,7 +29,9 @@
 #include <interfaces.h>
 #include <modslist.h>
 
-bool g_bShowUpdatedToast, g_bEnableFileDownloads;
+bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
+int g_nEnableNews, g_nDownloadTimeout;
+ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256],
      g_szAppName[256],
      g_szFakeAppName[256],
@@ -42,7 +44,7 @@ const char* g_szDataDir;
 jobject appContext;
 JNIEnv* env;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.2", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.2.1", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -276,7 +278,12 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     logger->ToggleOutput(cfg->BindOnce("EnableLogcats", true)->GetBool());
     bool bEnableUpdater = cfg->BindOnce("EnableUpdater", true)->GetBool();
     g_bShowUpdatedToast = cfg->BindOnce("ShowUpdaterToast", true)->GetBool();
+    g_bShowUpdateFailedToast = cfg->BindOnce("ShowUpdaterFailedToast", true)->GetBool();
     g_bEnableFileDownloads = cfg->BindOnce("EnableModFileDownloads", true)->GetBool();
+    g_nEnableNews = cfg->BindOnce("ShowNewsForFewTimes", 3)->GetInt();
+    g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
+    g_nDownloadTimeout = cfg->BindOnce("DownloadTimeout", 3)->GetInt();
+    if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     cfg->Save();
 
     /* Mods? */
@@ -302,11 +309,30 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(g_pAML->IsGameFaked()) g_pAML->AddFeature("FAKEGAME");
     if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER");
     if(!logger->HasOutput()) g_pAML->AddFeature("NOLOGGING");
-    if(bEnableUpdater) g_pAML->AddFeature("UPDATER");
-
+    
+    /* Load news first! */
+    if(g_nEnableNews > 0)
+    {
+        char newsBuf[1024]; newsBuf[0] = 0;
+        
+        if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", newsBuf, sizeof(newsBuf)) && newsBuf[0])
+        {
+            if(strncmp(g_pLastNewsId->GetString(), newsBuf, 16) != 0)
+            {
+                for(int i = 0; i < g_nEnableNews; ++i)
+                    aml->ShowToast(true, newsBuf);
+                    
+                newsBuf[16] = 0;
+                g_pLastNewsId->SetString(newsBuf);
+                cfg->Save();
+            }
+        }
+    }
+    
     /* All mods are sorted and should be loaded! */
     if(bEnableUpdater)
     {
+        g_pAML->AddFeature("UPDATER");
         modlist->ProcessUpdater();
         logger->Info("Mods were updated!");
     }

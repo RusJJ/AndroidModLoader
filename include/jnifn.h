@@ -92,3 +92,19 @@ inline void ShowToastMessage(JNIEnv* env, jobject jActivity, const char* txt, in
     
     env->DeleteLocalRef(message);
 }
+
+inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, jint duration)
+{
+    jclass ToastClass = env->FindClass("android/widget/Toast");
+    jmethodID makeTextMethodID = env->GetStaticMethodID(ToastClass, "makeText", "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;");
+    jmethodID showMethodID = env->GetMethodID(ToastClass, "show", "()V");
+    jmethodID setDurationMethodID = env->GetMethodID(ToastClass, "setDuration", "(I)V");
+
+    jstring message = env->NewStringUTF(txt);
+    jobject toast = env->CallStaticObjectMethod(ToastClass, makeTextMethodID, jActivity, message, duration);
+    env->CallVoidMethod(toast, setDurationMethodID, duration);
+    env->CallVoidMethod(toast, showMethodID);
+
+    env->DeleteLocalRef(message);
+}
+

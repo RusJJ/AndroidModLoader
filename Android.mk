@@ -25,31 +25,19 @@ endif
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := crypto
+LOCAL_MODULE := wolfssl
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
-    LOCAL_SRC_FILES := libcurl/armv7a/libcrypto.a
+    LOCAL_SRC_FILES := libcurl/armv7a/libwolfssl.a
 else
     ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
-        LOCAL_SRC_FILES := libcurl/armv8a/libcrypto.a
-    endif
-endif
-include $(PREBUILT_STATIC_LIBRARY)
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := ssl
-LOCAL_SHARED_LIBRARIES := libz crypto
-ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
-    LOCAL_SRC_FILES := libcurl/armv7a/libssl.a
-else
-    ifeq ($(TARGET_ARCH_ABI), arm64-v8a)
-        LOCAL_SRC_FILES := libcurl/armv8a/libssl.a
+        LOCAL_SRC_FILES := libcurl/armv8a/libwolfssl.a
     endif
 endif
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := curl
-LOCAL_SHARED_LIBRARIES := ssl
+LOCAL_SHARED_LIBRARIES := wolfssl libz
 ifeq ($(TARGET_ARCH_ABI), armeabi-v7a)
     LOCAL_SRC_FILES := libcurl/armv7a/libcurl.a
 else

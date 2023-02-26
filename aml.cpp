@@ -3,8 +3,9 @@
 #include <vtable_hooker.h>
 #include <modslist.h>
 #include <libcurl/curl.h>
-#include <openssl/md5.h>
+#include <wolfssl/wolfcrypt/md5.h>
 #include <stdio.h>
+#include <time.h>
 #include <jnifn.h>
 
 char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
@@ -16,6 +17,7 @@ extern jobject appContext;
 extern JNIEnv* env;
 extern bool g_bEnableFileDownloads;
 extern CURL* curl;
+extern int g_nDownloadTimeout;
 
 inline bool HasFakeAppName()
 {
@@ -203,66 +205,75 @@ const char* AML::GetSymNameXDL(void* ptr)
     return ARMPatch::GetSymNameXDL(ptr);
 }
 
-void AML::ShowToast(int msDuration, const char* fmt, ...)
+void AML::ShowToast(bool longerDuration, const char* fmt, ...)
 {
+    if(!fmt) return;
+    
     char txt[2048];
     va_list args;
     va_start(args, fmt);
     vsnprintf(txt, sizeof(txt), fmt, args);
-    ShowToastMessage(env, appContext, txt, msDuration);
+    ShowToastMessage(env, appContext, txt, longerDuration ? 1 : 0);
     va_end(args);
 }
 
 static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
 {
-    FILE* file = (FILE*)userdata;
+    FILE* file = fopen((const char*)userdata, "wb");
+    if(!file) return 0;
+    
     size_t written = fwrite(buffer, size, nmemb, file);
+    fclose(file);
     return written;
 }
-void AML::DownloadFile(const char* url, const char* saveto)
+bool AML::DownloadFile(const char* url, const char* saveto)
 {
-    if(!g_bEnableFileDownloads) return;
-    if(!curl) return;
+    if(!g_bEnableFileDownloads) return false;
+    if(!curl) return false;
     curl_easy_reset(curl);
     
-    FILE* file = fopen(saveto, "wb");
-    if(!file) return;
+    FILE* file = fopen(saveto, "a");
+    if(!file) return false; // Dont clean it up first!
+    fclose(file);
     
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, saveto);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
     
-    curl_easy_perform(curl);
-    fclose(file);
+    CURLcode res = curl_easy_perform(curl);
+    return res != CURLE_OK;
 }
 
-size_t maxsizeof = 0;
-static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userdata)
+static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, MemChunk_t* chunk)
 {
-    return snprintf((char*)userdata, maxsizeof, "%s", buffer);
+    return snprintf(chunk->out, chunk->out_len, "%s", buffer);
 }
-void AML::DownloadFileToData(const char* url, char* out, size_t outLen)
+bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 {
-    if(!g_bEnableFileDownloads) return;
-    if(!curl) return;
+    if(!g_bEnableFileDownloads) return false;
+    if(!curl) return false;
     curl_easy_reset(curl);
     
-    maxsizeof = outLen;
+    MemChunk_t chunk = { out, outLen };
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, out);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &chunk);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
     
-    curl_easy_perform(curl);
-    
-    maxsizeof = 0;
+    CURLcode res = curl_easy_perform(curl);
+    return res == CURLE_OK;
 }
 
-void AML::FileMD5(const char* path, char* out)
+void AML::FileMD5(const char* path, char* out, size_t out_len)
 {
+    if(!out || out_len < MINIMUM_MD5_BUF_SIZE) return;
+    
     FILE *file;
-    MD5_CTX md5Context;
-    unsigned char md5Digest[MD5_DIGEST_LENGTH];
-    unsigned int i;
+    wc_Md5 md5Context;
+    unsigned char md5Digest[WC_MD5_DIGEST_SIZE];
     out[0] = 0;
 
     // Open file for reading
@@ -270,26 +281,26 @@ void AML::FileMD5(const char* path, char* out)
     if(!file) return;
 
     // Initialize MD5 context
-    MD5_Init(&md5Context);
+    wc_InitMd5(&md5Context);
 
     // Read file contents and update MD5 context
     unsigned char buffer[1024];
     size_t bytesRead;
     while((bytesRead = fread(buffer, 1, sizeof(buffer), file))) {
-        MD5_Update(&md5Context, buffer, bytesRead);
+        wc_Md5Update(&md5Context, buffer, bytesRead);
     }
 
     // Finalize MD5 context and get hash value
-    MD5_Final(md5Digest, &md5Context);
+    wc_Md5Final(&md5Context, md5Digest);
 
     // Save MD5 hash value as hexadecimal string
     char hex[3];
-    for(i = 0; i < 16; i++)
+    for(uint8_t i = 0; i < WC_MD5_DIGEST_SIZE; ++i)
     {
         sprintf(hex, "%02x", md5Digest[i]);
         strcat(out, hex);
     }
-    out[16] = 0;
+    out[2 * WC_MD5_DIGEST_SIZE] = 0;
 
     // Close file
     fclose(file);
@@ -308,6 +319,11 @@ JNIEnv* AML::GetJNIEnvironment()
 jobject AML::GetAppContextObject()
 {
     return appContext;
+}
+
+bool AML::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
+{
+    return modlist->HasModOfBiggerVersion(szGUID, szVersion);
 }
 
 static AML amlLocal;
