@@ -284,6 +284,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
     g_nDownloadTimeout = cfg->GetInt("DownloadTimeout", 3);
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
+    else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
     cfg->Save();
 
     /* Mods? */
