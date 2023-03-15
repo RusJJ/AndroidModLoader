@@ -69,11 +69,11 @@ LOCAL_SHARED_LIBRARIES := armpatch curl
 LOCAL_MODULE    := AML
 LOCAL_SRC_FILES := main.cpp interface.cpp aml.cpp modpaks.cpp \
                    modslist.cpp icfg.cpp vtable_hooker.cpp \
-                   mod/logger.cpp mod/config.cpp
+                   mod/logger.cpp mod/config_inih.cpp
 
  ## FLAGS ##
 LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c17 -mthumb
-LOCAL_CXXFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17 -mthumb
+LOCAL_CXXFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -std=c++17 -mthumb -fexceptions
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include
 LOCAL_LDLIBS += -llog -ldl -landroid
 

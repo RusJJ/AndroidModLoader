@@ -4,7 +4,8 @@
     #define snprintf stbsp_snprintf
 #endif
 #include <icfg_desc.h>
-#include <mod/thirdparty/inipp.h>
+#include <mod/thirdparty/inicpp.h>
+#include <mod/logger.h>
 #include <fstream>
 
 #include <mod/iaml.h>
@@ -13,27 +14,26 @@ extern char g_szCfgPath[0xFF];
 
 void* CFG::InitIniPointer()
 {
-    return new inipp::Ini<char>();
+    void* ret = new ini::IniFile;
+    return ret;
 }
 void CFG::ParseInputStream(void* iniPointer, const char* szFilename)
 {
     char path[0xFF];
     snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, szFilename);
-    std::ifstream cfgStream(path);
-    ((inipp::Ini<char>*)iniPointer)->parse(cfgStream);
+    ((ini::IniFile*)iniPointer)->load(path);
 }
 void CFG::GenerateToOutputStream(void* iniPointer, const char* szFilename)
 {
     char path[0xFF];
     snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, szFilename);
-    std::ofstream cfgStream(path);
-    ((inipp::Ini<char>*)iniPointer)->generate(cfgStream);
+    ((ini::IniFile*)iniPointer)->save(path);
 }
 const char* CFG::GetValueFrom(void* iniPointer, const char* szSection, const char* szKey)
 {
-    return ((inipp::Ini<char>*)iniPointer)->sections[szSection][szKey].c_str();
+    return (*(ini::IniFile*)iniPointer)[szSection][szKey].as<const char*>();
 }
 void CFG::SetValueTo(void* iniPointer, const char* szSection, const char* szKey, const char* szValue)
 {
-    ((inipp::Ini<char>*)iniPointer)->sections[szSection][szKey] = szValue;
+    (*(ini::IniFile*)iniPointer)[szSection][szKey] = szValue;
 }

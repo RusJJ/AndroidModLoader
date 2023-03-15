@@ -44,7 +44,7 @@ const char* g_szDataDir;
 jobject appContext;
 JNIEnv* env;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.2.1", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.2.2", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -267,22 +267,22 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* AML Config */
     logger->Info("Reading config...");
     cfg->Init();
-    cfg->BindOnce("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
-    cfg->BindOnce("Discord", "")->SetString("https://discord.gg/2MY7W39kBg");
+    cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]"); cfg->ClearLast();
+    cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg"); cfg->ClearLast();
     bool bHasChangedCfgAuthor = cfg->IsValueChanged();
-    cfg->BindOnce("Version", "")->SetString(modinfo->VersionString());
-    cfg->BindOnce("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
-    cfg->BindOnce("FakePackageName", "")->GetString(g_szFakeAppName, sizeof(g_szFakeAppName));
-    snprintf(g_szInternalModsDir, sizeof(g_szInternalModsDir), "%s/%s/%s", g_szInternalStoragePath, cfg->BindOnce("InternalModsFolder", "AMLMods")->GetString(), g_szAppName);
-    bool internalModsPriority = cfg->BindOnce("InternalModsFirst", true)->GetBool();
-    logger->ToggleOutput(cfg->BindOnce("EnableLogcats", true)->GetBool());
-    bool bEnableUpdater = cfg->BindOnce("EnableUpdater", true)->GetBool();
-    g_bShowUpdatedToast = cfg->BindOnce("ShowUpdaterToast", true)->GetBool();
-    g_bShowUpdateFailedToast = cfg->BindOnce("ShowUpdaterFailedToast", true)->GetBool();
-    g_bEnableFileDownloads = cfg->BindOnce("EnableModFileDownloads", true)->GetBool();
-    g_nEnableNews = cfg->BindOnce("ShowNewsForFewTimes", 3)->GetInt();
+    cfg->Bind("Version", "")->SetString(modinfo->VersionString()); cfg->ClearLast();
+    cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL)); cfg->ClearLast();
+    cfg->Bind("FakePackageName", "")->GetString(g_szFakeAppName, sizeof(g_szFakeAppName)); cfg->ClearLast();
+    snprintf(g_szInternalModsDir, sizeof(g_szInternalModsDir), "%s/%s/%s", g_szInternalStoragePath, cfg->Bind("InternalModsFolder", "AMLMods")->GetString(), g_szAppName); cfg->ClearLast();
+    bool internalModsPriority = cfg->GetBool("InternalModsFirst", true);
+    logger->ToggleOutput(cfg->GetBool("EnableLogcats", true));
+    bool bEnableUpdater = cfg->GetBool("EnableUpdater", true);
+    g_bShowUpdatedToast = cfg->GetBool("ShowUpdaterToast", true);
+    g_bShowUpdateFailedToast = cfg->GetBool("ShowUpdaterFailedToast", true);
+    g_bEnableFileDownloads = cfg->GetBool("EnableModFileDownloads", true);
+    g_nEnableNews = cfg->GetInt("ShowNewsForFewTimes", 3);
     g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
-    g_nDownloadTimeout = cfg->BindOnce("DownloadTimeout", 3)->GetInt();
+    g_nDownloadTimeout = cfg->GetInt("DownloadTimeout", 3);
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     cfg->Save();
 
