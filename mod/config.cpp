@@ -200,7 +200,11 @@ const char* Config::GetString(const char* szKey, const char* szDefaultValue, con
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        hINI[szSection][szKey] = szDefaultValue;
+        #if !defined(__AML) && defined(_ICFG)
+            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, szDefaultValue);
+        #else
+            hINI[szSection][szKey] = szDefaultValue;
+        #endif
         Save();
         return szDefaultValue;
     }
@@ -224,7 +228,13 @@ int Config::GetInt(const char* szKey, int nDefaultValue, const char* szSection)
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        hINI[szSection][szKey] = nDefaultValue;
+        #if !defined(__AML) && defined(_ICFG)
+            char tmp[16];
+            snprintf(tmp, sizeof(tmp), "%d", nDefaultValue);
+            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, tmp);
+        #else
+            hINI[szSection][szKey] = nDefaultValue;
+        #endif
         Save();
         return nDefaultValue;
     }
@@ -248,7 +258,13 @@ float Config::GetFloat(const char* szKey, float flDefaultValue, const char* szSe
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        hINI[szSection][szKey] = flDefaultValue;
+        #if !defined(__AML) && defined(_ICFG)
+            char tmp[24];
+            snprintf(tmp, sizeof(tmp), "%f", flDefaultValue);
+            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, tmp);
+        #else
+            hINI[szSection][szKey] = flDefaultValue;
+        #endif
         Save();
         return flDefaultValue;
     }
@@ -272,7 +288,11 @@ bool Config::GetBool(const char* szKey, bool bDefaultValue, const char* szSectio
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        hINI[szSection][szKey] = bDefaultValue ? "1" : "0";
+        #if !defined(__AML) && defined(_ICFG)
+            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, bDefaultValue ? "1" : "0");
+        #else
+            hINI[szSection][szKey] = bDefaultValue ? "1" : "0";
+        #endif
         Save();
         return bDefaultValue;
     }
