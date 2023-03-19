@@ -3,7 +3,7 @@
     #define sprintf stbsp_sprintf
     #define snprintf stbsp_snprintf
 #endif
-#include <include/jnifn.h>
+#include <jnifn.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h> // mkdir
@@ -11,8 +11,9 @@
 #include <fcntl.h> // "open" flags
 #include <dlfcn.h>
 
-#include <include/aml.h>
-#include <include/defines.h>
+#include <aml.h>
+#include <defines.h>
+#include <modpaks.h>
 #include <mod/amlmod.h>
 #include <mod/logger.h>
 #include <mod/config.h>
@@ -25,19 +26,25 @@
 #include <icfg_desc.h>
 // Should be after config.h in main.cpp
 
-#include <include/interfaces.h>
-#include <include/modslist.h>
+#include <interfaces.h>
+#include <modslist.h>
 
-char g_szInternalStoragePath[0xFF],
-     g_szAppName[0xFF],
-     g_szFakeAppName[0xFF],
-     g_szModsDir[0xFF],
-     g_szInternalModsDir[0xFF],
-     g_szAndroidDataDir[0xFF],
-     g_szCfgPath[0xFF];
+bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
+int g_nEnableNews, g_nDownloadTimeout;
+ConfigEntry* g_pLastNewsId;
+char g_szInternalStoragePath[256],
+     g_szAppName[256],
+     g_szFakeAppName[256],
+     g_szModsDir[256],
+     g_szInternalModsDir[256],
+     g_szAndroidDataDir[256],
+     g_szCfgPath[256];
 const char* g_szDataDir;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.1", "RusJJ aka [-=KILL MAN=-]");
+jobject appContext;
+JNIEnv* env;
+
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.2.2", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -118,7 +125,7 @@ void LoadMods(const char* path)
     SpecificGameFn maybeINeedAGame = NULL;
     GetModInfoFn modInfoFn = NULL;
 
-    char buf[0xFF], dataBuf[0xFF];
+    char buf[256], dataBuf[256];
     DIR* dir = opendir(path);
     if (dir != NULL)
     {
@@ -134,8 +141,8 @@ void LoadMods(const char* path)
                 //logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
                 continue;
             }
-            sprintf(buf, "%s/%s", path, diread->d_name);
-            sprintf(dataBuf, "%s/%s", g_szDataDir, diread->d_name);
+            snprintf(buf, sizeof(buf), "%s/%s", path, diread->d_name);
+            snprintf(dataBuf, sizeof(dataBuf), "%s/%s", g_szDataDir, diread->d_name);
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
@@ -158,12 +165,13 @@ void LoadMods(const char* path)
                     logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
                     goto nextMod;
                 }
-                if(!modlist->AddMod(pModInfo, handle))
+                if(!modlist->AddMod(pModInfo, handle, buf))
                 {
                     logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
                     goto nextMod;
                 }
-                logger->Info("Mod (GUID %s) has been preloaded...", pModInfo->GUID());
+                
+                logger->Info("Mod (GUID %s) has been processed...", pModInfo->GUID());
             }
             else
             {
@@ -188,7 +196,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     const char* szTmp; jstring jTmp;
 
     /* JNI Environment */
-    JNIEnv* env = NULL;
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     {
         logger->Error("Cannot get JNI Environment!");
@@ -196,7 +203,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     }
 
     /* Application Context */
-    jobject appContext = GetGlobalContext(env);
+    appContext = GetGlobalContext(env);
     if(appContext == NULL)
     {
         logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
@@ -206,7 +213,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Must Have for mods */    
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
-    modlist->AddMod(modinfo, 0);
+    modlist->AddMod(modinfo, 0, NULL);
+    InitCURL();
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
@@ -219,14 +227,14 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Internal Storage */
     jTmp = GetAbsolutePath(env, GetStorageDir(env));
     szTmp = env->GetStringUTFChars(jTmp, NULL);
-    sprintf(g_szInternalStoragePath, "%s", szTmp);
+    snprintf(g_szInternalStoragePath, sizeof(g_szInternalStoragePath), "%s", szTmp);
     env->ReleaseStringUTFChars(jTmp, szTmp);
 
     /* Package Name */
     char i = 0;
     jTmp = GetPackageName(env, appContext);
     szTmp = env->GetStringUTFChars(jTmp, NULL);
-    while(szTmp[i] != 0 && i < 0xFF)
+    while(szTmp[i] != 0 && i < sizeof(g_szAppName)-1)
     {
         g_szAppName[i] = tolower(szTmp[i]);
         ++i;
@@ -235,22 +243,22 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     logger->Info("Determined app info: %s", g_szAppName);
 
     /* Create a folder in /Android/data/.../ */
-    char szBuf[0xFF];
+    char szBuf[256];
     snprintf(szBuf, sizeof(szBuf), "%s/Android/data/%s/", g_szInternalStoragePath, g_szAppName);
     DIR* dir = opendir(szBuf);
     if(dir != NULL) closedir(dir);
     else GetExternalFilesDir(env, appContext);
 
     /* Create "mods" folder in /Android/data/.../ */
-    sprintf(g_szModsDir, "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
+    snprintf(g_szModsDir, sizeof(g_szModsDir), "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szModsDir, 0777);
 
     /* Create "files" folder in /Android/data/.../ */
-    sprintf(g_szAndroidDataDir, "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
+    snprintf(g_szAndroidDataDir, sizeof(g_szAndroidDataDir), "%s/Android/data/%s/files/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szAndroidDataDir, 0777); // Who knows, right?
 
     /* Create "configs" folder in /Android/data/.../ */
-    sprintf(g_szCfgPath, "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
+    snprintf(g_szCfgPath, sizeof(g_szCfgPath), "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szCfgPath, 0777);
 
     /* root/data/data Folder */
@@ -259,17 +267,24 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* AML Config */
     logger->Info("Reading config...");
     cfg->Init();
-    cfg->BindOnce("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]");
-    cfg->BindOnce("Discord", "")->SetString("https://discord.gg/2MY7W39kBg");
+    cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]"); cfg->ClearLast();
+    cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg"); cfg->ClearLast();
     bool bHasChangedCfgAuthor = cfg->IsValueChanged();
-    cfg->BindOnce("Version", "")->SetString(modinfo->VersionString());
-    cfg->BindOnce("LaunchedTimeStamp", 0)->SetInt((int)time(NULL));
-    const char* szFakeAppName = cfg->BindOnce("FakePackageName", "")->GetString();
-    strcpy(g_szFakeAppName, szFakeAppName);
-    const char* szInternalModsDir = cfg->BindOnce("InternalModsFolder", "AMLMods")->GetString();
-    sprintf(g_szInternalModsDir, "%s/%s/%s", g_szInternalStoragePath, szInternalModsDir, g_szAppName);
-    bool internalModsPriority = cfg->BindOnce("InternalModsFirst", true)->GetBool();
-    logger->ToggleOutput(cfg->BindOnce("EnableLogcats", true)->GetBool());
+    cfg->Bind("Version", "")->SetString(modinfo->VersionString()); cfg->ClearLast();
+    cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL)); cfg->ClearLast();
+    cfg->Bind("FakePackageName", "")->GetString(g_szFakeAppName, sizeof(g_szFakeAppName)); cfg->ClearLast();
+    snprintf(g_szInternalModsDir, sizeof(g_szInternalModsDir), "%s/%s/%s", g_szInternalStoragePath, cfg->Bind("InternalModsFolder", "AMLMods")->GetString(), g_szAppName); cfg->ClearLast();
+    bool internalModsPriority = cfg->GetBool("InternalModsFirst", true);
+    logger->ToggleOutput(cfg->GetBool("EnableLogcats", true));
+    bool bEnableUpdater = cfg->GetBool("EnableUpdater", true);
+    g_bShowUpdatedToast = cfg->GetBool("ShowUpdaterToast", true);
+    g_bShowUpdateFailedToast = cfg->GetBool("ShowUpdaterFailedToast", true);
+    g_bEnableFileDownloads = cfg->GetBool("EnableModFileDownloads", true);
+    g_nEnableNews = cfg->GetInt("ShowNewsForFewTimes", 3);
+    g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
+    g_nDownloadTimeout = cfg->GetInt("DownloadTimeout", 3);
+    if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
+    else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
     cfg->Save();
 
     /* Mods? */
@@ -295,18 +310,45 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(g_pAML->IsGameFaked()) g_pAML->AddFeature("FAKEGAME");
     if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER");
     if(!logger->HasOutput()) g_pAML->AddFeature("NOLOGGING");
-
+    
+    /* Load news first! */
+    if(g_nEnableNews > 0)
+    {
+        char newsBuf[1024]; newsBuf[0] = 0;
+        
+        if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", newsBuf, sizeof(newsBuf)) && newsBuf[0])
+        {
+            if(strncmp(g_pLastNewsId->GetString(), newsBuf, 16) != 0)
+            {
+                for(int i = 0; i < g_nEnableNews; ++i)
+                    aml->ShowToast(true, newsBuf);
+                    
+                newsBuf[16] = 0;
+                g_pLastNewsId->SetString(newsBuf);
+                cfg->Save();
+            }
+        }
+    }
+    
     /* All mods are sorted and should be loaded! */
+    if(bEnableUpdater)
+    {
+        g_pAML->AddFeature("UPDATER");
+        modlist->ProcessUpdater();
+        logger->Info("Mods were updated!");
+    }
     modlist->ProcessPreLoading();
     modlist->ProcessLoading();
     modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
-
+    
+    /* Return the value it needs */
     return JNI_VERSION_1_6;
 }
 
 JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
 {
     /* Not sure if it'll work... */
-    modlist->ProcessUnloading();
+    /* It worked once, lol */
+    //modlist->ProcessUnloading();
 }

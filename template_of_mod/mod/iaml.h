@@ -2,6 +2,7 @@
 #define _IAML
 
 #include "interface.h"
+#include <jni.h>
 #include <stdint.h>
 
 // Because the name was changed to be correct
@@ -67,6 +68,18 @@ public:
     virtual uintptr_t   GetAddrBaseXDL(uintptr_t addr) = 0;
     virtual size_t      GetSymSizeXDL(void* ptr) = 0;
     virtual const char* GetSymNameXDL(void* ptr) = 0;
+    
+    /* AML 1.0.2 */
+    virtual void        ShowToast(bool longerDuration, const char* fmt, ...) = 0;
+    virtual bool        DownloadFile(const char* url, const char* saveto) = 0;
+    virtual bool        DownloadFileToData(const char* url, char* out, size_t outLen) = 0;
+    virtual void        FileMD5(const char* path, char* out, size_t out_len) = 0;
+    virtual int         GetModsLoadedCount() = 0;
+    virtual JNIEnv*     GetJNIEnvironment() = 0;
+    virtual jobject     GetAppContextObject() = 0;
+    
+    /* AML 1.0.2.1 */
+    virtual bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion) = 0;
 };
 
 extern IAML* aml;

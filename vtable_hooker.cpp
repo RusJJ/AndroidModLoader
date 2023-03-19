@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <mod/logger.h>
+#include <aml.h>
 
 void* vtablez[MAX_VTABLE_FUNCS];
 int vtablez_offset = 0;
@@ -28,7 +29,8 @@ void HookVtableFunc(void* ptr, unsigned int funcNum, void* func, void** original
     }
     else
     {
-        mprotect((void*)((uintptr_t)&vtableTemp[funcNum - 1] & 0xFFFFF000), sizeof(void*), PROT_READ | PROT_WRITE | PROT_EXEC);
+        g_pAML->Unprot((uintptr_t)&vtableTemp[funcNum - 1], sizeof(void*));
+        //mprotect((void*)((uintptr_t)&vtableTemp[funcNum - 1] & 0xFFFFF000), sizeof(void*), PROT_READ | PROT_WRITE | PROT_EXEC);
     }
     
     if(original != NULL) *((uintptr_t*)original) = (uintptr_t)vtableTemp[funcNum - 1];
