@@ -6,6 +6,7 @@
 
 /* Is not required. Can be used only for a smaller size of mod (~480kb savings) */
 #include "icfg.h"
+#include <stdint.h>
 
 class ConfigEntry;
 
