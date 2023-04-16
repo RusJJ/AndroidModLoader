@@ -240,7 +240,7 @@ const char* Config::GetString(const char* szKey, const char* szDefaultValue, con
 
 int Config::GetInt(const char* szKey, int nDefaultValue, const char* szSection)
 {
-    if(!m_bInitialized) return NULL;
+    if(!m_bInitialized) return 0;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
     strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
@@ -270,7 +270,7 @@ int Config::GetInt(const char* szKey, int nDefaultValue, const char* szSection)
 
 float Config::GetFloat(const char* szKey, float flDefaultValue, const char* szSection)
 {
-    if(!m_bInitialized) return NULL;
+    if(!m_bInitialized) return 0.0f;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
     strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
@@ -300,7 +300,7 @@ float Config::GetFloat(const char* szKey, float flDefaultValue, const char* szSe
 
 bool Config::GetBool(const char* szKey, bool bDefaultValue, const char* szSection)
 {
-    if(!m_bInitialized) return NULL;
+    if(!m_bInitialized) return false;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
     strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
@@ -324,6 +324,32 @@ bool Config::GetBool(const char* szKey, bool bDefaultValue, const char* szSectio
         return bDefaultValue;
     }
     return atoi(tryToGetValue)!=0;
+}
+
+rgba_t Config::GetColor(const char* szKey, rgba_t clr, const char* szSection)
+{
+    if(!m_bInitialized) return NULL;
+    ConfigEntry entry; ConfigEntry* pRet = &entry;
+    pRet->m_pBoundCfg = this;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
+    snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d %d %d %d", (int)clr.r, (int)clr.g, (int)clr.b, (int)clr.a);
+    const char* tryToGetValue;
+    #if !defined(__AML) && defined(_ICFG)
+        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+    #else
+        tryToGetValue = hINI[szSection][szKey].as<const char*>();
+    #endif
+    if(tryToGetValue[0] == '\0')
+        pRet->SetString(pRet->m_szDefaultValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
+    Save();
+    return pRet->ParseColor();
 }
 
 void ConfigEntry::SetString(const char* newValue)

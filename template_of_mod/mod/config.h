@@ -43,7 +43,7 @@ public:
     int          GetInt(const char* szKey, int nDefaultValue, const char* szSection = "Preferences");
     float        GetFloat(const char* szKey, float flDefaultValue, const char* szSection = "Preferences");
     bool         GetBool(const char* szKey, bool bDefaultValue, const char* szSection = "Preferences");
-    //rgba_t       GetColor(const char* szKey, bool bDefaultValue, const char* szSection = "Preferences");
+    rgba_t       GetColor(const char* szKey, rgba_t clrDefaultValue, const char* szSection = "Preferences");
 
     // Self-explained
     inline bool  IsValueChanged() { return m_bValueChanged; }
