@@ -188,6 +188,33 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
 	return pRet;
 }
 
+ConfigEntry* Config::Bind(const char* szKey, rgba_t clr, const char* szSection)
+{
+    if(!m_bInitialized) return NULL;
+    ConfigEntry* pRet = new ConfigEntry;
+    pRet->m_pBoundCfg = this;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
+    snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d %d %d %d", (int)clr.r, (int)clr.g, (int)clr.b, (int)clr.a);
+    const char* tryToGetValue;
+    #if !defined(__AML) && defined(_ICFG)
+        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+    #else
+        tryToGetValue = hINI[szSection][szKey].as<const char*>();
+    #endif
+    if(tryToGetValue[0] == '\0')
+        pRet->SetString(pRet->m_szDefaultValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
+    Save();
+    pLastEntry = pRet;
+    return pRet;
+}
+
 const char* Config::GetString(const char* szKey, const char* szDefaultValue, const char* szSection)
 {
     if(!m_bInitialized) return NULL;
@@ -213,7 +240,7 @@ const char* Config::GetString(const char* szKey, const char* szDefaultValue, con
 
 int Config::GetInt(const char* szKey, int nDefaultValue, const char* szSection)
 {
-    if(!m_bInitialized) return NULL;
+    if(!m_bInitialized) return 0;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
     strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
@@ -243,7 +270,7 @@ int Config::GetInt(const char* szKey, int nDefaultValue, const char* szSection)
 
 float Config::GetFloat(const char* szKey, float flDefaultValue, const char* szSection)
 {
-    if(!m_bInitialized) return NULL;
+    if(!m_bInitialized) return 0.0f;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
     strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
@@ -273,7 +300,7 @@ float Config::GetFloat(const char* szKey, float flDefaultValue, const char* szSe
 
 bool Config::GetBool(const char* szKey, bool bDefaultValue, const char* szSection)
 {
-    if(!m_bInitialized) return NULL;
+    if(!m_bInitialized) return false;
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
     strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
@@ -297,6 +324,32 @@ bool Config::GetBool(const char* szKey, bool bDefaultValue, const char* szSectio
         return bDefaultValue;
     }
     return atoi(tryToGetValue)!=0;
+}
+
+rgba_t Config::GetColor(const char* szKey, rgba_t clr, const char* szSection)
+{
+    if(!m_bInitialized) return NULL;
+    ConfigEntry entry; ConfigEntry* pRet = &entry;
+    pRet->m_pBoundCfg = this;
+    strncpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));
+    strncpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
+    snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d %d %d %d", (int)clr.r, (int)clr.g, (int)clr.b, (int)clr.a);
+    const char* tryToGetValue;
+    #if !defined(__AML) && defined(_ICFG)
+        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
+    #else
+        tryToGetValue = hINI[szSection][szKey].as<const char*>();
+    #endif
+    if(tryToGetValue[0] == '\0')
+        pRet->SetString(pRet->m_szDefaultValue);
+    else
+    {
+        bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
+        pRet->SetString(tryToGetValue);
+        if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
+    }
+    Save();
+    return pRet->ParseColor();
 }
 
 void ConfigEntry::SetString(const char* newValue)
@@ -383,11 +436,11 @@ rgba_t ConfigEntry::ParseColor()
     int r, g, b, a, sscanfed = sscanf(m_szValue, "%d %d %d %d", &r, &g, &b, &a);
     if(sscanfed == 4 && IsRGBValue(r) && IsRGBValue(g) && IsRGBValue(b) && IsRGBValue(a))
     {
-        return rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,(unsigned char)a};
+        m_ColorValue = rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,(unsigned char)a};
     }
     else if(sscanfed == 3 && IsRGBValue(r) && IsRGBValue(g) && IsRGBValue(b))
     {
-        return rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,255};
+        m_ColorValue = rgba_t{(unsigned char)r,(unsigned char)g,(unsigned char)b,255};
     }
     else
     {
@@ -395,14 +448,15 @@ rgba_t ConfigEntry::ParseColor()
         sscanfed = sscanf(m_szValue, "%f %f %f %f", &fr, &fg, &fb, &fa);
         if(sscanfed == 4 && IsRGBFloatValue(r) && IsRGBFloatValue(g) && IsRGBFloatValue(b) && IsRGBFloatValue(a))
         {
-            return rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),(unsigned char)(255*fa)};
+            m_ColorValue = rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),(unsigned char)(255*fa)};
         }
         else if(sscanfed == 3 && IsRGBFloatValue(r) && IsRGBFloatValue(g) && IsRGBFloatValue(b))
         {
-            return rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),255};
+            m_ColorValue = rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),255};
         }
     }
-    return rgba_t{255,255,255,255};
+    //m_ColorValue = rgba_t{255,255,255,255}
+    return m_ColorValue;
 }
 
 void ConfigEntry::SetColor(rgba_t clr, bool asFloat)
