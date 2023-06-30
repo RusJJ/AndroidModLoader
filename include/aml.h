@@ -11,7 +11,7 @@ public:
     uintptr_t   GetLib(const char* szLib);
     uintptr_t   GetSym(void* handle, const char* sym);
     bool        Hook(void* handle, void* fnAddress, void** orgFnAddress = NULL);
-    void        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL);
+    bool        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL);
     int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE);
     void        Write(uintptr_t dest, uintptr_t src, size_t size);
     void        Read(uintptr_t src, uintptr_t dest, size_t size);

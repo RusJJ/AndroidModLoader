@@ -74,9 +74,9 @@ bool AML::Hook(void* handle, void* fnAddress, void** orgFnAddress)
     return ARMPatch::hookInternal(handle, fnAddress, orgFnAddress);
 }
 
-void AML::HookPLT(void* handle, void* fnAddress, void** orgFnAddress)
+bool AML::HookPLT(void* handle, void* fnAddress, void** orgFnAddress)
 {
-    ARMPatch::hookPLTInternal(handle, fnAddress, orgFnAddress);
+    return ARMPatch::hookPLTInternal(handle, fnAddress, orgFnAddress);
 }
 
 int AML::Unprot(uintptr_t handle, size_t len)

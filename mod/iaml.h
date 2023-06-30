@@ -29,7 +29,7 @@ public:
     virtual uintptr_t   GetLib(const char* szLib) = 0;
     virtual uintptr_t   GetSym(void* handle, const char* sym) = 0;
     virtual bool        Hook(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0; // AML 1.0.0.5: Returns true on success
-    virtual void        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
+    virtual bool        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
     virtual int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
     virtual void        Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
     virtual void        Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
