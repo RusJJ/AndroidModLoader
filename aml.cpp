@@ -1,8 +1,8 @@
 #include <aml.h>
-#include <armpatch_src/ARMPatch.h>
+#include <ARMPatch/armpatch_src/ARMPatch.h>
 #include <vtable_hooker.h>
 #include <modslist.h>
-#include <libcurl/curl.h>
+#include <curl/curl.h>
 #include <wolfssl/wolfcrypt/md5.h>
 #include <stdio.h>
 #include <time.h>

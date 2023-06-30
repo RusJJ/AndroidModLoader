@@ -1,0 +1,12 @@
+[submodule "ARMPatch"]
+	path = ARMPatch
+	url = https://github.com/RusJJ/ARMPatch
+[submodule "curl"]
+	path = curl
+	url = https://github.com/curl/curl
+[submodule "wolfssl"]
+	path = wolfssl
+	url = https://github.com/wolfSSL/wolfssl
+[submodule "zlib"]
+	path = zlib
+	url = https://github.com/madler/zlib

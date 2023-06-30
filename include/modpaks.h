@@ -1,4 +1,4 @@
-#include <libcurl/curl.h>
+#include <curl/curl.h>
 #include <modslist.h>
 
 #define FILE_DATA_SIZE 8192

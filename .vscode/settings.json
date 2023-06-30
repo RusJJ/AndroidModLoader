@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "curl_setup.h": "c",
+        "settings.h": "c"
+    }
+}
