@@ -7,6 +7,14 @@
 #include <cstring>
 #include <stdlib.h>
 
+#ifdef __arm__
+    #define AML32
+#elif defined __aarch64__
+    #define AML64
+#else
+    #error This lib is supposed to work on ARM only!
+#endif
+
 #ifdef __clang__
     #define TARGET_ARM __attribute__((target("no-thumb-mode")))
     #define TARGET_THUMB  __attribute__((target("thumb-mode")))
