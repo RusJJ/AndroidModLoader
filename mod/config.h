@@ -82,6 +82,46 @@ public:
     inline void Reset() { SetString(m_szDefaultValue); }
     rgba_t ParseColor();
     void SetColor(rgba_t clr, bool asFloat = false);
+    inline int Clamp(int min, int max)
+    {
+        if(m_nIntegerValue < min)
+        {
+            int ret = m_nIntegerValue - min;
+            m_nIntegerValue = min;
+            m_fFloatValue = (float)min;
+            m_szValue[0] = 0;
+            return ret;
+        }
+        if(m_nIntegerValue > max)
+        {
+            int ret = m_nIntegerValue - max;
+            m_nIntegerValue = max;
+            m_fFloatValue = (float)max;
+            m_szValue[0] = 0;
+            return ret;
+        }
+        return 0;
+    }
+    inline float Clamp(float min, float max)
+    {
+        if(m_fFloatValue < min)
+        {
+            float ret = m_fFloatValue - min;
+            m_nIntegerValue = (int)min;
+            m_fFloatValue = min;
+            m_szValue[0] = 0;
+            return ret;
+        }
+        if(m_fFloatValue > max)
+        {
+            float ret = m_fFloatValue - max;
+            m_nIntegerValue = (int)max;
+            m_fFloatValue = max;
+            m_szValue[0] = 0;
+            return ret;
+        }
+        return 0.0f;
+    }
     
 private:
     Config* m_pBoundCfg;

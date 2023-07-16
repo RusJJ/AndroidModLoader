@@ -44,7 +44,7 @@ const char* g_szDataDir;
 jobject appContext;
 JNIEnv* env;
 
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.3", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.3.1", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
