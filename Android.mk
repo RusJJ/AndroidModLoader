@@ -11,6 +11,11 @@ LOCAL_SRC_FILES := obj/local/$(TARGET_ARCH_ABI)/libsubstrate.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+LOCAL_MODULE := dobby
+LOCAL_SRC_FILES := AML_PrecompiledLibs/$(TARGET_ARCH_ABI)/libdobby.a
+include $(PREBUILT_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
 LOCAL_MODULE := libz
 LOCAL_SRC_FILES := AML_PrecompiledLibs/$(TARGET_ARCH_ABI)/libz.a
 include $(PREBUILT_STATIC_LIBRARY)
@@ -28,7 +33,7 @@ include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION     := .cpp .cc
-LOCAL_SHARED_LIBRARIES  := armpatch substrate curl
+LOCAL_SHARED_LIBRARIES  := armpatch substrate curl dobby
 LOCAL_MODULE            := AML
 LOCAL_SRC_FILES         := main.cpp interface.cpp aml.cpp modpaks.cpp \
                            modslist.cpp icfg.cpp vtable_hooker.cpp \
