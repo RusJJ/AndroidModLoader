@@ -248,7 +248,7 @@ bool AML::DownloadFile(const char* url, const char* saveto)
 
 static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, MemChunk_t* chunk)
 {
-    return snprintf(chunk->out, chunk->out_len, "%s", buffer);
+    return snprintf(chunk->out, chunk->out_len, "%s", (const char*)buffer);
 }
 bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 {

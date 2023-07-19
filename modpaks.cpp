@@ -28,7 +28,7 @@ static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userd
 {
     szFileData[0] = 0;
     nReadedBytes = size * nmemb;
-    return snprintf(szFileData, FILE_DATA_SIZE, "%s", buffer);
+    return snprintf(szFileData, FILE_DATA_SIZE, "%s", (const char*)buffer);
 }
 
 CURLcode DownloadFile(const char* url, const char* path)
@@ -67,7 +67,7 @@ CURLcode DownloadFileToData(const char* url)
 }
 
 inline bool str_equal(const char* str1, const char* str2) { 
-    for ( ; *str1 == *str2 && *str1 != 0; ++str1, ++str2 ); 
+    for ( ; *str1 == *str2 && *str1 != 0; ++str1, ++str2 ) {}
         return *str2 == *str1; 
 }
 extern bool g_bShowUpdatedToast, g_bShowUpdateFailedToast;
