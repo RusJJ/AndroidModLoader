@@ -86,6 +86,7 @@ public:
     {
         if(m_nIntegerValue < min)
         {
+            m_pBoundCfg->m_bValueChanged = true;
             int ret = m_nIntegerValue - min;
             m_nIntegerValue = min;
             m_fFloatValue = (float)min;
@@ -94,6 +95,7 @@ public:
         }
         if(m_nIntegerValue > max)
         {
+            m_pBoundCfg->m_bValueChanged = true;
             int ret = m_nIntegerValue - max;
             m_nIntegerValue = max;
             m_fFloatValue = (float)max;
@@ -106,6 +108,7 @@ public:
     {
         if(m_fFloatValue < min)
         {
+            m_pBoundCfg->m_bValueChanged = true;
             float ret = m_fFloatValue - min;
             m_nIntegerValue = (int)min;
             m_fFloatValue = min;
@@ -114,6 +117,7 @@ public:
         }
         if(m_fFloatValue > max)
         {
+            m_pBoundCfg->m_bValueChanged = true;
             float ret = m_fFloatValue - max;
             m_nIntegerValue = (int)max;
             m_fFloatValue = max;
