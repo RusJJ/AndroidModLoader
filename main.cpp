@@ -44,6 +44,12 @@ const char* g_szDataDir;
 jobject appContext;
 JNIEnv* env;
 
+// Enchanced logging?!
+#define VA_ARGS(...) , ##__VA_ARGS__
+#define LOGEX_INFO(...) { logger->Info(__VA_ARGS__); }
+#define LOGEX_ERROR(...) { logger->Error(__VA_ARGS__); }
+
+// Main
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.4", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* modinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
@@ -129,7 +135,7 @@ void LoadMods(const char* path)
     DIR* dir = opendir(path);
     if (dir != NULL)
     {
-        logger->Info("Opening %s", path);
+        LOGEX_INFO("Opening %s", path);
         struct dirent *diread; void* handle;
         const char* gameName = HasFakeAppName() ? g_szFakeAppName : g_szAppName;
         while ((diread = readdir(dir)) != NULL)
@@ -138,7 +144,7 @@ void LoadMods(const char* path)
             if(!EndsWithSO(diread->d_name))
             {
                 // Useless info for us!
-                //logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
+                //LOGEX_ERROR("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
                 continue;
             }
             snprintf(buf, sizeof(buf), "%s/%s", path, diread->d_name);
@@ -146,10 +152,10 @@ void LoadMods(const char* path)
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
-            //if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
+            //if(removeStatus != 0) LOGEX_ERROR("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
             if(!CopyFileFaster(buf, dataBuf) && !CopyFile(buf, dataBuf))
             {
-                logger->Error("File %s is failed to be copied! :(", diread->d_name);
+                LOGEX_ERROR("File %s is failed to be copied! :(", diread->d_name);
                 continue;
             }
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
@@ -162,16 +168,16 @@ void LoadMods(const char* path)
                 maybeINeedAGame = (SpecificGameFn)dlsym(handle, "__INeedASpecificGame");
                 if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), gameName) != 0)
                 {
-                    logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
+                    LOGEX_ERROR("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
                     goto nextMod;
                 }
                 if(!modlist->AddMod(pModInfo, handle, buf))
                 {
-                    logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
+                    LOGEX_ERROR("Mod (GUID %s) is already loaded!", pModInfo->GUID());
                     goto nextMod;
                 }
                 
-                logger->Info("Mod (GUID %s) has been processed...", pModInfo->GUID());
+                LOGEX_INFO("Mod (GUID %s) has been processed...", pModInfo->GUID());
             }
             else
             {
@@ -180,16 +186,17 @@ void LoadMods(const char* path)
             }
             //unlink(dataBuf);
             removeStatus = remove(dataBuf);
-            if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
+            if(removeStatus != 0) LOGEX_ERROR("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
         }
         closedir(dir);
     }
     else
     {
-        logger->Error("Failed to load mods: DIR IS NOT OPEN");
+        LOGEX_ERROR("Failed to load mods: DIR IS NOT OPEN");
     }
 }
 
+void StartSignalHandler();
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
@@ -198,7 +205,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* JNI Environment */
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     {
-        logger->Error("Cannot get JNI Environment!");
+        LOGEX_ERROR("Cannot get JNI Environment!");
         return -1;
     }
 
@@ -206,7 +213,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     appContext = GetGlobalContext(env);
     if(appContext == NULL)
     {
-        logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
+        LOGEX_ERROR("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
         return JNI_VERSION_1_6;
     }
 
@@ -240,7 +247,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         ++i;
     } g_szAppName[i] = 0;
     env->ReleaseStringUTFChars(jTmp, szTmp);
-    logger->Info("Determined app info: %s", g_szAppName);
+    LOGEX_INFO("Determined app info: %s", g_szAppName);
 
     /* Create a folder in /Android/data/.../ */
     char szBuf[256];
@@ -265,7 +272,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
 
     /* AML Config */
-    logger->Info("Reading config...");
+    LOGEX_INFO("Reading config...");
     cfg->Init();
     cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]"); cfg->ClearLast();
     cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg"); cfg->ClearLast();
@@ -287,17 +294,20 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
     cfg->Save();
 
+    /* Catch the fish! */
+    if(cfg->GetBool("SignalHandler", true)) StartSignalHandler();
+
     /* Mods? */
-    logger->Info("Working with mods...");
+    LOGEX_INFO("Working with mods...");
     #ifdef __IL2CPPUTILS
-        logger->Info("IL2CPP: Attempting to initialize IL2CPP-Utils");
+        LOGEX_INFO("IL2CPP: Attempting to initialize IL2CPP-Utils");
         IL2CPP::Func::HookFunctions();
     #endif
     LoadMods(internalModsPriority ? g_szInternalModsDir : g_szModsDir);
     LoadMods(internalModsPriority ? g_szModsDir : g_szInternalModsDir);
 
     /* All mods are loaded now. We should check for dependencies! */
-    logger->Info("Checking for dependencies...");
+    LOGEX_INFO("Checking for dependencies...");
     modlist->ProcessDependencies();
     
     /* Process features */
@@ -335,12 +345,12 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     {
         g_pAML->AddFeature("UPDATER");
         modlist->ProcessUpdater();
-        logger->Info("Mods were updated!");
+        LOGEX_INFO("Mods were updated!");
     }
     modlist->ProcessPreLoading();
     modlist->ProcessLoading();
     modlist->OnAllModsLoaded();
-    logger->Info("Mods were launched!");
+    LOGEX_INFO("Mods were launched!");
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;

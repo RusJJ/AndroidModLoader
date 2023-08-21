@@ -209,34 +209,34 @@ void ModsList::ProcessDependencies()
 void ModsList::ProcessPreLoading()
 {
     OnModLoadFn onModPreLoadFn;
-    auto it = modlist->m_vecModInfo.begin();
     auto end = modlist->m_vecModInfo.end();
     ModDesc* desc = NULL;
-    while( it != end )
+    for( auto it = modlist->m_vecModInfo.begin(); it != end; ++it )
     {
         desc = *it;
-        if(desc->m_pHandle != 0)
+        void* handle = desc->m_pHandle;
+        if(handle != 0)
         {
-            onModPreLoadFn = (OnModLoadFn)dlsym(desc->m_pHandle, "OnModPreLoad");
-            if(onModPreLoadFn == NULL) onModPreLoadFn = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z12OnModPreLoadv");
+            onModPreLoadFn = (OnModLoadFn)dlsym(handle, "OnModPreLoad");
+            if(onModPreLoadFn == NULL) onModPreLoadFn = (OnModLoadFn)dlsym(handle, "_Z12OnModPreLoadv");
             if(onModPreLoadFn != NULL) onModPreLoadFn();
 
-            desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "OnModLoad");
-            if(desc->m_fnOnModLoaded == NULL) desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z9OnModLoadv");
+            desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(handle, "OnModLoad");
+            if(desc->m_fnOnModLoaded == NULL) desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(handle, "_Z9OnModLoadv");
 
-            desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(desc->m_pHandle, "OnModUnload");
-            if(desc->m_fnOnModUnloaded == NULL) desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z11OnModUnloadv");
+            desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(handle, "OnModUnload");
+            if(desc->m_fnOnModUnloaded == NULL) desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(handle, "_Z11OnModUnloadv");
 
-            desc->m_fnRequestUpdaterURL = (GetUpdaterURLFn)dlsym(desc->m_pHandle, "OnUpdaterURLRequested");
+            desc->m_fnRequestUpdaterURL = (GetUpdaterURLFn)dlsym(handle, "OnUpdaterURLRequested");
 
-            desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(desc->m_pHandle, "OnInterfaceAdded");
-            if(desc->m_fnInterfaceAddedCB == NULL) desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(desc->m_pHandle, "_Z16OnInterfaceAddedPKcPKv");
+            desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(handle, "OnInterfaceAdded");
+            if(desc->m_fnInterfaceAddedCB == NULL) desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(handle, "_Z16OnInterfaceAddedPKcPKv");
 
-            desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "OnAllModsLoaded");
-            if(desc->m_fnOnAllModsLoaded == NULL) desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z15OnAllModsLoadedv");
+            desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(handle, "OnAllModsLoaded");
+            if(desc->m_fnOnAllModsLoaded == NULL) desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(handle, "_Z15OnAllModsLoadedv");
         }
-        ++it;
     }
+    logger->Info("Mods were preloaded!");
 }
 void ModsList::ProcessLoading()
 {
@@ -249,6 +249,7 @@ void ModsList::ProcessLoading()
         if(desc->m_fnOnModLoaded != NULL) desc->m_fnOnModLoaded();
         ++it;
     }
+    logger->Info("Mods were loaded!");
 }
 void ModsList::ProcessUnloading()
 {
@@ -310,6 +311,7 @@ void ModsList::OnAllModsLoaded()
         if(desc->m_fnOnAllModsLoaded != NULL) desc->m_fnOnAllModsLoaded();
         ++it;
     }
+    logger->Info("Mods were postloaded!");
 }
 
 static ModsList modlistLocal;

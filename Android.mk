@@ -40,7 +40,7 @@ include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION     := .cpp .cc
 LOCAL_SHARED_LIBRARIES  := armpatch substrate curl dobby gloss
 LOCAL_MODULE            := AML
-LOCAL_SRC_FILES         := main.cpp interface.cpp aml.cpp modpaks.cpp \
+LOCAL_SRC_FILES         := main.cpp interface.cpp aml.cpp modpaks.cpp signal.cpp \
                            modslist.cpp icfg.cpp vtable_hooker.cpp \
                            mod/logger.cpp mod/config.cpp
 
