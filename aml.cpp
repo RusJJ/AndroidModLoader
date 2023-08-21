@@ -326,6 +326,21 @@ bool AML::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
     return modlist->HasModOfBiggerVersion(szGUID, szVersion);
 }
 
+bool AML::HookB(void* handle, void* fnAddress, void** orgFnAddress)
+{
+    return ARMPatch::hookBranchInternal(handle, fnAddress, orgFnAddress);
+}
+
+bool AML::HookBL(void* handle, void* fnAddress, void** orgFnAddress)
+{
+    return ARMPatch::hookBranchLinkInternal(handle, fnAddress, orgFnAddress);
+}
+
+bool AML::HookBLX(void* handle, void* fnAddress, void** orgFnAddress)
+{
+    return ARMPatch::hookBranchLinkXInternal(handle, fnAddress, orgFnAddress);
+}
+
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;
 AML* g_pAML = &amlLocal;

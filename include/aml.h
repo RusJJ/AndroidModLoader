@@ -34,7 +34,7 @@ public:
     void        PatchForThumb(bool forThumb);
     const char* GetFeatures();
     void        AddFeature(const char* feature); // Not in interface
-    void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false);
+    void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = NULL, bool instantiate = false);
     bool        IsGameFaked();
     const char* GetRealCurrentGame();
     void*       GetLibHandle(const char* soLib);
@@ -55,6 +55,11 @@ public:
     jobject     GetAppContextObject();
     /* AML 1.0.2.1 */
     bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion);
+    /* AML 1.0.4 */
+    // GlossHook
+    bool        HookB(void* handle, void* fnAddress, void** orgFnAddress = NULL);
+    bool        HookBL(void* handle, void* fnAddress, void** orgFnAddress = NULL);
+    bool        HookBLX(void* handle, void* fnAddress, void** orgFnAddress = NULL);
 };
 
 extern char g_szAMLFeatures[1024];

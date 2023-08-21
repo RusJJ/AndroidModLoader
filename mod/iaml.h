@@ -65,7 +65,7 @@ public:
     /* AML 1.0.1 */
     virtual void        PatchForThumb(bool forThumb) = 0;
     virtual const char* GetFeatures() = 0;
-    virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = (void**)0, bool instantiate = false) = 0;
+    virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = NULL, bool instantiate = false) = 0;
     virtual bool        IsGameFaked() = 0;
     virtual const char* GetRealCurrentGame() = 0;
     virtual void*       GetLibHandle(const char* soLib) = 0;
@@ -90,6 +90,11 @@ public:
     
     /* AML 1.0.2.1 */
     virtual bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion) = 0;
+    
+    /* AML 1.0.4 */
+    virtual bool        HookB(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
+    virtual bool        HookBL(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
+    virtual bool        HookBLX(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
 };
 
 extern IAML* aml;
