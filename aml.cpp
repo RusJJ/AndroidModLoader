@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <jnifn.h>
+#include <XBGameVersion.hpp>
 
 char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
 extern char g_szAppName[0xFF], g_szFakeAppName[0xFF];
@@ -69,19 +70,19 @@ uintptr_t AML::GetSym(uintptr_t libAddr, const char* sym)
     return ARMPatch::GetSym(libAddr, sym);
 }
 
-bool AML::Hook(void* handle, void* fnAddress, void** orgFnAddress)
+void* AML::Hook(void* addr, void* fnAddress, void** orgFnAddress)
 {
-    return ARMPatch::hookInternal(handle, fnAddress, orgFnAddress);
+    return ARMPatch::hookInternal(addr, fnAddress, orgFnAddress);
 }
 
-bool AML::HookPLT(void* handle, void* fnAddress, void** orgFnAddress)
+void* AML::HookPLT(void* addr, void* fnAddress, void** orgFnAddress)
 {
-    return ARMPatch::hookPLTInternal(handle, fnAddress, orgFnAddress);
+    return ARMPatch::hookPLTInternal(addr, fnAddress, orgFnAddress);
 }
 
-int AML::Unprot(uintptr_t handle, size_t len)
+int AML::Unprot(uintptr_t addr, size_t len)
 {
-    return ARMPatch::Unprotect(handle, len);
+    return ARMPatch::Unprotect(addr, len);
 }
 
 void AML::Write(uintptr_t dest, uintptr_t src, size_t size)
@@ -180,29 +181,29 @@ void* AML::GetLibHandle(uintptr_t addr)
     return ARMPatch::GetLibHandle(addr);
 }
 
-bool AML::IsCorrectXDLHandle(void* ptr)
+bool AML::IsCorrectXDLHandle(void* xdl_handle)
 {
-    return ARMPatch::IsCorrectXDLHandle(ptr);
+    return ARMPatch::IsCorrectXDLHandle(xdl_handle);
 }
 
-uintptr_t AML::GetLibXDL(void* ptr)
+uintptr_t AML::GetLibXDL(void* xdl_handle)
 {
-    return ARMPatch::GetLibXDL(ptr);
+    return ARMPatch::GetLibXDL(xdl_handle);
 }
 
-uintptr_t AML::GetAddrBaseXDL(uintptr_t addr)
+uintptr_t AML::GetSymAddrXDL(uintptr_t addr)
 {
-    return ARMPatch::GetAddrBaseXDL(addr);
+    return ARMPatch::GetSymAddrXDL(addr);
 }
 
-size_t AML::GetSymSizeXDL(void* ptr)
+size_t AML::GetSymSizeXDL(uintptr_t addr)
 {
-    return ARMPatch::GetSymSizeXDL(ptr);
+    return ARMPatch::GetSymSizeXDL(addr);
 }
 
-const char* AML::GetSymNameXDL(void* ptr)
+const char* AML::GetSymNameXDL(uintptr_t addr)
 {
-    return ARMPatch::GetSymNameXDL(ptr);
+    return ARMPatch::GetSymNameXDL(addr);
 }
 
 void AML::ShowToast(bool longerDuration, const char* fmt, ...)
@@ -324,6 +325,46 @@ jobject AML::GetAppContextObject()
 bool AML::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
 {
     return modlist->HasModOfBiggerVersion(szGUID, szVersion);
+}
+
+uintptr_t AML::PatternScan(const char* pattern, const char* soLib, const char* section_name)
+{
+    return ARMPatch::GetAddressFromPattern(pattern, soLib, section_name);
+}
+
+void* AML::HookB(void* addr, void* fnAddress, void** orgFnAddress)
+{
+    return ARMPatch::hook_b(addr, fnAddress, orgFnAddress);
+}
+
+void* AML::HookBL(void* addr, void* fnAddress, void** orgFnAddress)
+{
+    return ARMPatch::hook_bl(addr, fnAddress, orgFnAddress);
+}
+
+void* AML::HookBLX(void* addr, void* fnAddress, void** orgFnAddress)
+{
+    return ARMPatch::hook_blx(addr, fnAddress, orgFnAddress);
+}
+
+AML::GAME_ID AML::GetGameID()
+{
+    return (AML::GAME_ID)XB::GetGameId();
+}
+
+AML::GAME_VER AML::GetGameVersion()
+{
+    return (AML::GAME_VER)XB::GetGameVersion();
+}
+
+const char* AML::GetGameName()
+{
+    return XB::GetGameName();
+}
+
+const char* AML::GetGameLibName()
+{
+    return XB::GetGameLibName();
 }
 
 static AML amlLocal;

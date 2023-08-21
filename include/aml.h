@@ -10,9 +10,9 @@ public:
     bool        HasModOfVersion(const char* szGUID, const char* szVersion);
     uintptr_t   GetLib(const char* szLib);
     uintptr_t   GetSym(void* handle, const char* sym);
-    bool        Hook(void* handle, void* fnAddress, void** orgFnAddress = NULL);
-    bool        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL);
-    int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE);
+    void*       Hook(void* addr, void* fnAddress, void** orgFnAddress = NULL);
+    void*       HookPLT(void* addr, void* fnAddress, void** orgFnAddress = NULL);
+    int         Unprot(uintptr_t addr, size_t len = PAGE_SIZE);
     void        Write(uintptr_t dest, uintptr_t src, size_t size);
     void        Read(uintptr_t src, uintptr_t dest, size_t size);
     int         PlaceNOP(uintptr_t addr, size_t count = 1);
@@ -40,11 +40,12 @@ public:
     void*       GetLibHandle(const char* soLib);
     void*       GetLibHandle(uintptr_t addr);
     // xDL
-    bool        IsCorrectXDLHandle(void* ptr);
-    uintptr_t   GetLibXDL(void* ptr);
-    uintptr_t   GetAddrBaseXDL(uintptr_t addr);
-    size_t      GetSymSizeXDL(void* ptr);
-    const char* GetSymNameXDL(void* ptr);
+    // AML 1.0.4 //fix name
+    bool        IsCorrectXDLHandle(void* xdl_handle);
+    uintptr_t   GetLibXDL(void* xdl_handle);
+    uintptr_t   GetSymAddrXDL(uintptr_t addr);
+    size_t      GetSymSizeXDL(uintptr_t addr);
+    const char* GetSymNameXDL(uintptr_t addr);
     /* AML 1.0.2 */
     void        ShowToast(bool longerDuration, const char* fmt, ...);
     bool        DownloadFile(const char* url, const char* saveto);
@@ -55,6 +56,16 @@ public:
     jobject     GetAppContextObject();
     /* AML 1.0.2.1 */
     bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion);
+    
+    /* AML 1.0.4 */
+    uintptr_t   PatternScan(const char* pattern, const char* soLib, const char* section_name);
+    void*       HookB(void* addr, void* fnAddress, void** orgFnAddress); // not all
+    void*       HookBL(void* addr, void* fnAddress, void** orgFnAddress);
+    void*       HookBLX(void* addr, void* fnAddress, void** orgFnAddress);
+    GAME_ID     GetGameID();
+    GAME_VER    GetGameVersion();
+    const char* GetGameName();
+    const char* GetGameLibName();
 };
 
 extern char g_szAMLFeatures[1024];

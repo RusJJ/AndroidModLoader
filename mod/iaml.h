@@ -25,6 +25,34 @@ size_t strlen(char const*);
 class IAML
 {
 public:
+    enum GAME_ID : char\
+    {
+		UN_GAME,
+		GTA3,
+		GTAVC,
+		GTASA,
+		GTALCS,
+		GTACTW
+    };
+    
+    enum GAME_VER : char
+    {
+		UN_VER,
+		// 32
+		III_1_8,
+		VC_1_09,
+		SA_2_00,
+		LCS_2_4,
+		CTW_1_04,
+		// hign ver
+		III_1_9,
+		VC_1_12,
+		SA_2_10,
+		// 64
+		III_1_9_64,
+		VC_1_12_64,
+		SA_2_10_64
+    };
     /* AML 1.0.0.0 */
     virtual const char* GetCurrentGame() = 0;
     virtual const char* GetConfigPath() = 0;
@@ -32,9 +60,9 @@ public:
     virtual bool        HasModOfVersion(const char* szGUID, const char* szVersion) = 0;
     virtual uintptr_t   GetLib(const char* szLib) = 0;
     virtual uintptr_t   GetSym(void* handle, const char* sym) = 0;
-    virtual bool        Hook(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
-    virtual bool        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
-    virtual int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
+    virtual void*       Hook(void* addr, void* fnAddress, void** orgFnAddress = NULL) = 0;
+    virtual void*       HookPLT(void* addr, void* fnAddress, void** orgFnAddress = NULL) = 0;
+    virtual int         Unprot(uintptr_t addr, size_t len = PAGE_SIZE) = 0;
     virtual void        Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
     inline void         Write(uintptr_t dest, const char* str, size_t size) { Write(dest, (uintptr_t)str, size); } // Inline
     inline void         Write(uintptr_t dest, const char* str) { Write(dest, (uintptr_t)str, strlen(str)); } // Inline
@@ -73,11 +101,12 @@ public:
     // xDL (will return 0 if xDL is not used)
     // These functions always exists
     // So no need to check for their availability
-    virtual bool        IsCorrectXDLHandle(void* ptr) = 0;
-    virtual uintptr_t   GetLibXDL(void* ptr) = 0;
-    virtual uintptr_t   GetAddrBaseXDL(uintptr_t addr) = 0;
-    virtual size_t      GetSymSizeXDL(void* ptr) = 0;
-    virtual const char* GetSymNameXDL(void* ptr) = 0;
+    // AML 1.0.4 //fix name
+    virtual bool        IsCorrectXDLHandle(void* xdl_handle) = 0;
+    virtual uintptr_t   GetLibXDL(void* xdl_handle) = 0;
+    virtual uintptr_t   GetSymAddrXDL(uintptr_t addr) = 0;
+    virtual size_t      GetSymSizeXDL(uintptr_t addr) = 0;
+    virtual const char* GetSymNameXDL(uintptr_t addr) = 0;
     
     /* AML 1.0.2 */
     virtual void        ShowToast(bool longerDuration, const char* fmt, ...) = 0;
@@ -90,6 +119,16 @@ public:
     
     /* AML 1.0.2.1 */
     virtual bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion) = 0;
+
+    /* AML 1.0.4 */
+    virtual uintptr_t   PatternScan(const char* pattern, const char* soLib, const char* section_name) = 0;
+    virtual void*       HookB(void* addr, void* fnAddress, void** orgFnAddress) = 0; // not all
+    virtual void*       HookBL(void* addr, void* fnAddress, void** orgFnAddress) = 0;
+    virtual void*       HookBLX(void* addr, void* fnAddress, void** orgFnAddress) = 0;
+    virtual GAME_ID     GetGameID() = 0;
+    virtual GAME_VER    GetGameVersion() = 0;
+    virtual const char* GetGameName() = 0;
+    virtual const char* GetGameLibName() = 0;
 };
 
 extern IAML* aml;
