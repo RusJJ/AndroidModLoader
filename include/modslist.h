@@ -4,10 +4,31 @@
 #include <vector>
 #include <mod/amlmod.h>
 
+typedef void (*OnInterfaceAddedFn)(const char*, const void*);
+typedef const char* (*GetUpdaterURLFn)();
+typedef void (*OnModLoadFn)();
+typedef ModInfoDependency* (*GetDependenciesListFn)();
 struct ModDesc
 {
-    ModInfo* info;
-    char szLibPath[256];
+    ModInfo*            m_pInfo;
+    void*               m_pHandle;
+    char                m_szLibPath[256];
+
+    OnModLoadFn         m_fnOnModLoaded;
+    OnModLoadFn         m_fnOnModUnloaded;
+    OnModLoadFn         m_fnOnAllModsLoaded;
+    GetUpdaterURLFn     m_fnRequestUpdaterURL;
+    OnInterfaceAddedFn  m_fnInterfaceAddedCB;
+
+    ModDesc()
+    {
+        m_szLibPath[0] = 0;
+        m_fnOnModLoaded = NULL;
+        m_fnOnModUnloaded = NULL;
+        m_fnOnAllModsLoaded = NULL;
+        m_fnRequestUpdaterURL = NULL;
+        m_fnInterfaceAddedCB = NULL;
+    }
 };
 
 class ModsList

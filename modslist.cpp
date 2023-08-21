@@ -3,14 +3,13 @@
 #include <mod/logger.h>
 #include <dlfcn.h>
 
-typedef ModInfoDependency* (*GetDependenciesListFn)();
 bool ModsList::AddMod(ModInfo* modinfo, void* modhandle, const char* path)
 {
     auto it = m_vecModInfo.begin();
     auto end = m_vecModInfo.end();
     while( it != end )
     {
-        if(!strcmp((*it)->info->szGUID, modinfo->szGUID)) return false;
+        if(!strcmp((*it)->m_pInfo->szGUID, modinfo->szGUID)) return false;
         ++it;
     }
 
@@ -23,9 +22,10 @@ bool ModsList::AddMod(ModInfo* modinfo, void* modhandle, const char* path)
             modinfo->dependencies = getDepList();
     }
     
-    ModDesc* d = new ModDesc {0};
-    d->info = modinfo;
-    snprintf(d->szLibPath, 256, "%s", path);
+    ModDesc* d = new ModDesc();
+    d->m_pInfo = modinfo;
+    d->m_pHandle = modhandle;
+    snprintf(d->m_szLibPath, 256, "%s", path);
     m_vecModInfo.push_back(d);
     return true;
 }
@@ -34,12 +34,15 @@ bool ModsList::RemoveMod(ModInfo* modinfo)
 {
     auto it = m_vecModInfo.begin();
     auto end = m_vecModInfo.end();
+    ModInfo* found = NULL;
     while( it != end )
     {
-        if((*it)->info == modinfo)
+        found = (*it)->m_pInfo;
+        if(found == modinfo)
         {
+            dlclose(found->handle);
+            delete found;
             m_vecModInfo.erase(it);
-            delete (*it);
             return true;
         }
         ++it;
@@ -51,12 +54,15 @@ bool ModsList::RemoveMod(const char* szGUID)
 {
     auto it = m_vecModInfo.begin();
     auto end = m_vecModInfo.end();
+    ModInfo* found = NULL;
     while( it != end )
     {
-        if(!strcmp((*it)->info->szGUID, szGUID))
+        found = (*it)->m_pInfo;
+        if(!strcmp(found->szGUID, szGUID))
         {
+            dlclose(found->handle);
+            delete found;
             m_vecModInfo.erase(it);
-            delete (*it);
             return true;
         }
         ++it;
@@ -70,7 +76,7 @@ bool ModsList::HasMod(const char* szGUID)
     auto end = m_vecModInfo.end();
     while( it != end )
     {
-        if(!strcmp((*it)->info->szGUID, szGUID))
+        if(!strcmp((*it)->m_pInfo->szGUID, szGUID))
         {
             return true;
         }
@@ -101,7 +107,7 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
     ModInfo* pInfo = NULL;
     while( it != end )
     {
-        pInfo = (*it)->info;
+        pInfo = (*it)->m_pInfo;
         if(!strcmp(pInfo->szGUID, szGUID))
         {
             if(pInfo->version.major > major) return true;
@@ -143,7 +149,7 @@ bool ModsList::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
     ModInfo* pInfo = NULL;
     while( it != end )
     {
-        pInfo = (*it)->info;
+        pInfo = (*it)->m_pInfo;
         if(!strcmp(pInfo->szGUID, szGUID))
         {
             if(pInfo->version.major > major) return true;
@@ -177,7 +183,7 @@ void ModsList::ProcessDependencies()
         auto end = modlist->m_vecModInfo.end();
         while( it != end )
         {
-            pInfo = (*it)->info;
+            pInfo = (*it)->m_pInfo;
             if(pInfo->dependencies != NULL)
             {
                 depList = pInfo->dependencies;
@@ -186,7 +192,6 @@ void ModsList::ProcessDependencies()
                     if(!HasModOfVersion(depList[i].szGUID, depList[i].szVersion))
                     {
                         logger->Error("Mod (GUID %s) requires a mod %s %s", pInfo->szGUID, depList[i].szGUID, depList[i].szVersion);
-                        dlclose((void*)(pInfo->handle));
                         RemoveMod(pInfo);
 
                         bRepeatDependencies = true;
@@ -201,117 +206,108 @@ void ModsList::ProcessDependencies()
     }
 }
 
-typedef void (*OnModLoadFn)();
 void ModsList::ProcessPreLoading()
 {
-    OnModLoadFn onModLoadFn;
+    OnModLoadFn onModPreLoadFn;
     auto it = modlist->m_vecModInfo.begin();
     auto end = modlist->m_vecModInfo.end();
+    ModDesc* desc = NULL;
     while( it != end )
     {
-        if((*it)->info->handle != 0)
+        desc = *it;
+        if(desc->m_pHandle != 0)
         {
-            onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "OnModPreLoad");
-            if(onModLoadFn == NULL) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "_Z12OnModPreLoadv");
-            if(onModLoadFn != NULL) onModLoadFn();
+            onModPreLoadFn = (OnModLoadFn)dlsym(desc->m_pHandle, "OnModPreLoad");
+            if(onModPreLoadFn == NULL) onModPreLoadFn = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z12OnModPreLoadv");
+            if(onModPreLoadFn != NULL) onModPreLoadFn();
+
+            desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "OnModLoad");
+            if(desc->m_fnOnModLoaded == NULL) desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z9OnModLoadv");
+
+            desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(desc->m_pHandle, "OnModUnload");
+            if(desc->m_fnOnModUnloaded == NULL) desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z11OnModUnloadv");
+
+            desc->m_fnRequestUpdaterURL = (GetUpdaterURLFn)dlsym(desc->m_pHandle, "OnUpdaterURLRequested");
+
+            desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(desc->m_pHandle, "OnInterfaceAdded");
+            if(desc->m_fnInterfaceAddedCB == NULL) desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(desc->m_pHandle, "_Z16OnInterfaceAddedPKcPKv");
+
+            desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "OnAllModsLoaded");
+            if(desc->m_fnOnAllModsLoaded == NULL) desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(desc->m_pHandle, "_Z15OnAllModsLoadedv");
         }
         ++it;
     }
 }
 void ModsList::ProcessLoading()
 {
-    OnModLoadFn onModLoadFn;
     auto it = modlist->m_vecModInfo.begin();
     auto end = modlist->m_vecModInfo.end();
+    ModDesc* desc = NULL;
     while( it != end )
     {
-        if((*it)->info->handle != 0)
-        {
-            onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "OnModLoad");
-            if(onModLoadFn == NULL) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "_Z9OnModLoadv");
-            if(onModLoadFn != NULL) onModLoadFn();
-        }
+        desc = *it;
+        if(desc->m_fnOnModLoaded != NULL) desc->m_fnOnModLoaded();
         ++it;
     }
 }
 void ModsList::ProcessUnloading()
 {
-    OnModLoadFn onModLoadFn;
     auto it = modlist->m_vecModInfo.begin();
     auto end = modlist->m_vecModInfo.end();
+    ModDesc* desc = NULL;
     while( it != end )
     {
-        if((*it)->info->handle != 0)
-        {
-            onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "OnModUnload");
-            if(onModLoadFn == NULL) onModLoadFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "_Z11OnModUnloadv");
-            if(onModLoadFn != NULL) onModLoadFn();
-        }
+        desc = *it;
+        if(desc->m_fnOnModUnloaded != NULL) desc->m_fnOnModUnloaded();
         ++it;
     }
 }
-typedef const char* (*GetUpdaterURLFn)();
 void ModsList::ProcessUpdater()
 {
-    GetUpdaterURLFn updaterFn;
     auto it = modlist->m_vecModInfo.begin();
     auto end = modlist->m_vecModInfo.end();
+    ModDesc* desc = NULL;
     while( it != end )
     {
-        if((*it)->info->handle != 0)
+        desc = *it;
+        if(desc->m_fnRequestUpdaterURL != NULL)
         {
-            updaterFn = (GetUpdaterURLFn)dlsym((void*)((*it)->info->handle), "OnUpdaterURLRequested");
-            //if(updaterFn == NULL) updaterFn = (GetUpdaterURLFn)dlsym((void*)((*it)->handle), "");
-            if(updaterFn != NULL)
+            const char* url = desc->m_fnRequestUpdaterURL();
+            CURLcode res = DownloadFileToData(url);
+            if(res != CURLE_OK)
             {
-                const char* url = updaterFn();
-                //logger->Info("url=%s", url);
-                CURLcode res = DownloadFileToData(url);
-                if(res != CURLE_OK)
-                {
-                    logger->Error("Updater failed to determine an update info for %s, err %d", (*it)->info->GUID(), res);
-                }
-                else
-                {
-                    //logger->Info("Updater data:\n%s", szFileData);
-                    ProcessData(*it);
-                }
+                logger->Error("Updater failed to determine an update info for %s, err %d", desc->m_pInfo->GUID(), res);
+            }
+            else
+            {
+                ProcessData(*it);
             }
         }
         ++it;
     }
 }
-typedef void (*OnInterfaceAddedFn)(const char*, const void*);
 void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
 {
-    OnInterfaceAddedFn onInterfaceAddedFn;
     auto it = modlist->m_vecModInfo.begin();
     auto end = modlist->m_vecModInfo.end();
+    ModDesc* desc = NULL;
     while( it != end )
     {
-        if((*it)->info->handle != 0)
-        {
-            onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->info->handle), "OnInterfaceAdded");
-            if(onInterfaceAddedFn == NULL) onInterfaceAddedFn = (OnInterfaceAddedFn)dlsym((void*)((*it)->info->handle), "_Z16OnInterfaceAddedPKcPKv");
-            if(onInterfaceAddedFn != NULL) onInterfaceAddedFn(name, ptr);
-        }
+        desc = *it;
+        if(desc->m_fnInterfaceAddedCB != NULL) desc->m_fnInterfaceAddedCB(name, ptr);
         ++it;
     }
 }
 
 void ModsList::OnAllModsLoaded()
 {
-    OnModLoadFn onModsLoadedFn;
     auto it = modlist->m_vecModInfo.begin();
     auto end = modlist->m_vecModInfo.end();
+    ModDesc* desc = NULL;
     while( it != end )
     {
-        if((*it)->info->handle != 0)
-        {
-            onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "OnAllModsLoaded");
-            if(onModsLoadedFn == NULL) onModsLoadedFn = (OnModLoadFn)dlsym((void*)((*it)->info->handle), "_Z15OnAllModsLoadedv");
-            if(onModsLoadedFn != NULL) onModsLoadedFn();
-        }
+        desc = *it;
+        if(desc->m_fnOnAllModsLoaded != NULL) desc->m_fnOnAllModsLoaded();
         ++it;
     }
 }

@@ -76,18 +76,18 @@ static inline void ProcessLine(ModDesc* d, char* data)
     char left[64], middle[64], right[128];
     int scanned = sscanf(data, "%[^:]:%[^:]:%[^\n]", left, middle, right);
     if(scanned < 3) return;
-    else if(!strncmp(left, "myself", 6) || !strcmp(left, d->info->GUID()))
+    else if(!strncmp(left, "myself", 6) || !strcmp(left, d->m_pInfo->GUID()))
     {
-        if(!modlist->HasModOfVersion(d->info->GUID(), middle))
+        if(!modlist->HasModOfVersion(d->m_pInfo->GUID(), middle))
         {
-            CURLcode res = DownloadFile(right, d->szLibPath);
+            CURLcode res = DownloadFile(right, d->m_szLibPath);
             if(res == CURLE_OK)
             {
-                if(g_bShowUpdatedToast) aml->ShowToast(true, "Mod %s has been updated!\nRestart the game to load new mod.", d->info->Name());
+                if(g_bShowUpdatedToast) aml->ShowToast(true, "Mod %s has been updated!\nRestart the game to load new mod.", d->m_pInfo->Name());
             }
             else
             {
-                if(g_bShowUpdateFailedToast) aml->ShowToast(true, "Mod %s has failed to update!\nIs this located in internal folder..?", d->info->Name());
+                if(g_bShowUpdateFailedToast) aml->ShowToast(true, "Mod %s has failed to update!\nIs this located in internal folder..?", d->m_pInfo->Name());
             }
         }
     }
