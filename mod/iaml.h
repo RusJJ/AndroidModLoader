@@ -92,6 +92,7 @@ public:
     virtual bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion) = 0;
     
     /* AML 1.0.4 */
+    virtual int         PlaceNOP4(uintptr_t addr, size_t count = 1) = 0;
     virtual bool        HookB(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
     virtual bool        HookBL(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
     virtual bool        HookBLX(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;

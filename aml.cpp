@@ -327,6 +327,11 @@ bool AML::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
     return modlist->HasModOfBiggerVersion(szGUID, szVersion);
 }
 
+int AML::PlaceNOP4(uintptr_t addr, size_t count)
+{
+    return ARMPatch::WriteNOP4(addr, count);
+}
+
 bool AML::HookB(void* handle, void* fnAddress, void** orgFnAddress)
 {
     return ARMPatch::hookBranchInternal(handle, fnAddress, orgFnAddress);

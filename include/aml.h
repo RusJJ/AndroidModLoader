@@ -56,6 +56,7 @@ public:
     /* AML 1.0.2.1 */
     bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion);
     /* AML 1.0.4 */
+    int         PlaceNOP4(uintptr_t addr, size_t count = 1);
     // GlossHook
     bool        HookB(void* handle, void* fnAddress, void** orgFnAddress = NULL);
     bool        HookBL(void* handle, void* fnAddress, void** orgFnAddress = NULL);
