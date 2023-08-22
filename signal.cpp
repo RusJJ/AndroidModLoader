@@ -15,6 +15,7 @@
 
 std::ofstream g_pLogFile;
 
+struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
 
 int SignalInnerId(int code)
@@ -168,24 +169,34 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #endif
     uintptr_t faultAddr = mcontext.fault_address; // == si->si_addr?
 
-    aml->ShowToast(true, "Application has been crashed!");
-    logger->Info("Exception Signal %d - %s (%s)", sig, SignalEnum(sig), CodeEnum(sig, si->si_code));
+    // Java doesnt work here and so crashing again and again?
+    //aml->ShowToast(true, "Application has been crashed!");
+    logger->Error("Exception Signal %d - %s (%s)", sig, SignalEnum(sig), CodeEnum(sig, si->si_code));
 
     Dl_info dlInfo;
     if(dladdr((void*)PC, &dlInfo) != 0)
     {
         // Success
+        if(dlInfo.dli_fname)
+        {
+            logger->Error("Library: %s + 0x%08X", dlInfo.dli_fname, PC - (uintptr_t)dlInfo.dli_fbase);
+        }
+        else
+        {
 
+        }
     }
     else
     {
         // Unsuccess
         
     }
+    oldSigaction[SignalInnerId(sig)].sa_sigaction(sig, si, ptr);
     exit(0);
 }
 
-#define HANDLESIG(_code) sigaction(_code, &sigbreak, oldSigaction + SignalInnerId(_code))
+#define HANDLESIG(_code) sigbreak = newSigaction + SignalInnerId(_code); sigbreak->sa_sigaction = &Handler; \
+                         sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND; sigemptyset(&sigbreak->sa_mask); sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
 void StartSignalHandler()
 {
     static char stack[SIGSTKSZ];
@@ -195,10 +206,7 @@ void StartSignalHandler()
     ss.ss_flags = 0;
     sigaltstack(&ss, NULL);
 
-    struct sigaction sigbreak;
-    sigbreak.sa_sigaction = &Handler;
-    sigbreak.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND;
-    sigemptyset(&sigbreak.sa_mask);
+    struct sigaction* sigbreak = NULL;
 
     HANDLESIG(SIGABRT);
     HANDLESIG(SIGBUS);
