@@ -3,6 +3,7 @@
 #include <vtable_hooker.h>
 #include <modslist.h>
 #include <curl/curl.h>
+#define WC_NO_HARDEN // suppress the annoying warning.
 #include <wolfssl/wolfcrypt/md5.h>
 #include <stdio.h>
 #include <time.h>
