@@ -5,7 +5,7 @@
 #include <jni.h>
 #include <stdint.h>
 
-// Because the name was changed to be correct
+// Because the name was changed to be more understandable
 #define PlaceB PlaceJMP
 
 #ifndef PAGE_SIZE
@@ -36,12 +36,6 @@ public:
     virtual bool        HookPLT(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
     virtual int         Unprot(uintptr_t handle, size_t len = PAGE_SIZE) = 0;
     virtual void        Write(uintptr_t dest, uintptr_t src, size_t size) = 0;
-    inline void         Write(uintptr_t dest, const char* str, size_t size) { Write(dest, (uintptr_t)str, size); } // Inline
-    inline void         Write(uintptr_t dest, const char* str) { Write(dest, (uintptr_t)str, strlen(str)); } // Inline
-    inline void         Write8(uintptr_t dest, uint8_t v) { uint8_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 1); } // Inline
-    inline void         Write16(uintptr_t dest, uint16_t v) { uint16_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 2); } // Inline
-    inline void         Write32(uintptr_t dest, uint32_t v) { uint32_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
-    inline void         WriteAddr(uintptr_t dest, uintptr_t addr) { uintptr_t addrPtr = addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
     virtual void        Read(uintptr_t src, uintptr_t dest, size_t size) = 0;
     virtual int         PlaceNOP(uintptr_t addr, size_t count = 1) = 0;
     virtual int         PlaceJMP(uintptr_t addr, uintptr_t dest) = 0;
@@ -56,7 +50,7 @@ public:
 
     /* AML 1.0.0.6 */
     virtual uintptr_t   GetLibLength(const char* szLib) = 0;
-    virtual int         Redirect(uintptr_t addr, uintptr_t to) = 0; // Move directly to "to" from "addr" with the same stack
+    virtual int         Redirect(uintptr_t addr, uintptr_t to) = 0; // Move directly to "to" from "addr" with the same stack and registers
     virtual void        PlaceBL(uintptr_t addr, uintptr_t dest) = 0;
     virtual void        PlaceBLX(uintptr_t addr, uintptr_t dest) = 0;
     virtual uintptr_t   PatternScan(const char* pattern, const char* soLib) = 0;
@@ -93,9 +87,19 @@ public:
     
     /* AML 1.0.4 */
     virtual int         PlaceNOP4(uintptr_t addr, size_t count = 1) = 0;
+    virtual const char* GetAndroidDataRootPath() = 0; // /sdcard/Android/data/.../* (not /files/ !!!)
     virtual bool        HookB(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
     virtual bool        HookBL(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
     virtual bool        HookBLX(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;
+
+    // Inlines (shortcuts for you!)
+    inline void         Write(uintptr_t dest, const char* str, size_t size) { Write(dest, (uintptr_t)str, size); } // Inline
+    inline void         Write(uintptr_t dest, const char* str) { Write(dest, (uintptr_t)str, strlen(str)); } // Inline
+    inline void         Write8(uintptr_t dest, uint8_t v) { uint8_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 1); } // Inline
+    inline void         Write16(uintptr_t dest, uint16_t v) { uint16_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 2); } // Inline
+    inline void         Write32(uintptr_t dest, uint32_t v) { uint32_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
+    inline void         WriteAddr(uintptr_t dest, uintptr_t addr) { uintptr_t addrPtr = addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
+    inline void         WriteAddr(uintptr_t dest, void* addr) { uintptr_t addrPtr = (uintptr_t)addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
 };
 
 extern IAML* aml;

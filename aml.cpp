@@ -10,9 +10,10 @@
 #include <jnifn.h>
 
 char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
-extern char g_szAppName[0xFF], g_szFakeAppName[0xFF];
-extern char g_szCfgPath[0xFF];
-extern char g_szAndroidDataDir[0xFF];
+extern char g_szAppName[256], g_szFakeAppName[256];
+extern char g_szCfgPath[256];
+extern char g_szAndroidDataDir[256];
+extern char g_szAndroidDataRootDir[256];
 extern const char* g_szDataDir;
 extern jobject appContext;
 extern JNIEnv* env;
@@ -330,6 +331,11 @@ bool AML::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
 int AML::PlaceNOP4(uintptr_t addr, size_t count)
 {
     return ARMPatch::WriteNOP4(addr, count);
+}
+
+const char* AML::GetAndroidDataRootPath()
+{
+    return g_szAndroidDataRootDir;
 }
 
 bool AML::HookB(void* handle, void* fnAddress, void** orgFnAddress)

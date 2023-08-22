@@ -37,6 +37,7 @@ char g_szInternalStoragePath[256],
      g_szFakeAppName[256],
      g_szModsDir[256],
      g_szInternalModsDir[256],
+     g_szAndroidDataRootDir[256],
      g_szAndroidDataDir[256],
      g_szCfgPath[256];
 const char* g_szDataDir;
@@ -197,6 +198,7 @@ void LoadMods(const char* path)
 }
 
 void StartSignalHandler();
+void HookALog();
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
@@ -250,9 +252,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     LOGEX_INFO("Determined app info: %s", g_szAppName);
 
     /* Create a folder in /Android/data/.../ */
-    char szBuf[256];
-    snprintf(szBuf, sizeof(szBuf), "%s/Android/data/%s/", g_szInternalStoragePath, g_szAppName);
-    DIR* dir = opendir(szBuf);
+    snprintf(g_szAndroidDataRootDir, sizeof(g_szAndroidDataRootDir), "%s/Android/data/%s/", g_szInternalStoragePath, g_szAppName);
+    DIR* dir = opendir(g_szAndroidDataRootDir);
     if(dir != NULL) closedir(dir);
     else GetExternalFilesDir(env, appContext);
 
@@ -289,13 +290,16 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_bEnableFileDownloads = cfg->GetBool("EnableModFileDownloads", true);
     g_nEnableNews = cfg->GetInt("ShowNewsForFewTimes", 3);
     g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
-    g_nDownloadTimeout = cfg->GetInt("DownloadTimeout", 3);
+    g_nDownloadTimeout = cfg->GetInt("DownloadTimeout", 2);
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
     cfg->Save();
 
     /* Catch the fish! */
     if(cfg->GetBool("SignalHandler", true)) StartSignalHandler();
+
+    /* Catch another fish! */
+    if(cfg->GetBool("PrintLogsToFile", false)) HookALog();
 
     /* Mods? */
     LOGEX_INFO("Working with mods...");
