@@ -3,38 +3,58 @@
 #include "mod/logger.h"
 #define _IAML // Do not include "interface" twice!
 #include "modslist.h"
+#include "mod/listitem.h"
 
-struct InterfaceStorage;
-InterfaceStorage* pInterfaceList = NULL;
-
-struct InterfaceStorage
+// Should be faster than strncpy?
+inline char *strxcpy(char* __restrict__ dst, const char* __restrict__ src, int len)
 {
-    InterfaceStorage* pPrev;
-    InterfaceStorage* pNext;
+    if (!len) return NULL;
+    while (--len && (*dst++ = *src++));
+    if (!len)
+    {
+        *dst++ = '\0';
+        return *src ? NULL : dst;
+    }
+    else
+    {
+        return dst;
+    }
+}
+
+class Interfaces;
+Interfaces* listInterfaces = NULL;
+LIST_START(Interfaces)
+
+    LIST_INITSTART(Interfaces)
+        pInterface = NULL;
+        szName[0] = 0;
+    LIST_INITEND()
+
+    static void AddNew(const char* name, void* interface)
+    {
+        Interfaces* newItem = new Interfaces;
+        newItem->pInterface = interface;
+        strxcpy(newItem->szName, name, 48);
+        newItem->Push(&listInterfaces);
+    }
+    static void* Get(const char* name)
+    {
+        LIST_FOR(listInterfaces)
+        {
+            if (!strcmp(item->szName, name)) return item->pInterface;
+        }
+        return NULL;
+    }
+
     void* pInterface;
     char szName[48];
-
-    InterfaceStorage(const char* name, void* interface)
-    {
-        pInterface = interface;
-        strncpy(szName, name, 48);
-
-        pPrev = NULL;
-        if(pInterfaceList == NULL) pNext = NULL;
-        else
-        {
-            pNext = pInterfaceList;
-            pInterfaceList->pPrev = this;
-        }
-        pInterfaceList = this;
-    }
-};
+LIST_END()
 
 void InterfaceSys::Register(const char* szInterfaceName, void* pInterfacePointer)
 {
-    if(Get(szInterfaceName) != NULL)
+    if(szInterfaceName == NULL)
     {
-        logger->Error("Failed to add interface %s to the list because it`s already registered!", szInterfaceName);
+        logger->Error("Failed to add unknown interface to the list because it`s NULL!");
         return;
     }
     if(pInterfacePointer == NULL)
@@ -42,22 +62,18 @@ void InterfaceSys::Register(const char* szInterfaceName, void* pInterfacePointer
         logger->Error("Failed to add interface %s to the list because it`s NULL!", szInterfaceName);
         return;
     }
-    new InterfaceStorage(szInterfaceName, pInterfacePointer);
+    if(Interfaces::Get(szInterfaceName) != NULL)
+    {
+        logger->Error("Failed to add interface %s to the list because it`s already registered!", szInterfaceName);
+        return;
+    }
+    Interfaces::AddNew(szInterfaceName, pInterfacePointer);
     modlist->OnInterfaceAdded(szInterfaceName, pInterfacePointer);
 }
 
 void* InterfaceSys::Get(const char* szInterfaceName)
 {
-    InterfaceStorage* storage = pInterfaceList;
-    while (storage != NULL)
-    {
-        if (!strcmp(storage->szName, szInterfaceName))
-        {
-            return (storage->pInterface);
-        }
-        storage = storage->pNext;
-    }
-    return NULL;
+    return Interfaces::Get(szInterfaceName);
 }
 
 static InterfaceSys interfacesLocal;

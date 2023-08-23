@@ -1,6 +1,7 @@
 #include <modslist.h>
 #include <modpaks.h>
 #include <mod/logger.h>
+#include <mod/listitem.h>
 #include <dlfcn.h>
 
 bool ModsList::AddMod(ModInfo* modinfo, void* modhandle, const char* path)
