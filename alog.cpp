@@ -5,31 +5,49 @@
 #include <android/log.h>
 
 void* hAndroidLog;
+bool bAndroidLog_OnlyImportant;
 std::ofstream oAndroidLogFile;
 
-#define ENUMERATE_THIS(_me) case _me: return #_me
-const char* EnumPriority(int prio)
+inline const char* EnumPriority(int prio)
 {
     switch(prio)
     {
-        ENUMERATE_THIS(ANDROID_LOG_UNKNOWN);
-        ENUMERATE_THIS(ANDROID_LOG_DEFAULT);
-        ENUMERATE_THIS(ANDROID_LOG_VERBOSE);
-        ENUMERATE_THIS(ANDROID_LOG_DEBUG);
-        ENUMERATE_THIS(ANDROID_LOG_INFO);
-        ENUMERATE_THIS(ANDROID_LOG_WARN);
-        ENUMERATE_THIS(ANDROID_LOG_ERROR);
-        ENUMERATE_THIS(ANDROID_LOG_FATAL);
-        ENUMERATE_THIS(ANDROID_LOG_SILENT);
+        case ANDROID_LOG_UNKNOWN: return "UNKNOWN";
+        case ANDROID_LOG_DEFAULT: return "DEFAULT";
+        case ANDROID_LOG_VERBOSE: return "VERBOSE";
+        case ANDROID_LOG_DEBUG: return "DEBUG";
+        case ANDROID_LOG_INFO: return "INFO";
+        case ANDROID_LOG_WARN: return "WARN";
+        case ANDROID_LOG_ERROR: return "ERROR";
+        case ANDROID_LOG_FATAL: return "FATAL";
+        case ANDROID_LOG_SILENT: return "SILENT";
     }
-    return "ANDROID_LOG_UNKNOWN";
+    return "UNKNOWN";
+}
+inline bool IsImportantLogLevel(int prio)
+{
+    switch(prio)
+    {
+        case ANDROID_LOG_DEBUG:
+        case ANDROID_LOG_WARN:
+        case ANDROID_LOG_ERROR:
+        case ANDROID_LOG_FATAL:
+            return true;
+    }
+    return false;
 }
 
-DECL_HOOKv(__aml_log_print, int prio, const char *tag, const char *text)
+char text[4096]; // Log texts are not bigger than 4kb
+extern DECL_HOOKv(__aml_log_print, int prio, const char *tag, const char *fmt, ...);
+DECL_HOOKv(__aml_log_vprint, int prio, const char *tag, const char *fmt, va_list ap)
 {
-    __aml_log_print(prio, tag, text);
-    if(!text) return;
+    if(!fmt) return;
     if(!tag) tag = "Unknown Tag";
+
+    vsprintf(text, fmt, ap);
+    __aml_log_print(prio, tag, text);
+
+    if(bAndroidLog_OnlyImportant && !IsImportantLogLevel(prio)) return;
 
     time_t rawtime;
     time ( &rawtime );
@@ -37,14 +55,14 @@ DECL_HOOKv(__aml_log_print, int prio, const char *tag, const char *text)
     oAndroidLogFile << asctime(localtime ( &rawtime )) << " [" << EnumPriority(prio) << "][" << tag << "] " << text << std::endl << std::endl;
 }
 
-DECL_HOOKv(__aml_log_vprint, int prio, const char *tag, const char *fmt, va_list ap)
+DECL_HOOKv(__aml_log_print, int prio, const char *tag, const char *fmt, ...)
 {
     if(!fmt) return;
 
-    char text[512];
-    vsprintf(text, fmt, ap);
-
-    HookOf___aml_log_print(prio, tag, text);
+    va_list ap;
+    va_start(ap, fmt);
+    HookOf___aml_log_vprint(prio, tag, fmt, ap);
+    va_end(ap);
 }
 
 void HookALog()
