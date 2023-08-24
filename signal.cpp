@@ -182,6 +182,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     }
     bHasHandledError = true;
 
+    char *stack;
     ucontext_t* ucontext = (ucontext_t*)ptr;
     mcontext_t* mcontext = &ucontext->uc_mcontext;
     
@@ -294,6 +295,21 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << "PC:   " << std::dec << mcontext->pc <<       " 0x" << std::hex << std::uppercase << mcontext->pc << std::endl;
         g_pLogFile << "CPSR: " << std::dec << mcontext->pstate <<   " 0x" << std::hex << std::uppercase << mcontext->pstate << std::endl;
     #endif
+
+    #ifdef AML32
+        stack = (char*)mcontext->arm_sp;
+    #else
+        stack = (char*)mcontext->sp;
+    #endif
+    #define STACKDUMP_SIZE 1024
+    g_pLogFile << "\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
+    g_pLogFile << std::hex << std::uppercase;
+    for(int i = 1; i <= STACKDUMP_SIZE; ++i)
+    {
+        g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(*stack);
+        if(i % 16 == 0) g_pLogFile << " (SP+0x" << 16 * ((i / 16) - 1) << ")" << std::endl;
+        ++stack;
+    }
 
   skip_logging:
     logger->Info("Notifying mods about the crash...");
