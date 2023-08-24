@@ -398,7 +398,6 @@ FodyWeavers.xsd
 *.sln.iml
 
 # Own
-mod/
 libs/
 *.bak
 build.ps1
