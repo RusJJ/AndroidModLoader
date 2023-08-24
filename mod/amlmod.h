@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <cstring>
 #include <stdlib.h>
+#include <signal.h>
 
 #ifdef __arm__
     #define AML32

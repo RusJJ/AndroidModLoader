@@ -8,6 +8,7 @@ typedef void (*OnInterfaceAddedFn)(const char*, const void*);
 typedef const char* (*GetUpdaterURLFn)();
 typedef void (*OnModLoadFn)();
 typedef ModInfoDependency* (*GetDependenciesListFn)();
+typedef void (*OnGameCrashedFn)(const char*, int, int, uintptr_t, mcontext_t*);
 struct ModDesc
 {
     ModInfo*            m_pInfo;
@@ -19,6 +20,7 @@ struct ModDesc
     OnModLoadFn         m_fnOnAllModsLoaded;
     GetUpdaterURLFn     m_fnRequestUpdaterURL;
     OnInterfaceAddedFn  m_fnInterfaceAddedCB;
+    OnGameCrashedFn     m_fnGameCrashedCB;
 
     ModDesc()
     {
@@ -28,6 +30,7 @@ struct ModDesc
         m_fnOnAllModsLoaded = NULL;
         m_fnRequestUpdaterURL = NULL;
         m_fnInterfaceAddedCB = NULL;
+        m_fnGameCrashedCB = NULL;
     }
 };
 
@@ -46,6 +49,7 @@ public:
     void ProcessLoading();
     void ProcessUnloading();
     void ProcessUpdater();
+    void ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext);
     inline int GetModsNum() { return m_vecModInfo.size(); }
 
 // Callbacks

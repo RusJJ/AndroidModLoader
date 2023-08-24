@@ -352,6 +352,9 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     modlist->ProcessLoading();
     modlist->OnAllModsLoaded();
     logger->Info("Mods were launched!");
+
+    /* Fake crash for crash handler testing */
+    //__builtin_trap();
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;

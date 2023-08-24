@@ -1,7 +1,6 @@
 #include <modslist.h>
 #include <modpaks.h>
 #include <mod/logger.h>
-#include <mod/listitem.h>
 #include <dlfcn.h>
 
 bool ModsList::AddMod(ModInfo* modinfo, void* modhandle, const char* path)
@@ -219,22 +218,26 @@ void ModsList::ProcessPreLoading()
         if(handle != 0)
         {
             onModPreLoadFn = (OnModLoadFn)dlsym(handle, "OnModPreLoad");
-            if(onModPreLoadFn == NULL) onModPreLoadFn = (OnModLoadFn)dlsym(handle, "_Z12OnModPreLoadv");
+            //if(onModPreLoadFn == NULL) onModPreLoadFn = (OnModLoadFn)dlsym(handle, "_Z12OnModPreLoadv");
             if(onModPreLoadFn != NULL) onModPreLoadFn();
 
             desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(handle, "OnModLoad");
-            if(desc->m_fnOnModLoaded == NULL) desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(handle, "_Z9OnModLoadv");
+            //if(desc->m_fnOnModLoaded == NULL) desc->m_fnOnModLoaded = (OnModLoadFn)dlsym(handle, "_Z9OnModLoadv");
 
             desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(handle, "OnModUnload");
-            if(desc->m_fnOnModUnloaded == NULL) desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(handle, "_Z11OnModUnloadv");
+            //if(desc->m_fnOnModUnloaded == NULL) desc->m_fnOnModUnloaded = (OnModLoadFn)dlsym(handle, "_Z11OnModUnloadv");
 
             desc->m_fnRequestUpdaterURL = (GetUpdaterURLFn)dlsym(handle, "OnUpdaterURLRequested");
+            //if(desc->m_fnRequestUpdaterURL == NULL) desc->m_fnRequestUpdaterURL = (GetUpdaterURLFn)dlsym(handle, "_Z21OnUpdaterURLRequestedv");
 
             desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(handle, "OnInterfaceAdded");
-            if(desc->m_fnInterfaceAddedCB == NULL) desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(handle, "_Z16OnInterfaceAddedPKcPKv");
+            //if(desc->m_fnInterfaceAddedCB == NULL) desc->m_fnInterfaceAddedCB = (OnInterfaceAddedFn)dlsym(handle, "_Z16OnInterfaceAddedPKcPKv");
 
             desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(handle, "OnAllModsLoaded");
-            if(desc->m_fnOnAllModsLoaded == NULL) desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(handle, "_Z15OnAllModsLoadedv");
+            //if(desc->m_fnOnAllModsLoaded == NULL) desc->m_fnOnAllModsLoaded = (OnModLoadFn)dlsym(handle, "_Z15OnAllModsLoadedv");
+
+            desc->m_fnGameCrashedCB = (OnGameCrashedFn)dlsym(handle, "OnGameCrash");
+            //if(desc->m_fnGameCrashedCB == NULL) desc->m_fnGameCrashedCB = (OnGameCrashedFn)dlsym(handle, "_Z11OnGameCrashv");
         }
     }
     logger->Info("Mods were preloaded!");
@@ -285,6 +288,18 @@ void ModsList::ProcessUpdater()
                 ProcessData(*it);
             }
         }
+        ++it;
+    }
+}
+void ModsList::ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext)
+{
+    auto it = modlist->m_vecModInfo.begin();
+    auto end = modlist->m_vecModInfo.end();
+    ModDesc* desc = NULL;
+    while( it != end )
+    {
+        desc = *it;
+        if(desc->m_fnGameCrashedCB != NULL) desc->m_fnGameCrashedCB(szLibName, sig, code, libaddr, mcontext);
         ++it;
     }
 }
