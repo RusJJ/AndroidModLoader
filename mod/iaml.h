@@ -101,6 +101,9 @@ public:
     inline void         Write32(uintptr_t dest, uint32_t v) { uint32_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
     inline void         WriteAddr(uintptr_t dest, uintptr_t addr) { uintptr_t addrPtr = addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
     inline void         WriteAddr(uintptr_t dest, void* addr) { uintptr_t addrPtr = (uintptr_t)addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
+    // Can be used with HookVtableFunc to not to instantiate vtable for 1000 times!
+    inline void**       GetVtable(void* ptr) { return *(void***)ptr; }
+    inline void         SetVtable(void* ptr, void** vtable) { *(void***)ptr = vtable; }
 };
 
 extern IAML* aml;
@@ -110,8 +113,8 @@ inline IAML* GetAMLInterface() { return aml; }
 #define SET_TO(__a1, __a2) *(void**)&(__a1) = (void*)(__a2)
 
 /* Unprotect that memory chunk for making changes */
-#define UNPROT(_addr, ...)                                      \
-    aml->Unprot((uintptr_t)(_addr), ( __VA_ARGS__ ));
+#define UNPROT(_addr, _count)                                   \
+    aml->Unprot((uintptr_t)(_addr), ( _count ));
 /* Just write own info to the memory */
 #define WRITE(_addr, _whatToWrite, _size)                       \
     aml->Write(_addr, _whatToWrite, _size);
@@ -124,46 +127,26 @@ inline IAML* GetAMLInterface() { return aml; }
 #define DECL_HOOKv(_name, ...)                                  \
     void (*_name)(__VA_ARGS__);	                                \
 	void HookOf_##_name(__VA_ARGS__)
+
 /* Just a hook of a function */
 #define HOOK(_name, _fnAddr)                                    \
     aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a function located in PLT section (by address!) */
 #define HOOKPLT(_name, _fnAddr)                                 \
     aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
+/* Just a hook of a branch */
+#define HOOKB(_name, _fnAddr)                                   \
+    aml->HookB((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
+/* Just a hook of a branch with link */
+#define HOOKBL(_name, _fnAddr)                                  \
+    aml->HookBL((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
+/* Just a hook of a branch with link (and registers exchange) */
+#ifdef AML32
+    #define HOOKBLX(_name, _fnAddr)                             \
+        aml->HookBLX((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
+#endif
 /* Just a hook of a function hidden behind IL2CPP */
 #define HOOK_IL2CPP(_name, _methodInfo)                         \
     aml->Hook((void*)_methodInfo->methodPointer, (void*)(&HookOf_##_name), (void**)(&_name))
-/* Unhook a function (unsafe, actually) */
-#define UNHOOK(_name, _fnAddr)                                  \
-    aml->Hook((void*)(_fnAddr), (void*)(&_name), (void**)0)
-/* Unhook an IL2CPP function (unsafe, actually) */
-#define UNHOOK_IL2CPP(_name, _methodInfo)                       \
-    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&_name), (void**)0)
-
-/* Just a hook decl with saveable original function pointer */
-#define DECL_HOOK2(_ret, _name, ...)                            \
-    _ret (*_name)(__VA_ARGS__);	                                \
-    static void* fnLocated##_name = 0;                          \
-	_ret HookOf_##_name(__VA_ARGS__)
-/* Just a hook declaration with return type = void and saveable original function pointer */
-#define DECL_HOOK2v(_name, ...)                                 \
-    void (*_name)(__VA_ARGS__);	                                \
-    static void* fnLocated##_name = 0;                          \
-	void HookOf_##_name(__VA_ARGS__)
-/* Just a hook of a function and save original function pointer */
-#define HOOK2(_name, _fnAddr)                                   \
-    fnLocated##_name = (void*)_fnAddr;                          \
-    aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
-/* Just a hook of a function located in PLT section (by address!) and save original function pointer */
-#define HOOK2PLT(_name, _fnAddr)                                \
-    fnLocated##_name = (void*)_fnAddr;                          \
-    aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
-/* Just a hook of a function hidden behind IL2CPP and save original function pointer */
-#define HOOK2_IL2CPP(_name, _methodInfo)                        \
-    fnLocated##_name = (void*)_methodInfo->methodPointer;       \
-    aml->Hook((void*)_methodInfo->methodPointer, (void*)(&HookOf_##_name), (void**)(&_name))
-/* Unhook a function (unsafe, actually) that was saved before */
-#define UNHOOK2(_name)                                          \
-    aml->Hook(fnLocated##_name, (void*)(&_name), (void**)0)
 
 #endif // _IAML
