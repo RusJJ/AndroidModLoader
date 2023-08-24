@@ -47,7 +47,7 @@ JNIEnv* env;
 
 // Main
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.0.4", "RusJJ aka [-=KILL MAN=-]");
-ModInfo* modinfo = &modinfoLocal;
+ModInfo* amlmodinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
 static CFG icfgLocal; ICFG* icfg = &icfgLocal;
@@ -215,10 +215,10 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         return JNI_VERSION_1_6;
     }
 
-    /* Must Have for mods */    
+    /* Must Have for mods */
+    modlist->AddMod(amlmodinfo, 0, NULL);
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
-    modlist->AddMod(modinfo, 0, NULL);
     InitCURL();
 
     /* Permissions! We really need them for configs! */
@@ -274,7 +274,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]"); cfg->ClearLast();
     cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg"); cfg->ClearLast();
     bool bHasChangedCfgAuthor = cfg->IsValueChanged();
-    cfg->Bind("Version", "")->SetString(modinfo->VersionString()); cfg->ClearLast();
+    cfg->Bind("Version", "")->SetString(amlmodinfo->VersionString()); cfg->ClearLast();
     cfg->Bind("LaunchedTimeStamp", 0)->SetInt((int)time(NULL)); cfg->ClearLast();
     cfg->Bind("FakePackageName", "")->GetString(g_szFakeAppName, sizeof(g_szFakeAppName)); cfg->ClearLast();
     snprintf(g_szInternalModsDir, sizeof(g_szInternalModsDir), "%s/%s/%s", g_szInternalStoragePath, cfg->Bind("InternalModsFolder", "AMLMods")->GetString(), g_szAppName); cfg->ClearLast();

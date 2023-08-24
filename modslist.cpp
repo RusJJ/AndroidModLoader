@@ -1,86 +1,105 @@
 #include <modslist.h>
 #include <modpaks.h>
 #include <mod/logger.h>
+#include <mod/listitem.h>
 #include <dlfcn.h>
+
+
+Mods* listMods = NULL;
+LIST_START(Mods)
+
+    LIST_INITSTART(Mods)
+        pModInfo = NULL;
+        pModDesc = NULL;
+        pHandle = NULL;
+    LIST_INITEND()
+
+    static void AddNew(ModInfo* info, void* libhandle, const char* path)
+    {
+        Mods* newItem = new Mods;
+        newItem->pModInfo = info;
+        newItem->pHandle = libhandle;
+
+        ModDesc* d = new ModDesc();
+        d->m_pInfo = info;
+        d->m_pHandle = libhandle;
+        d->m_aDependencies = NULL;
+        if(path) snprintf(d->m_szLibPath, 256, "%s", path);
+        else d->m_szLibPath[0] = 0;
+        if(libhandle != NULL)
+        {
+            GetDependenciesListFn getDepList = (GetDependenciesListFn)dlsym(libhandle, "__GetDepsList");
+            if(getDepList != NULL) d->m_aDependencies = getDepList();
+        }
+        newItem->pModDesc = d;
+        
+        newItem->Push(&listMods);
+    }
+    static Mods* Get(const char* guid)
+    {
+        LIST_FOR(listMods)
+        {
+            if (!strcmp(item->pModInfo->szGUID, guid)) return item;
+        }
+        return NULL;
+    }
+
+    ModInfo* pModInfo;
+    ModDesc* pModDesc;
+    void* pHandle;
+LIST_END()
 
 bool ModsList::AddMod(ModInfo* modinfo, void* modhandle, const char* path)
 {
-    auto it = m_vecModInfo.begin();
-    auto end = m_vecModInfo.end();
-    while( it != end )
-    {
-        if(!strcmp((*it)->m_pInfo->szGUID, modinfo->szGUID)) return false;
-        ++it;
-    }
-
-    modinfo->handle = modhandle;
-    modinfo->dependencies = NULL;
-    if(modhandle != NULL)
-    {
-        GetDependenciesListFn getDepList = (GetDependenciesListFn)dlsym(modhandle, "__GetDepsList");
-        if(getDepList != NULL)
-            modinfo->dependencies = getDepList();
-    }
-    
-    ModDesc* d = new ModDesc();
-    d->m_pInfo = modinfo;
-    d->m_pHandle = modhandle;
-    snprintf(d->m_szLibPath, 256, "%s", path);
-    m_vecModInfo.push_back(d);
+    if(Mods::Get(modinfo->szGUID) != NULL) return false;
+    Mods::AddNew(modinfo, modhandle, path);
     return true;
 }
 
 bool ModsList::RemoveMod(ModInfo* modinfo)
 {
-    auto it = m_vecModInfo.begin();
-    auto end = m_vecModInfo.end();
-    ModInfo* found = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        found = (*it)->m_pInfo;
-        if(found == modinfo)
+        if(item->pModInfo == modinfo)
         {
-            dlclose(found->handle);
-            delete found;
-            m_vecModInfo.erase(it);
+            dlclose(item->pHandle);
+            if(item->Remove(&listMods))
+            {
+                delete item->pModDesc;
+                delete item;
+            }
             return true;
         }
-        ++it;
     }
     return false;
 }
 
 bool ModsList::RemoveMod(const char* szGUID)
 {
-    auto it = m_vecModInfo.begin();
-    auto end = m_vecModInfo.end();
-    ModInfo* found = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        found = (*it)->m_pInfo;
-        if(!strcmp(found->szGUID, szGUID))
+        if(!strcmp(item->pModInfo->szGUID, szGUID))
         {
-            dlclose(found->handle);
-            delete found;
-            m_vecModInfo.erase(it);
+            dlclose(item->pHandle);
+            if(item->Remove(&listMods))
+            {
+                delete item->pModDesc;
+                delete item;
+            }
             return true;
         }
-        ++it;
     }
     return false;
 }
 
 bool ModsList::HasMod(const char* szGUID)
 {
-    auto it = m_vecModInfo.begin();
-    auto end = m_vecModInfo.end();
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        if(!strcmp((*it)->m_pInfo->szGUID, szGUID))
+        if(!strcmp(item->pModInfo->szGUID, szGUID))
         {
             return true;
         }
-        ++it;
     }
     return false;
 }
@@ -102,12 +121,10 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
         build = 0;
     }
 
-    auto it = m_vecModInfo.begin();
-    auto end = m_vecModInfo.end();
     ModInfo* pInfo = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        pInfo = (*it)->m_pInfo;
+        pInfo = item->pModInfo;
         if(!strcmp(pInfo->szGUID, szGUID))
         {
             if(pInfo->version.major > major) return true;
@@ -122,7 +139,6 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
             }
             return false;
         }
-        ++it;
     }
     return false;
 }
@@ -144,12 +160,10 @@ bool ModsList::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
         build = 0;
     }
 
-    auto it = m_vecModInfo.begin();
-    auto end = m_vecModInfo.end();
     ModInfo* pInfo = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        pInfo = (*it)->m_pInfo;
+        pInfo = item->pModInfo;
         if(!strcmp(pInfo->szGUID, szGUID))
         {
             if(pInfo->version.major > major) return true;
@@ -164,14 +178,52 @@ bool ModsList::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
             }
             return false;
         }
-        ++it;
     }
     return false;
 }
 
 void ModsList::ProcessDependencies()
 {
-    bool bRepeatDependencies = true;
+    ModInfoDependency* depList;
+    ModInfo* info;
+
+  label_run_dependencies_check:
+    //logger->Info("Checking dependencies from the start! Mods count: %d", modlist->GetModsNum());
+    LIST_FOR(listMods)
+    {
+        // If the mod is already ok or doesnt require check, depList = NULL
+        depList = item->pModDesc->m_aDependencies;
+        if(depList)
+        {
+            info = item->pModInfo;
+            for(int i = 0; depList[i].szGUID && depList[i].szGUID[0] != 0; ++i)
+            {
+                if(depList[i].szVersion)
+                {
+                    if(!HasModOfVersion(depList[i].szGUID, depList[i].szVersion))
+                    {
+                        logger->Error("Mod (GUID %s) requires a mod %s of version %s+", info->szGUID, depList[i].szGUID, depList[i].szVersion);
+                        ModsList::RemoveMod(info);
+                        goto label_run_dependencies_check;
+                    }
+                }
+                else
+                {
+                    if(!HasMod(depList[i].szGUID))
+                    {
+                        logger->Error("Mod (GUID %s) requires a mod %s of any veesion", info->szGUID, depList[i].szGUID);
+                        ModsList::RemoveMod(info);
+                        goto label_run_dependencies_check;
+                    }
+                }
+            }
+
+            // Everything is okay, we dont need to check it again!
+            item->pModDesc->m_aDependencies = NULL;
+        }
+    }
+
+    /*bool bRepeatDependencies = true;
     int i;
     ModInfoDependency* depList = NULL;
     ModInfo* pInfo = NULL;
@@ -179,19 +231,20 @@ void ModsList::ProcessDependencies()
     while( bRepeatDependencies && m_vecModInfo.size() >= 1 )
     {
         bRepeatDependencies = false;
+        logger->Info("Checking dependencies from the start! Mods count: %d", modlist->m_vecModInfo.size());
         auto it = modlist->m_vecModInfo.begin();
         auto end = modlist->m_vecModInfo.end();
         while( it != end )
         {
             pInfo = (*it)->m_pInfo;
-            if(pInfo->dependencies != NULL)
+            depList = (*it)->m_aDependencies;
+            if(depList != NULL)
             {
-                depList = pInfo->dependencies;
-                for(i = 0; depList[i].szGUID[0] != '\0'; ++i)
+                for(i = 0; depList[i].szGUID[0] != 0; ++i)
                 {
                     if(!HasModOfVersion(depList[i].szGUID, depList[i].szVersion))
                     {
-                        logger->Error("Mod (GUID %s) requires a mod %s %s", pInfo->szGUID, depList[i].szGUID, depList[i].szVersion);
+                        logger->Error("Mod (GUID %s) requires a mod %s of version %s+", pInfo->szGUID, depList[i].szGUID, depList[i].szVersion);
                         RemoveMod(pInfo);
 
                         bRepeatDependencies = true;
@@ -199,24 +252,25 @@ void ModsList::ProcessDependencies()
                     }
                 }
                 if( bRepeatDependencies ) break;
-                pInfo->dependencies = NULL; // Dont check that mod again if everything is ok...
+                (*it)->m_aDependencies = NULL; // Dont check that mod again if everything is ok...
             }
             ++it;
         }
-    }
+    }*/
 }
 
 void ModsList::ProcessPreLoading()
 {
     OnModLoadFn onModPreLoadFn;
-    auto end = modlist->m_vecModInfo.end();
-    ModDesc* desc = NULL;
-    for( auto it = modlist->m_vecModInfo.begin(); it != end; ++it )
+    ModDesc* desc;
+    void* handle;
+    LIST_FOR(listMods)
     {
-        desc = *it;
-        void* handle = desc->m_pHandle;
-        if(handle != 0)
+        handle = item->pHandle;
+        if(handle != NULL)
         {
+            desc = item->pModDesc;
+
             onModPreLoadFn = (OnModLoadFn)dlsym(handle, "OnModPreLoad");
             //if(onModPreLoadFn == NULL) onModPreLoadFn = (OnModLoadFn)dlsym(handle, "_Z12OnModPreLoadv");
             if(onModPreLoadFn != NULL) onModPreLoadFn();
@@ -244,38 +298,30 @@ void ModsList::ProcessPreLoading()
 }
 void ModsList::ProcessLoading()
 {
-    auto it = modlist->m_vecModInfo.begin();
-    auto end = modlist->m_vecModInfo.end();
     ModDesc* desc = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        desc = *it;
-        if(desc->m_fnOnModLoaded != NULL) desc->m_fnOnModLoaded();
-        ++it;
+        desc = item->pModDesc;
+        if(desc->m_fnOnModLoaded) desc->m_fnOnModLoaded();
     }
     logger->Info("Mods were loaded!");
 }
 void ModsList::ProcessUnloading()
 {
-    auto it = modlist->m_vecModInfo.begin();
-    auto end = modlist->m_vecModInfo.end();
     ModDesc* desc = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        desc = *it;
-        if(desc->m_fnOnModUnloaded != NULL) desc->m_fnOnModUnloaded();
-        ++it;
+        desc = item->pModDesc;
+        if(desc->m_fnOnModUnloaded) desc->m_fnOnModUnloaded();
     }
 }
 void ModsList::ProcessUpdater()
 {
-    auto it = modlist->m_vecModInfo.begin();
-    auto end = modlist->m_vecModInfo.end();
     ModDesc* desc = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        desc = *it;
-        if(desc->m_fnRequestUpdaterURL != NULL)
+        desc = item->pModDesc;
+        if(desc->m_fnRequestUpdaterURL)
         {
             const char* url = desc->m_fnRequestUpdaterURL();
             CURLcode res = DownloadFileToData(url);
@@ -285,47 +331,41 @@ void ModsList::ProcessUpdater()
             }
             else
             {
-                ProcessData(*it);
+                ProcessData(desc);
             }
         }
-        ++it;
     }
 }
 void ModsList::ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext)
 {
-    auto it = modlist->m_vecModInfo.begin();
-    auto end = modlist->m_vecModInfo.end();
     ModDesc* desc = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        desc = *it;
-        if(desc->m_fnGameCrashedCB != NULL) desc->m_fnGameCrashedCB(szLibName, sig, code, libaddr, mcontext);
-        ++it;
+        desc = item->pModDesc;
+        if(desc->m_fnGameCrashedCB) desc->m_fnGameCrashedCB(szLibName, sig, code, libaddr, mcontext);
     }
+}
+int ModsList::GetModsNum()
+{
+    return listMods->Count();
 }
 void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
 {
-    auto it = modlist->m_vecModInfo.begin();
-    auto end = modlist->m_vecModInfo.end();
     ModDesc* desc = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        desc = *it;
-        if(desc->m_fnInterfaceAddedCB != NULL) desc->m_fnInterfaceAddedCB(name, ptr);
-        ++it;
+        desc = item->pModDesc;
+        if(desc->m_fnInterfaceAddedCB) desc->m_fnInterfaceAddedCB(name, ptr);
     }
 }
 
 void ModsList::OnAllModsLoaded()
 {
-    auto it = modlist->m_vecModInfo.begin();
-    auto end = modlist->m_vecModInfo.end();
     ModDesc* desc = NULL;
-    while( it != end )
+    LIST_FOR(listMods)
     {
-        desc = *it;
-        if(desc->m_fnOnAllModsLoaded != NULL) desc->m_fnOnAllModsLoaded();
-        ++it;
+        desc = item->pModDesc;
+        if(desc->m_fnOnAllModsLoaded) desc->m_fnOnAllModsLoaded();
     }
     logger->Info("Mods were postloaded!");
 }

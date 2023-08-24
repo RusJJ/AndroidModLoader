@@ -7,15 +7,17 @@ public: \
     unsigned int nCount; \
     typedef __cls_name MyClass; \
     \
-    unsigned int Count() { return First()->nCount; } \
+    unsigned int Count() { return !this ? 0 : First()->nCount; } \
     __cls_name *First() \
     { \
+        if(!this) return NULL; \
         __cls_name *first = this; \
         while(first->pPrev != NULL) first = first->pPrev; \
         return first; \
     } \
     __cls_name *Last() \
     { \
+        if(!this) return NULL; \
         __cls_name *last = this; \
         while(last->pNext != NULL) last = last->pNext; \
         return last; \
@@ -45,17 +47,24 @@ public: \
         } \
         if(pNext) pNext->pPrev = pPrev; \
     } \
-    void Remove(__cls_name **listPtr) \
+    bool Remove(__cls_name **listPtr) \
     { \
-        if(First() != *listPtr) return; \
-        if(First() == this && Last() == this) { *listPtr = NULL; return; } \
-        if(pPrev) { \
-            --(First()->nCount); \
+        if(First() != *listPtr) return false; \
+        if(pPrev && pNext) { \
             pPrev->pNext = pNext; \
-        } else { \
+            pNext->pPrev = pPrev; \
+            --(*listPtr)->nCount; \
+        } else if(pPrev) { \
+            pPrev->pNext = NULL; \
+            --(*listPtr)->nCount; \
+        } else if(pNext) { \
+            *listPtr = pNext; \
+            pNext->pPrev = NULL; \
             pNext->nCount = nCount - 1; \
+        } else { \
+            *listPtr = NULL; \
         } \
-        if(pNext) pNext->pPrev = pPrev; \
+        return true; \
     }
 
 #define LIST_END() \
@@ -71,3 +80,4 @@ public: \
     }
 
 #define LIST_FOR(__list) for(auto item = __list; item != NULL; item = item->pNext)
+#define LIST_FOR2(__list, __itemname) for(auto __itemname = __list; __itemname != NULL; __itemname = __itemname->pNext)

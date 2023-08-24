@@ -123,17 +123,16 @@ public:
     inline unsigned short Minor() { return version.minor; }
     inline unsigned short Revision() { return version.revision; }
     inline unsigned short Build() { return version.build; }
-    inline void* Handle() { return handle; }
+
 private:
     char szGUID[48];
     char szName[48];
     char szVersion[24];
     char szAuthor[48];
     ModVersion version;
-    void* handle;
-    ModInfoDependency* dependencies;
 
     friend class ModsList;
+    friend class Mods;
 };
 
 typedef ModInfo* (*GetModInfoFn)();

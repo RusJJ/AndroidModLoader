@@ -1,8 +1,11 @@
 #ifndef __MODSLIST_H
 #define __MODSLIST_H
 
-#include <vector>
+//#include <vector>
 #include <mod/amlmod.h>
+
+class Mods;
+extern Mods* listMods;
 
 typedef void (*OnInterfaceAddedFn)(const char*, const void*);
 typedef const char* (*GetUpdaterURLFn)();
@@ -13,6 +16,7 @@ struct ModDesc
 {
     ModInfo*            m_pInfo;
     void*               m_pHandle;
+    ModInfoDependency*  m_aDependencies;
     char                m_szLibPath[256];
 
     OnModLoadFn         m_fnOnModLoaded;
@@ -50,7 +54,7 @@ public:
     void ProcessUnloading();
     void ProcessUpdater();
     void ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext);
-    inline int GetModsNum() { return m_vecModInfo.size(); }
+    int  GetModsNum();
 
 // Callbacks
 public:
@@ -58,7 +62,7 @@ public:
     void OnAllModsLoaded();
 
 private:
-    std::vector<ModDesc*> m_vecModInfo;
+    //std::vector<ModDesc*> m_vecModInfo;
 };
 
 extern ModsList* modlist;

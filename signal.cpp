@@ -205,7 +205,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     if(!g_pLogFile.is_open()) goto skip_logging;
 
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
-    g_pLogFile << "Fault address: " << std::hex << std::uppercase << faultAddr << std::nouppercase << std::endl;
+    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << std::nouppercase << std::endl;
 
     Dl_info dlInfo;
     if(dladdr((void*)PC, &dlInfo) != 0)
