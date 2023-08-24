@@ -59,7 +59,7 @@ public:
     /* AML 1.0.1 */
     virtual void        PatchForThumb(bool forThumb) = 0;
     virtual const char* GetFeatures() = 0;
-    virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = NULL, bool instantiate = false) = 0;
+    virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, void* fnAddress, void** orgFnAddress = NULL, bool instantiate = false) = 0; // unsafe
     virtual bool        IsGameFaked() = 0;
     virtual const char* GetRealCurrentGame() = 0;
     virtual void*       GetLibHandle(const char* soLib) = 0;
@@ -86,6 +86,7 @@ public:
     virtual bool        HasModOfBiggerVersion(const char* szGUID, const char* szVersion) = 0;
     
     /* AML 1.0.4 */
+    virtual void        HookVtableFunc(void* ptr, unsigned int funcNum, unsigned int count, void* fnAddress, void** orgFnAddress = NULL, bool instantiate = false) = 0;
     virtual int         PlaceNOP4(uintptr_t addr, size_t count = 1) = 0;
     virtual const char* GetAndroidDataRootPath() = 0; // /sdcard/Android/data/.../* (not /files/ !!!)
     virtual bool        HookB(void* handle, void* fnAddress, void** orgFnAddress = NULL) = 0;

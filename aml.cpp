@@ -328,6 +328,11 @@ bool AML::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
     return modlist->HasModOfBiggerVersion(szGUID, szVersion);
 }
 
+void AML::HookVtableFunc(void* ptr, unsigned int funcNum, unsigned int count, void* func, void** original, bool instantiate)
+{
+    HookVtableFunc(ptr, funcNum, count, func, original, instantiate);
+}
+
 int AML::PlaceNOP4(uintptr_t addr, size_t count)
 {
     return ARMPatch::WriteNOP4(addr, count);
