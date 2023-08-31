@@ -5,22 +5,6 @@
 #include "modslist.h"
 #include "mod/listitem.h"
 
-// Should be faster than strncpy?
-inline char *strxcpy(char* __restrict__ dst, const char* __restrict__ src, int len)
-{
-    if (!len) return NULL;
-    while (--len && (*dst++ = *src++));
-    if (!len)
-    {
-        *dst++ = '\0';
-        return *src ? NULL : dst;
-    }
-    else
-    {
-        return dst;
-    }
-}
-
 class Interfaces;
 Interfaces* listInterfaces = NULL;
 LIST_START(Interfaces)

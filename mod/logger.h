@@ -2,7 +2,10 @@
 #define _LOGGER_H
 
 #include <stdio.h>
-#define TMPBUF_SIZE 768
+#define TMPBUF_SIZE 2048 // Max logging buf is 4096 btw
+
+/* Define NOLOGGING if you DONT need logs in any form */
+/* You can do it like that in Android.mk: LOCAL_CXXFLAGS += -DNOLOGGING */
 
 enum eLogPrio
 {
@@ -17,6 +20,8 @@ enum eLogPrio
     LogP_Silent,
 };
 
+class Logger;
+extern Logger* logger;
 class Logger
 {
 public:
@@ -31,12 +36,15 @@ public:
     void InfoV(const char* szMessage, va_list args);
     void Error(const char* szMessage, ...);
     void ErrorV(const char* szMessage, va_list args);
+    #ifdef NOLOGGING
+    inline bool HasOutput() { return false; }
+    #else
     inline bool HasOutput() { return m_bEnabled; }
-    static Logger* GetLogger();
+    #endif
+    inline static Logger* GetLogger() { return logger; }
 private:
     const char* m_szTag;
     bool m_bEnabled;
 };
-extern Logger* logger;
 
 #endif // _LOGGER_H

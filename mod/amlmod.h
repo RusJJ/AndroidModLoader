@@ -84,16 +84,32 @@ struct ModVersion
     unsigned short build;
 };
 
+// Should be faster than strncpy?
+inline char *strxcpy(char* __restrict__ dst, const char* __restrict__ src, int len)
+{
+    if (!len) return NULL;
+    while (--len && (*dst++ = *src++));
+    if (!len)
+    {
+        *dst++ = '\0';
+        return *src ? NULL : dst;
+    }
+    else
+    {
+        return dst;
+    }
+}
+
 class ModInfo
 {
 public:
     ModInfo(const char* szGUID, const char* szName, const char* szVersion, const char* szAuthor)
     {
         /* No buffer overflow! */
-        strncpy(this->szGUID, szGUID, sizeof(ModInfo::szGUID)); this->szGUID[sizeof(ModInfo::szGUID) - 1] = '\0';
-        strncpy(this->szName, szName, sizeof(ModInfo::szName)); this->szName[sizeof(ModInfo::szName) - 1] = '\0';
-        strncpy(this->szVersion, szVersion, sizeof(ModInfo::szVersion)); this->szVersion[sizeof(ModInfo::szVersion) - 1] = '\0';
-        strncpy(this->szAuthor, szAuthor, sizeof(ModInfo::szAuthor)); this->szAuthor[sizeof(ModInfo::szAuthor) - 1] = '\0';
+        strxcpy(this->szGUID, szGUID, sizeof(ModInfo::szGUID)); this->szGUID[sizeof(ModInfo::szGUID) - 1] = '\0';
+        strxcpy(this->szName, szName, sizeof(ModInfo::szName)); this->szName[sizeof(ModInfo::szName) - 1] = '\0';
+        strxcpy(this->szVersion, szVersion, sizeof(ModInfo::szVersion)); this->szVersion[sizeof(ModInfo::szVersion) - 1] = '\0';
+        strxcpy(this->szAuthor, szAuthor, sizeof(ModInfo::szAuthor)); this->szAuthor[sizeof(ModInfo::szAuthor) - 1] = '\0';
 
         /* GUID should be lowcase */
         for(int i = 0; this->szGUID[i] != '\0'; ++i)
