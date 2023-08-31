@@ -6,6 +6,15 @@
 #include <ctype.h>
 #include <cstring>
 #include <stdlib.h>
+#include <signal.h>
+
+#ifdef __arm__
+    #define AML32
+#elif defined __aarch64__
+    #define AML64
+#else
+    #error This lib is supposed to work on ARM only!
+#endif
 
 #ifdef __clang__
     #define TARGET_ARM __attribute__((target("no-thumb-mode")))
@@ -54,7 +63,7 @@
     
 
 #define MINIMUM_MD5_BUF_SIZE 33
-    
+
 struct MemChunk_t
 {
     char* out;
@@ -75,16 +84,32 @@ struct ModVersion
     unsigned short build;
 };
 
+// Should be faster than strncpy?
+inline char *strxcpy(char* __restrict__ dst, const char* __restrict__ src, int len)
+{
+    if (!len) return NULL;
+    while (--len && (*dst++ = *src++));
+    if (!len)
+    {
+        *dst++ = '\0';
+        return *src ? NULL : dst;
+    }
+    else
+    {
+        return dst;
+    }
+}
+
 class ModInfo
 {
 public:
     ModInfo(const char* szGUID, const char* szName, const char* szVersion, const char* szAuthor)
     {
         /* No buffer overflow! */
-        strncpy(this->szGUID, szGUID, sizeof(ModInfo::szGUID)); this->szGUID[sizeof(ModInfo::szGUID) - 1] = '\0';
-        strncpy(this->szName, szName, sizeof(ModInfo::szName)); this->szName[sizeof(ModInfo::szName) - 1] = '\0';
-        strncpy(this->szVersion, szVersion, sizeof(ModInfo::szVersion)); this->szVersion[sizeof(ModInfo::szVersion) - 1] = '\0';
-        strncpy(this->szAuthor, szAuthor, sizeof(ModInfo::szAuthor)); this->szAuthor[sizeof(ModInfo::szAuthor) - 1] = '\0';
+        strxcpy(this->szGUID, szGUID, sizeof(ModInfo::szGUID)); this->szGUID[sizeof(ModInfo::szGUID) - 1] = '\0';
+        strxcpy(this->szName, szName, sizeof(ModInfo::szName)); this->szName[sizeof(ModInfo::szName) - 1] = '\0';
+        strxcpy(this->szVersion, szVersion, sizeof(ModInfo::szVersion)); this->szVersion[sizeof(ModInfo::szVersion) - 1] = '\0';
+        strxcpy(this->szAuthor, szAuthor, sizeof(ModInfo::szAuthor)); this->szAuthor[sizeof(ModInfo::szAuthor) - 1] = '\0';
 
         /* GUID should be lowcase */
         for(int i = 0; this->szGUID[i] != '\0'; ++i)
@@ -114,17 +139,16 @@ public:
     inline unsigned short Minor() { return version.minor; }
     inline unsigned short Revision() { return version.revision; }
     inline unsigned short Build() { return version.build; }
-    inline void* Handle() { return handle; }
+
 private:
     char szGUID[48];
     char szName[48];
     char szVersion[24];
     char szAuthor[48];
     ModVersion version;
-    void* handle;
-    ModInfoDependency* dependencies;
 
     friend class ModsList;
+    friend class Mods;
 };
 
 typedef ModInfo* (*GetModInfoFn)();

@@ -15,11 +15,6 @@ Logger::Logger()
     m_bEnabled = true;
 }
 
-Logger* Logger::GetLogger()
-{
-    return logger;
-}
-
 void Logger::ToggleOutput(bool enabled)
 {
     m_bEnabled = enabled;
@@ -32,6 +27,7 @@ void Logger::SetTag(const char* szTag)
 
 void Logger::Print(eLogPrio prio, const char* szMessage, ...)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
@@ -40,19 +36,23 @@ void Logger::Print(eLogPrio prio, const char* szMessage, ...)
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
     va_end(args);
+#endif
 }
 
 void Logger::PrintV(eLogPrio prio, const char* szMessage, va_list args)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
+#endif
 }
 
 void Logger::PrintTag(eLogPrio prio, const char* szTag, const char* szMessage, ...)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
@@ -61,19 +61,23 @@ void Logger::PrintTag(eLogPrio prio, const char* szTag, const char* szMessage, .
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
     va_end(args);
+#endif
 }
 
 void Logger::PrintTagV(eLogPrio prio, const char* szTag, const char* szMessage, va_list args)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
+#endif
 }
 
 void Logger::Info(const char* szMessage, ...)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
@@ -82,19 +86,23 @@ void Logger::Info(const char* szMessage, ...)
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write(ANDROID_LOG_INFO, m_szTag, buffer);
     va_end(args);
+#endif
 }
 
 void Logger::InfoV(const char* szMessage, va_list args)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write(ANDROID_LOG_INFO, m_szTag, buffer);
+#endif
 }
 
 void Logger::Error(const char* szMessage, ...)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
@@ -103,15 +111,18 @@ void Logger::Error(const char* szMessage, ...)
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write(ANDROID_LOG_ERROR, m_szTag, buffer);
     va_end(args);
+#endif
 }
 
 void Logger::ErrorV(const char* szMessage, va_list args)
 {
+#ifndef NOLOGGING
     if(!m_bEnabled) return;
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
     __android_log_write(ANDROID_LOG_ERROR, m_szTag, buffer);
+#endif
 }
 
 static Logger loggerLocal;
