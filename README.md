@@ -17,4 +17,7 @@ For any examples visit the repository for all official mods: https://github.com/
 Discord Server of this project located here: https://discord.gg/2MY7W39kBg
 
 # Web
-We dont have a website actually but there is a little infopage: https://androidmodloader.github.io/
+We now have a WEB site everyone may use now! It`s still in progress so everything may look bad: https://aml-mods.ru/
+
+# YouTube
+We DO have a YouTube channel but it`s inactive for a reason: https://www.youtube.com/@amloader
