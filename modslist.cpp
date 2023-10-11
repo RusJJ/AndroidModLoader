@@ -332,7 +332,7 @@ void ModsList::PrintModsList(std::ofstream& logfile)
         desc = item->pModDesc;
         
         logfile << info->Name() << " (" << info->Author() << ", version " << info->VersionString() << ")\n";
-        logfile << " - Loaded from: " << desc->m_szLibPath << "\n";
+        logfile << " - GUID: " << info->GUID() << " | Path: " << desc->m_szLibPath << "\n";
     }
 }
 
