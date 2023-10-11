@@ -222,41 +222,6 @@ void ModsList::ProcessDependencies()
             item->pModDesc->m_aDependencies = NULL;
         }
     }
-
-    /*bool bRepeatDependencies = true;
-    int i;
-    ModInfoDependency* depList = NULL;
-    ModInfo* pInfo = NULL;
-
-    while( bRepeatDependencies && m_vecModInfo.size() >= 1 )
-    {
-        bRepeatDependencies = false;
-        logger->Info("Checking dependencies from the start! Mods count: %d", modlist->m_vecModInfo.size());
-        auto it = modlist->m_vecModInfo.begin();
-        auto end = modlist->m_vecModInfo.end();
-        while( it != end )
-        {
-            pInfo = (*it)->m_pInfo;
-            depList = (*it)->m_aDependencies;
-            if(depList != NULL)
-            {
-                for(i = 0; depList[i].szGUID[0] != 0; ++i)
-                {
-                    if(!HasModOfVersion(depList[i].szGUID, depList[i].szVersion))
-                    {
-                        logger->Error("Mod (GUID %s) requires a mod %s of version %s+", pInfo->szGUID, depList[i].szGUID, depList[i].szVersion);
-                        RemoveMod(pInfo);
-
-                        bRepeatDependencies = true;
-                        break;
-                    }
-                }
-                if( bRepeatDependencies ) break;
-                (*it)->m_aDependencies = NULL; // Dont check that mod again if everything is ok...
-            }
-            ++it;
-        }
-    }*/
 }
 
 void ModsList::ProcessPreLoading()
@@ -296,6 +261,7 @@ void ModsList::ProcessPreLoading()
     }
     logger->Info("Mods were preloaded!");
 }
+
 void ModsList::ProcessLoading()
 {
     ModDesc* desc = NULL;
@@ -306,6 +272,7 @@ void ModsList::ProcessLoading()
     }
     logger->Info("Mods were loaded!");
 }
+
 void ModsList::ProcessUnloading()
 {
     ModDesc* desc = NULL;
@@ -315,6 +282,7 @@ void ModsList::ProcessUnloading()
         if(desc->m_fnOnModUnloaded) desc->m_fnOnModUnloaded();
     }
 }
+
 void ModsList::ProcessUpdater()
 {
     ModDesc* desc = NULL;
@@ -336,6 +304,7 @@ void ModsList::ProcessUpdater()
         }
     }
 }
+
 void ModsList::ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext)
 {
     ModDesc* desc = NULL;
@@ -345,10 +314,28 @@ void ModsList::ProcessCrash(const char* szLibName, int sig, int code, uintptr_t 
         if(desc->m_fnGameCrashedCB) desc->m_fnGameCrashedCB(szLibName, sig, code, libaddr, mcontext);
     }
 }
+
 int ModsList::GetModsNum()
 {
     return listMods->Count();
 }
+
+void ModsList::PrintModsList(std::ofstream& logfile)
+{
+    logfile << "List of loaded mods (count=" << listMods->Count() << "):\n";
+
+    ModInfo* info = NULL;
+    ModDesc* desc = NULL;
+    LIST_FOR(listMods)
+    {
+        info = item->pModInfo;
+        desc = item->pModDesc;
+        
+        logfile << info->Name() << " (" << info->Author() << ", version " << info->VersionString() << ")\n";
+        logfile << " - Loaded from: " << desc->m_szLibPath << "\n";
+    }
+}
+
 void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
 {
     ModDesc* desc = NULL;

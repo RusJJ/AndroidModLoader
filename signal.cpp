@@ -311,6 +311,8 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         ++stack;
     }
 
+    modlist->PrintModsList(g_pLogFile);
+
   skip_logging:
     logger->Info("Notifying mods about the crash...");
     modlist->ProcessCrash(dlInfo.dli_fname ? GetFilenamePart(dlInfo.dli_fname) : "", sig, si->si_code, (uintptr_t)dlInfo.dli_fbase, mcontext);

@@ -1,7 +1,7 @@
 #ifndef __MODSLIST_H
 #define __MODSLIST_H
 
-//#include <vector>
+#include <fstream>
 #include <mod/amlmod.h>
 
 class Mods;
@@ -55,14 +55,12 @@ public:
     void ProcessUpdater();
     void ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext);
     int  GetModsNum();
+    void PrintModsList(std::ofstream& logfile);
 
 // Callbacks
 public:
     void OnInterfaceAdded(const char* name, const void* ptr);
     void OnAllModsLoaded();
-
-private:
-    //std::vector<ModDesc*> m_vecModInfo;
 };
 
 extern ModsList* modlist;
