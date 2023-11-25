@@ -103,8 +103,8 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
     else 
     {
         bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
-        pRet->m_bNotDefaultValue = true;
         pRet->SetString(tryToGetValue);
+        pRet->m_bNotDefaultValue = strcmp(tryToGetValue, szDefaultValue) != 0;
         if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
     }
     Save();
@@ -134,8 +134,8 @@ ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSe
     else
     {
         bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
-        pRet->m_bNotDefaultValue = true;
         pRet->SetString(tryToGetValue);
+        pRet->m_bNotDefaultValue = (nDefaultValue != pRet->m_nIntegerValue);
         if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
     }
     Save();
@@ -165,8 +165,8 @@ ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* s
     else
     {
         bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
-        pRet->m_bNotDefaultValue = true;
         pRet->SetString(tryToGetValue);
+        pRet->m_bNotDefaultValue = (flDefaultValue != pRet->m_fFloatValue);
         if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
     }
     Save();
@@ -196,8 +196,8 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
     else
     {
         bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
-        pRet->m_bNotDefaultValue = true;
         pRet->SetString(tryToGetValue);
+        pRet->m_bNotDefaultValue = (bDefaultValue != (!!pRet->m_nIntegerValue));
         if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
     }
     Save();
@@ -227,8 +227,8 @@ ConfigEntry* Config::Bind(const char* szKey, rgba_t clr, const char* szSection)
     else
     {
         bool bShouldChange = !pRet->m_pBoundCfg->m_bValueChanged;
-        pRet->m_bNotDefaultValue = true;
         pRet->SetString(tryToGetValue);
+        pRet->m_bNotDefaultValue = (clr.value != pRet->m_ColorValue.value);
         if(bShouldChange) pRet->m_pBoundCfg->m_bValueChanged = false;
     }
     Save();
