@@ -82,6 +82,8 @@ public:
     inline void Reset() { SetString(m_szDefaultValue); }
     rgba_t ParseColor();
     void SetColor(rgba_t clr, bool asFloat = false);
+
+    inline bool LoadedUndefault() { return m_bNotDefaultValue; }
     inline int Clamp(int min, int max)
     {
         if(m_nIntegerValue < min)
@@ -130,6 +132,7 @@ public:
 private:
     Config* m_pBoundCfg;
     bool m_bLoadedData;
+    bool m_bNotDefaultValue;
     char m_szMySection[KEY_SECTION_BUFFER_C];
     char m_szMyKey[KEY_SECTION_BUFFER_C];
     float m_fFloatValue;
