@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <aml.h>
+//#include "xunwind.h"
 
 #ifdef __arm__
     #define AML32
@@ -17,6 +18,10 @@ std::ofstream g_pLogFile;
 
 struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
+#ifdef IO_GITHUB_HEXHACKING_XUNWIND
+    static uintptr_t g_frames[128];
+    static size_t g_frames_sz = 0;
+#endif
 
 int SignalInnerId(int code)
 {
@@ -313,6 +318,18 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     modlist->PrintModsList(g_pLogFile);
 
+    #ifdef IO_GITHUB_HEXHACKING_XUNWIND
+        //static size_t frames_sz = xunwind_eh_unwind(g_frames, sizeof(g_frames) / sizeof(g_frames[0]), ucontext);
+        //__atomic_store_n(&g_frames_sz, frames_sz, __ATOMIC_SEQ_CST);
+
+        //xunwind_frames_log(g_frames, g_frames_sz, "AndroidModLoader: Crash", ANDROID_LOG_INFO, NULL);
+        static char* stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, XUNWIND_CURRENT_THREAD, ucontext, "AML Crash");
+        if(stackLog && stackLog[0])
+        {
+            g_pLogFile << "\nDetailed crash log:" << stackLog;
+        }
+    #endif
+
   skip_logging:
     logger->Info("Notifying mods about the crash...");
     modlist->ProcessCrash(dlInfo.dli_fname ? GetFilenamePart(dlInfo.dli_fname) : "", sig, si->si_code, (uintptr_t)dlInfo.dli_fbase, mcontext);
@@ -322,7 +339,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 }
 
 #define HANDLESIG(_code) sigbreak = newSigaction + SignalInnerId(_code); sigbreak->sa_sigaction = &Handler; \
-                         sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND; sigemptyset(&sigbreak->sa_mask); sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
+                         sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND; sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
 void StartSignalHandler()
 {
     static char stack[SIGSTKSZ];

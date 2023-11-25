@@ -319,7 +319,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         g_pAML->AddFeature("IL2CPP");
     #endif
     if(g_pAML->IsGameFaked()) g_pAML->AddFeature("FAKEGAME");
-    if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER");
+    if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER"); // For fun
     if(!logger->HasOutput()) g_pAML->AddFeature("NOLOGGING");
     
     /* Load news first! */
