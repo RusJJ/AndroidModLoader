@@ -2,7 +2,7 @@
 #include <modpaks.h>
 #include <mod/logger.h>
 #include <mod/listitem.h>
-#include <dlfcn.h>
+//#include <dlfcn.h>
 
 
 Mods* listMods = NULL;

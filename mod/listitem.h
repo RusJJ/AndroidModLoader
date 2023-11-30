@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h> // use of undeclared identifier 'NULL'
+
 #define LIST_START(__cls_name) class __cls_name { \
 public: \
     __cls_name *pPrev; \
