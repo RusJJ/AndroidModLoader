@@ -195,7 +195,7 @@ void LoadMods(const char* path)
 
 void StartSignalHandler();
 void HookALog();
-extern bool bAndroidLog_OnlyImportant;
+extern bool bAndroidLog_OnlyImportant, bAndroidLog_NoAfter;
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
@@ -305,6 +305,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Catch another fish! */
     if(cfg->GetBool("PrintLogsToFile", false)) HookALog();
     bAndroidLog_OnlyImportant = !cfg->GetBool("PrintLogsToFile_Verbose", false);
+    bAndroidLog_NoAfter = cfg->GetBool("rintLogsToFile_NoLogCat", false);
 
     /* Mods? */
     logger->Info("Working with mods...");
