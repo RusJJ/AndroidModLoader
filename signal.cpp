@@ -6,23 +6,11 @@
 #include <aml.h>
 #include "xunwind.h"
 
-#ifdef __arm__
-    #define AML32
-#elif defined __aarch64__
-    #define AML64
-#else
-    #error This lib is supposed to work on ARM only!
-#endif
-
 #define STACKDUMP_SIZE 1024
 std::ofstream g_pLogFile;
 
 struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
-#ifdef IO_GITHUB_HEXHACKING_XUNWIND
-    static uintptr_t g_frames[128];
-    static size_t g_frames_sz = 0;
-#endif
 extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog;
 
 int SignalInnerId(int code)
@@ -202,7 +190,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     char path[320], pathText[320];
     sprintf(path, "%s/aml_crashlog.txt", aml->GetAndroidDataRootPath());
-    sprintf(pathText, "Application has been crashed!\n\nCrashlog has been saved in %s", path);
+    sprintf(pathText, "Application has been crashed!\n\nCrashlog should be saved in %s", path);
     g_pLogFile.open(path, std::ios::out | std::ios::trunc);
 
     // Java doesnt work here and so crashing again and again?
@@ -215,7 +203,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
     g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << std::nouppercase << std::endl;
-    g_pLogFile << "An overall reason of the crash: ";
+    g_pLogFile << "An overall reason of the crash:\n- ";
     switch(sig)
     {
     case SIGABRT:
@@ -273,36 +261,36 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << std::endl;
     }
 
-    g_pLogFile << std::endl << "Registers:" << std::endl;
+    g_pLogFile << "\n----------------------------------------------------\nRegisters:" << std::endl;
     #ifdef AML32
-        g_pLogFile << "R0:   " << std::dec << mcontext->arm_r0 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r0 << std::endl;
-        g_pLogFile << "R1:   " << std::dec << mcontext->arm_r1 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r1 << std::endl;
-        g_pLogFile << "R2:   " << std::dec << mcontext->arm_r2 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r2 << std::endl;
-        g_pLogFile << "R3:   " << std::dec << mcontext->arm_r3 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r3 << std::endl;
-        g_pLogFile << "R4:   " << std::dec << mcontext->arm_r4 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r4 << std::endl;
-        g_pLogFile << "R5:   " << std::dec << mcontext->arm_r5 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r5 << std::endl;
-        g_pLogFile << "R6:   " << std::dec << mcontext->arm_r6 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r6 << std::endl;
-        g_pLogFile << "R7:   " << std::dec << mcontext->arm_r7 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r7 << std::endl;
-        g_pLogFile << "R8:   " << std::dec << mcontext->arm_r8 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r8 << std::endl;
-        g_pLogFile << "R9:   " << std::dec << mcontext->arm_r9 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r9 << std::endl;
-        g_pLogFile << "R10:  " << std::dec << mcontext->arm_r10 <<  " 0x" << std::hex << std::uppercase << mcontext->arm_r10 << std::endl;
-        g_pLogFile << "R11:  " << std::dec << mcontext->arm_fp <<   " 0x" << std::hex << std::uppercase << mcontext->arm_fp << std::endl;
-        g_pLogFile << "R12:  " << std::dec << mcontext->arm_ip <<   " 0x" << std::hex << std::uppercase << mcontext->arm_ip << std::endl;
-        g_pLogFile << "SP:   " << std::dec << mcontext->arm_sp <<   " 0x" << std::hex << std::uppercase << mcontext->arm_sp << std::endl;
-        g_pLogFile << "LR:   " << std::dec << mcontext->arm_lr <<   " 0x" << std::hex << std::uppercase << mcontext->arm_lr << std::endl;
-        g_pLogFile << "PC:   " << std::dec << mcontext->arm_pc <<   " 0x" << std::hex << std::uppercase << mcontext->arm_pc << std::endl;
+        g_pLogFile << "R0:   " << std::dec << mcontext->arm_r0 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r0   << std::endl;
+        g_pLogFile << "R1:   " << std::dec << mcontext->arm_r1 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r1   << std::endl;
+        g_pLogFile << "R2:   " << std::dec << mcontext->arm_r2 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r2   << std::endl;
+        g_pLogFile << "R3:   " << std::dec << mcontext->arm_r3 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r3   << std::endl;
+        g_pLogFile << "R4:   " << std::dec << mcontext->arm_r4 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r4   << std::endl;
+        g_pLogFile << "R5:   " << std::dec << mcontext->arm_r5 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r5   << std::endl;
+        g_pLogFile << "R6:   " << std::dec << mcontext->arm_r6 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r6   << std::endl;
+        g_pLogFile << "R7:   " << std::dec << mcontext->arm_r7 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r7   << std::endl;
+        g_pLogFile << "R8:   " << std::dec << mcontext->arm_r8 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r8   << std::endl;
+        g_pLogFile << "R9:   " << std::dec << mcontext->arm_r9 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r9   << std::endl;
+        g_pLogFile << "R10:  " << std::dec << mcontext->arm_r10 <<  " 0x" << std::hex << std::uppercase << mcontext->arm_r10  << std::endl;
+        g_pLogFile << "R11:  " << std::dec << mcontext->arm_fp <<   " 0x" << std::hex << std::uppercase << mcontext->arm_fp   << std::endl;
+        g_pLogFile << "R12:  " << std::dec << mcontext->arm_ip <<   " 0x" << std::hex << std::uppercase << mcontext->arm_ip   << std::endl;
+        g_pLogFile << "SP:   " << std::dec << mcontext->arm_sp <<   " 0x" << std::hex << std::uppercase << mcontext->arm_sp   << std::endl;
+        g_pLogFile << "LR:   " << std::dec << mcontext->arm_lr <<   " 0x" << std::hex << std::uppercase << mcontext->arm_lr   << std::endl;
+        g_pLogFile << "PC:   " << std::dec << mcontext->arm_pc <<   " 0x" << std::hex << std::uppercase << mcontext->arm_pc   << std::endl;
         g_pLogFile << "CPSR: " << std::dec << mcontext->arm_cpsr << " 0x" << std::hex << std::uppercase << mcontext->arm_cpsr << std::endl;
     #else
-        g_pLogFile << "X0:   " << std::dec << mcontext->regs[0] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[0] << std::endl;
-        g_pLogFile << "X1:   " << std::dec << mcontext->regs[1] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[1] << std::endl;
-        g_pLogFile << "X2:   " << std::dec << mcontext->regs[2] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[2] << std::endl;
-        g_pLogFile << "X3:   " << std::dec << mcontext->regs[3] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[3] << std::endl;
-        g_pLogFile << "X4:   " << std::dec << mcontext->regs[4] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[4] << std::endl;
-        g_pLogFile << "X5:   " << std::dec << mcontext->regs[5] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[5] << std::endl;
-        g_pLogFile << "X6:   " << std::dec << mcontext->regs[6] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[6] << std::endl;
-        g_pLogFile << "X7:   " << std::dec << mcontext->regs[7] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[7] << std::endl;
-        g_pLogFile << "X8:   " << std::dec << mcontext->regs[8] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[8] << std::endl;
-        g_pLogFile << "X9:   " << std::dec << mcontext->regs[9] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[9] << std::endl;
+        g_pLogFile << "X0:   " << std::dec << mcontext->regs[0] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[0]  << std::endl;
+        g_pLogFile << "X1:   " << std::dec << mcontext->regs[1] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[1]  << std::endl;
+        g_pLogFile << "X2:   " << std::dec << mcontext->regs[2] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[2]  << std::endl;
+        g_pLogFile << "X3:   " << std::dec << mcontext->regs[3] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[3]  << std::endl;
+        g_pLogFile << "X4:   " << std::dec << mcontext->regs[4] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[4]  << std::endl;
+        g_pLogFile << "X5:   " << std::dec << mcontext->regs[5] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[5]  << std::endl;
+        g_pLogFile << "X6:   " << std::dec << mcontext->regs[6] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[6]  << std::endl;
+        g_pLogFile << "X7:   " << std::dec << mcontext->regs[7] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[7]  << std::endl;
+        g_pLogFile << "X8:   " << std::dec << mcontext->regs[8] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[8]  << std::endl;
+        g_pLogFile << "X9:   " << std::dec << mcontext->regs[9] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[9]  << std::endl;
         g_pLogFile << "X10:  " << std::dec << mcontext->regs[10] << " 0x" << std::hex << std::uppercase << mcontext->regs[10] << std::endl;
         g_pLogFile << "X11:  " << std::dec << mcontext->regs[11] << " 0x" << std::hex << std::uppercase << mcontext->regs[11] << std::endl;
         g_pLogFile << "X12:  " << std::dec << mcontext->regs[12] << " 0x" << std::hex << std::uppercase << mcontext->regs[12] << std::endl;
@@ -324,9 +312,9 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << "X28:  " << std::dec << mcontext->regs[28] << " 0x" << std::hex << std::uppercase << mcontext->regs[28] << std::endl;
         g_pLogFile << "X29:  " << std::dec << mcontext->regs[29] << " 0x" << std::hex << std::uppercase << mcontext->regs[29] << std::endl;
         g_pLogFile << "X30:  " << std::dec << mcontext->regs[30] << " 0x" << std::hex << std::uppercase << mcontext->regs[30] << std::endl;
-        g_pLogFile << "SP:   " << std::dec << mcontext->sp <<       " 0x" << std::hex << std::uppercase << mcontext->sp << std::endl;
-        g_pLogFile << "PC:   " << std::dec << mcontext->pc <<       " 0x" << std::hex << std::uppercase << mcontext->pc << std::endl;
-        g_pLogFile << "CPSR: " << std::dec << mcontext->pstate <<   " 0x" << std::hex << std::uppercase << mcontext->pstate << std::endl;
+        g_pLogFile << "SP:   " << std::dec << mcontext->sp <<       " 0x" << std::hex << std::uppercase << mcontext->sp       << std::endl;
+        g_pLogFile << "PC:   " << std::dec << mcontext->pc <<       " 0x" << std::hex << std::uppercase << mcontext->pc       << std::endl;
+        g_pLogFile << "CPSR: " << std::dec << mcontext->pstate <<   " 0x" << std::hex << std::uppercase << mcontext->pstate   << std::endl;
     #endif
 
     #ifdef AML32
@@ -337,14 +325,14 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     if(!g_bNoSPInLog)
     {
-        g_pLogFile << "\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
+        g_pLogFile << "\n----------------------------------------------------\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
         g_pLogFile << std::hex << std::uppercase;
         for(int i = 1; i <= STACKDUMP_SIZE; ++i)
         {
             g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(stack[i - 1]);
             if(i % 16 == 0)
             {
-                g_pLogFile << " (SP+0x" << 16 * ((i / 16) - 1) << ") [";
+                g_pLogFile << " (SP+0x" << std::setfill('0') << std::setw(3) << 16 * ((i / 16) - 1) << ") [";
                 int endv = i;
                 for(int j = i-16; j < endv && j < STACKDUMP_SIZE; ++j)
                 {
@@ -369,6 +357,9 @@ void Handler(int sig, siginfo_t *si, void *ptr)
             }
         }
     #endif
+
+    g_pLogFile << "\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n";
+    g_pLogFile << "If you`re having problems using official mods, please report about this problem on our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!";
 
   skip_logging:
     logger->Info("Notifying mods about the crash...");

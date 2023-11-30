@@ -10,8 +10,10 @@
 
 #ifdef __arm__
     #define AML32
+    #define BYBIT(__32val, __64val) (__32val)
 #elif defined __aarch64__
     #define AML64
+    #define BYBIT(__32val, __64val) (__64val)
 #else
     #error This lib is supposed to work on ARM only!
 #endif

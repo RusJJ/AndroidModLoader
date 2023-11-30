@@ -349,7 +349,7 @@ bool Config::GetBool(const char* szKey, bool bDefaultValue, const char* szSectio
 
 rgba_t Config::GetColor(const char* szKey, rgba_t clr, const char* szSection)
 {
-    if(!m_bInitialized) return NULL;
+    if(!m_bInitialized) return rgba_t {0,0,0,0};
     ConfigEntry entry; ConfigEntry* pRet = &entry;
     pRet->m_pBoundCfg = this;
     strxcpy(pRet->m_szMySection, szSection, sizeof(pRet->m_szMySection));

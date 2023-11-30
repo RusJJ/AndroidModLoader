@@ -217,7 +217,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     }
 
     /* Must Have for mods */
-    modlist->AddMod(amlmodinfo, 0, NULL);
+    modlist->AddMod(amlmodinfo, 0, "localpath (core)");
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
     InitCURL();
