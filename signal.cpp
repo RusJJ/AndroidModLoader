@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <aml.h>
-//#include "xunwind.h"
+#include "xunwind.h"
 
 #ifdef __arm__
     #define AML32
@@ -14,6 +14,7 @@
     #error This lib is supposed to work on ARM only!
 #endif
 
+#define STACKDUMP_SIZE 1024
 std::ofstream g_pLogFile;
 
 struct sigaction newSigaction[7];
@@ -22,6 +23,7 @@ struct sigaction oldSigaction[7];
     static uintptr_t g_frames[128];
     static size_t g_frames_sz = 0;
 #endif
+extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog;
 
 int SignalInnerId(int code)
 {
@@ -206,12 +208,38 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     // Java doesnt work here and so crashing again and again?
     //aml->ShowToast(true, pathText);
     logger->Error("Exception Signal %d - %s (%s)", sig, SignalEnum(sig), CodeEnum(sig, si->si_code));
-    logger->Error("Crashlog has been saved in %s", path);
+    logger->Error("Crashlog should be saved in %s", path);
 
+    char* stackLog;
     if(!g_pLogFile.is_open()) goto skip_logging;
 
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
     g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << std::nouppercase << std::endl;
+    g_pLogFile << "An overall reason of the crash: ";
+    switch(sig)
+    {
+    case SIGABRT:
+        g_pLogFile << "Because an application is killed by something (Android`s Low Memory Killer?)" << std::endl;
+        break;
+    case SIGBUS:
+        g_pLogFile << "Not enough memory, or invalid execution address, or bad mod patch" << std::endl;
+        break;
+    case SIGFPE:
+        g_pLogFile << "An error somewhere in the code, often - dividing by zero" << std::endl;
+        break;
+    case SIGSEGV:
+        g_pLogFile << "An application tried to access the memory address that is unaccessible, protected or just wrong" << std::endl;
+        break;
+    case SIGILL:
+        g_pLogFile << "Corrupted application stack, wrong call address or no privileges to do something" << std::endl;
+        break;
+    case SIGSTKFLT:
+        g_pLogFile << "Stack fault on coprocessor" << std::endl;
+        break;
+    case SIGTRAP:
+        g_pLogFile << "It`s a trap! Somewhere in the application is called \"it`s a trap! stop the application!\"" << std::endl;
+        break;
+    }
 
     Dl_info dlInfo;
     if(dladdr((void*)PC, &dlInfo) != 0)
@@ -219,13 +247,13 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         // Success
         if(dlInfo.dli_fname)
         {
-            g_pLogFile << "Library base: " << std::hex << std::uppercase << dlInfo.dli_fbase << std::endl;
+            g_pLogFile << "Library base: 0x" << std::hex << std::uppercase << (uintptr_t)dlInfo.dli_fbase << std::endl;
             g_pLogFile << GetFilenamePart(dlInfo.dli_fname) << " + 0x" << std::hex << std::uppercase << (PC - (uintptr_t)dlInfo.dli_fbase);
         }
         else
         {
             if(!dlInfo.dli_fbase) goto label_unsuccess;
-            g_pLogFile << "Library base: " << std::hex << std::uppercase << dlInfo.dli_fbase << std::endl;
+            g_pLogFile << "Library base: 0x" << std::hex << std::uppercase << (uintptr_t)dlInfo.dli_fbase << std::endl;
             g_pLogFile << "Program counter: Unknown Lib + 0x" << std::hex << std::uppercase << (PC - (uintptr_t)dlInfo.dli_fbase);
         }
     }
@@ -306,27 +334,39 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #else
         stack = (char*)mcontext->sp;
     #endif
-    #define STACKDUMP_SIZE 1024
-    g_pLogFile << "\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
-    g_pLogFile << std::hex << std::uppercase;
-    for(int i = 1; i <= STACKDUMP_SIZE; ++i)
+
+    if(!g_bNoSPInLog)
     {
-        g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(*stack);
-        if(i % 16 == 0) g_pLogFile << " (SP+0x" << 16 * ((i / 16) - 1) << ")" << std::endl;
-        ++stack;
+        g_pLogFile << "\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
+        g_pLogFile << std::hex << std::uppercase;
+        for(int i = 1; i <= STACKDUMP_SIZE; ++i)
+        {
+            g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(stack[i - 1]);
+            if(i % 16 == 0)
+            {
+                g_pLogFile << " (SP+0x" << 16 * ((i / 16) - 1) << ") [";
+                int endv = i;
+                for(int j = i-16; j < endv && j < STACKDUMP_SIZE; ++j)
+                {
+                    char spc = stack[j];
+                    if(std::isalnum(spc) || std::ispunct(spc)) g_pLogFile << spc;
+                    else g_pLogFile << '.';
+                }
+                g_pLogFile << "]" << std::endl;
+            }
+        }
     }
 
-    modlist->PrintModsList(g_pLogFile);
+    if(!g_bNoModsInLog) modlist->PrintModsList(g_pLogFile);
 
     #ifdef IO_GITHUB_HEXHACKING_XUNWIND
-        //static size_t frames_sz = xunwind_eh_unwind(g_frames, sizeof(g_frames) / sizeof(g_frames[0]), ucontext);
-        //__atomic_store_n(&g_frames_sz, frames_sz, __ATOMIC_SEQ_CST);
-
-        //xunwind_frames_log(g_frames, g_frames_sz, "AndroidModLoader: Crash", ANDROID_LOG_INFO, NULL);
-        static char* stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, XUNWIND_CURRENT_THREAD, ucontext, "AML Crash");
-        if(stackLog && stackLog[0])
+        if(!g_bSimplerCrashLog)
         {
-            g_pLogFile << "\nDetailed crash log:" << stackLog;
+            stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, XUNWIND_CURRENT_THREAD, ucontext, "");
+            if(stackLog && stackLog[0])
+            {
+                g_pLogFile << "\n----------------------------------------------------\nCall stack:\n" << stackLog;
+            }
         }
     #endif
 

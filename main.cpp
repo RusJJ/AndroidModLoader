@@ -30,6 +30,7 @@
 #include <modslist.h>
 
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
+bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog;
 int g_nEnableNews, g_nDownloadTimeout;
 ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256],
@@ -287,6 +288,13 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_nEnableNews = cfg->GetInt("ShowNewsForFewTimes", 3);
     g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
     g_nDownloadTimeout = cfg->GetInt("DownloadTimeout", 2);
+
+    g_bCrashAML = cfg->GetBool("CrashAML", false, "DevTools");
+    g_bNoMods = cfg->GetBool("DontLoadMods", false, "DevTools");
+    g_bSimplerCrashLog = cfg->GetBool("SimplerCrashLogs", false, "DevTools");
+    g_bNoSPInLog = cfg->GetBool("NoStackInCrashLog", false, "DevTools");
+    g_bNoModsInLog = cfg->GetBool("NoModsInCrashLog", false, "DevTools");
+
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
     cfg->Save();
@@ -304,8 +312,11 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         logger->Info("IL2CPP: Attempting to initialize IL2CPP-Utils");
         IL2CPP::Func::HookFunctions();
     #endif
-    LoadMods(internalModsPriority ? g_szInternalModsDir : g_szModsDir);
-    LoadMods(internalModsPriority ? g_szModsDir : g_szInternalModsDir);
+    if(!g_bNoMods)
+    {
+        LoadMods(internalModsPriority ? g_szInternalModsDir : g_szModsDir);
+        LoadMods(internalModsPriority ? g_szModsDir : g_szInternalModsDir);
+    }
 
     /* All mods are loaded now. We should check for dependencies! */
     logger->Info("Checking for dependencies...");
@@ -348,13 +359,16 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         modlist->ProcessUpdater();
         logger->Info("Mods were updated!");
     }
-    modlist->ProcessPreLoading();
-    modlist->ProcessLoading();
-    modlist->OnAllModsLoaded();
-    logger->Info("Mods were launched!");
+    if(!g_bNoMods)
+    {
+        modlist->ProcessPreLoading();
+        modlist->ProcessLoading();
+        modlist->OnAllModsLoaded();
+        logger->Info("Mods were launched!");
+    }
 
     /* Fake crash for crash handler testing */
-    //__builtin_trap();
+    if(g_bCrashAML) __builtin_trap();
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;
