@@ -104,6 +104,19 @@ public:
     // Can be used with HookVtableFunc to not to instantiate vtable for 1000 times!
     inline void**       GetVtable(void* ptr) { return *(void***)ptr; }
     inline void         SetVtable(void* ptr, void** vtable) { *(void***)ptr = vtable; }
+    
+    /* AML 1.2 */
+    virtual void        SaveFile();
+    virtual bool        HasValue(const char* key);
+    virtual void        DeleteValue(const char* key);
+    virtual void        SetInt(const char* key, int32_t val);
+    virtual void        SetFloat(const char* key, float val);
+    virtual void        SetInt64(const char* key, int64_t val);
+    virtual void        SetStr(const char* key, const char *val);
+    virtual bool        GetInt(const char* key, int32_t *val);
+    virtual bool        GetFloat(const char* key, float *val);
+    virtual bool        GetInt64(const char* key, int64_t *val);
+    virtual bool        GetStr(const char* key, char *val, size_t len);
 };
 
 extern IAML* aml;

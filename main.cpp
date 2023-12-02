@@ -14,6 +14,7 @@
 #include <aml.h>
 #include <defines.h>
 #include <modpaks.h>
+#include <mls.h>
 #include <mod/amlmod.h>
 #include <mod/logger.h>
 #include <mod/config.h>
@@ -30,7 +31,7 @@
 #include <modslist.h>
 
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
-bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog;
+bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves;
 int g_nEnableNews, g_nDownloadTimeout;
 ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256],
@@ -294,6 +295,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_bSimplerCrashLog = cfg->GetBool("SimplerCrashLogs", false, "DevTools");
     g_bNoSPInLog = cfg->GetBool("NoStackInCrashLog", false, "DevTools");
     g_bNoModsInLog = cfg->GetBool("NoModsInCrashLog", false, "DevTools");
+    g_bMLSOnlyManualSaves = cfg->GetBool("MLSOnlyManualSaves", false, "DevTools");
 
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
@@ -315,6 +317,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     #endif
     if(!g_bNoMods)
     {
+        MLS::LoadFile();
         LoadMods(internalModsPriority ? g_szInternalModsDir : g_szModsDir);
         LoadMods(internalModsPriority ? g_szModsDir : g_szInternalModsDir);
     }

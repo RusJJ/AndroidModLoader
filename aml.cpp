@@ -2,6 +2,8 @@
 #include <ARMPatch/armpatch_src/ARMPatch.h>
 #include <vtable_hooker.h>
 #include <modslist.h>
+#include <mls.h>
+
 #include <curl/curl.h>
 #define WC_NO_HARDEN // suppress the annoying warning.
 #include <wolfssl/wolfcrypt/md5.h>
@@ -356,6 +358,61 @@ bool AML::HookBL(void* handle, void* fnAddress, void** orgFnAddress)
 bool AML::HookBLX(void* handle, void* fnAddress, void** orgFnAddress)
 {
     return ARMPatch::hookBranchLinkXInternal(handle, fnAddress, orgFnAddress);
+}
+
+void AML::SaveFile()
+{
+    MLS::SaveFile();
+}
+
+bool AML::HasValue(const char* key)
+{
+    return MLS::HasValue(key);
+}
+
+void AML::DeleteValue(const char* key)
+{
+    MLS::DeleteValue(key);
+}
+
+void AML::SetInt(const char* key, int32_t val)
+{
+    MLS::SetInt(key, val);
+}
+
+void AML::SetFloat(const char* key, float val)
+{
+    MLS::SetFloat(key, val);
+}
+
+void AML::SetInt64(const char* key, int64_t val)
+{
+    MLS::SetInt64(key, val);
+}
+
+void AML::SetStr(const char* key, const char *val)
+{
+    MLS::SetStr(key, val);
+}
+
+bool AML::GetInt(const char* key, int32_t *val)
+{
+    return MLS::GetInt(key, val);
+}
+
+bool AML::GetFloat(const char* key, float *val)
+{
+    return MLS::GetFloat(key, val);
+}
+
+bool AML::GetInt64(const char* key, int64_t *val)
+{
+    return MLS::GetInt64(key, val);
+}
+
+bool AML::GetStr(const char* key, char *val, size_t len)
+{
+    return MLS::GetStr(key, val, len);
 }
 
 static AML amlLocal;

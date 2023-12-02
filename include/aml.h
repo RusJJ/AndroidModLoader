@@ -63,6 +63,18 @@ public:
     bool        HookB(void* handle, void* fnAddress, void** orgFnAddress = NULL);
     bool        HookBL(void* handle, void* fnAddress, void** orgFnAddress = NULL);
     bool        HookBLX(void* handle, void* fnAddress, void** orgFnAddress = NULL);
+    /* AML 1.2 */
+    void        SaveFile();
+    bool        HasValue(const char* key);
+    void        DeleteValue(const char* key);
+    void        SetInt(const char* key, int32_t val);
+    void        SetFloat(const char* key, float val);
+    void        SetInt64(const char* key, int64_t val);
+    void        SetStr(const char* key, const char *val);
+    bool        GetInt(const char* key, int32_t *val);
+    bool        GetFloat(const char* key, float *val);
+    bool        GetInt64(const char* key, int64_t *val);
+    bool        GetStr(const char* key, char *val, size_t len);
 };
 
 extern char g_szAMLFeatures[1024];

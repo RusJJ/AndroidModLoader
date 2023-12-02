@@ -9,22 +9,22 @@ public: \
     unsigned int nCount; \
     typedef __cls_name MyClass; \
     \
-    unsigned int Count() { return !this ? 0 : First()->nCount; } \
-    __cls_name *First() \
+    inline unsigned int Count() { return !this ? 0 : First()->nCount; } \
+    inline __cls_name *First() \
     { \
         if(!this) return NULL; \
         __cls_name *first = this; \
         while(first->pPrev != NULL) first = first->pPrev; \
         return first; \
     } \
-    __cls_name *Last() \
+    inline __cls_name *Last() \
     { \
         if(!this) return NULL; \
         __cls_name *last = this; \
         while(last->pNext != NULL) last = last->pNext; \
         return last; \
     } \
-    void Push(__cls_name **listPtr) \
+    inline void Push(__cls_name **listPtr) \
     { \
         if(pPrev || pNext) Remove(); \
         __cls_name*& list = *listPtr; \
@@ -39,7 +39,7 @@ public: \
         } \
         list = this; \
     } \
-    void Remove() /* risky removal! */ \
+    inline void Remove() /* risky removal! */ \
     { \
         if(pPrev) { \
             --(First()->nCount); \
@@ -49,7 +49,7 @@ public: \
         } \
         if(pNext) pNext->pPrev = pPrev; \
     } \
-    bool Remove(__cls_name **listPtr) \
+    inline bool Remove(__cls_name **listPtr) \
     { \
         if(First() != *listPtr) return false; \
         if(pPrev && pNext) { \
