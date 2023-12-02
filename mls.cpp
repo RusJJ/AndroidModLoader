@@ -3,10 +3,12 @@
 /* (for those who doesn`t like 1000 config files) */
 
 #include <mod/amlmod.h>
+#include <mod/logger.h>
 #include <mod/listitem.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "mls.h"
 
 extern bool g_bMLSOnlyManualSaves;
@@ -34,21 +36,27 @@ void MLS::LoadFile()
     char path[256];
     snprintf(path, sizeof(path), "%s/gamesave.mls", aml->GetAndroidDataPath());
     FILE* f = fopen(path, "rb");
-    if(!f) return;
+    if(!f)
+    {
+        logger->Error("An error (%d) opening MLS file!", errno, strerror(errno));
+        return;
+    }
 
+    logger->Info("MLS file is opened, reading sets...");
     MLSKeychain* item;
     while(true)
     {
         item = new MLSKeychain;
-        if(fread(&item->storage, sizeof(MLSStorage), 1, f) != sizeof(MLSStorage))
+        fread(&item->storage, sizeof(MLSStorage), 1, f);
+        if(!feof(f))
         {
-            delete item;
-            fclose(f);
-            return;
+            item->Push(&listSets);
         }
         else
         {
-            item->Push(&listSets);
+            fclose(f);
+            logger->Info("MLS file has been readed. Sets: %d", item->Count());
+            return;
         }
     }
 }

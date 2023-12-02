@@ -133,7 +133,7 @@ void LoadMods(const char* path)
     DIR* dir = opendir(path);
     if (dir != NULL)
     {
-        logger->Info("Opening %s", path);
+        logger->Info("Loading mods from %s", path);
         struct dirent *diread; void* handle;
         const char* gameName = HasFakeAppName() ? g_szFakeAppName : g_szAppName;
         while ((diread = readdir(dir)) != NULL)
