@@ -102,6 +102,29 @@ inline char *strxcpy(char* __restrict__ dst, const char* __restrict__ src, int l
     }
 }
 
+inline int clampint(int min, int max, int v)
+{
+    if(v < min) return min;
+    else if(v > max) return max;
+    return v;
+}
+inline void clampint(int min, int max, int& v)
+{
+    if(v < min) v = min;
+    else if(v > max) v = max;
+}
+inline float clampfloat(float min, float max, float v)
+{
+    if(v < min) return min;
+    else if(v > max) return max;
+    return v;
+}
+inline void clampfloat(float min, float max, float& v)
+{
+    if(v < min) v = min;
+    else if(v > max) v = max;
+}
+
 class ModInfo
 {
 public:

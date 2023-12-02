@@ -106,17 +106,17 @@ public:
     inline void         SetVtable(void* ptr, void** vtable) { *(void***)ptr = vtable; }
     
     /* AML 1.2 */
-    virtual void        SaveFile();
-    virtual bool        HasValue(const char* key);
-    virtual void        DeleteValue(const char* key);
-    virtual void        SetInt(const char* key, int32_t val);
-    virtual void        SetFloat(const char* key, float val);
-    virtual void        SetInt64(const char* key, int64_t val);
-    virtual void        SetStr(const char* key, const char *val);
-    virtual bool        GetInt(const char* key, int32_t *val);
-    virtual bool        GetFloat(const char* key, float *val);
-    virtual bool        GetInt64(const char* key, int64_t *val);
-    virtual bool        GetStr(const char* key, char *val, size_t len);
+    virtual void        MLSSaveFile();
+    virtual bool        MLSHasValue(const char* key);
+    virtual void        MLSDeleteValue(const char* key);
+    virtual void        MLSSetInt(const char* key, int32_t val);
+    virtual void        MLSSetFloat(const char* key, float val);
+    virtual void        MLSSetInt64(const char* key, int64_t val);
+    virtual void        MLSSetStr(const char* key, const char *val);
+    virtual bool        MLSGetInt(const char* key, int32_t *val);
+    virtual bool        MLSGetFloat(const char* key, float *val);
+    virtual bool        MLSGetInt64(const char* key, int64_t *val);
+    virtual bool        MLSGetStr(const char* key, char *val, size_t len);
 };
 
 extern IAML* aml;

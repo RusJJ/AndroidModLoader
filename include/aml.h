@@ -64,17 +64,17 @@ public:
     bool        HookBL(void* handle, void* fnAddress, void** orgFnAddress = NULL);
     bool        HookBLX(void* handle, void* fnAddress, void** orgFnAddress = NULL);
     /* AML 1.2 */
-    void        SaveFile();
-    bool        HasValue(const char* key);
-    void        DeleteValue(const char* key);
-    void        SetInt(const char* key, int32_t val);
-    void        SetFloat(const char* key, float val);
-    void        SetInt64(const char* key, int64_t val);
-    void        SetStr(const char* key, const char *val);
-    bool        GetInt(const char* key, int32_t *val);
-    bool        GetFloat(const char* key, float *val);
-    bool        GetInt64(const char* key, int64_t *val);
-    bool        GetStr(const char* key, char *val, size_t len);
+    void        MLSSaveFile();
+    bool        MLSHasValue(const char* key);
+    void        MLSDeleteValue(const char* key);
+    void        MLSSetInt(const char* key, int32_t val);
+    void        MLSSetFloat(const char* key, float val);
+    void        MLSSetInt64(const char* key, int64_t val);
+    void        MLSSetStr(const char* key, const char *val);
+    bool        MLSGetInt(const char* key, int32_t *val);
+    bool        MLSGetFloat(const char* key, float *val);
+    bool        MLSGetInt64(const char* key, int64_t *val);
+    bool        MLSGetStr(const char* key, char *val, size_t len);
 };
 
 extern char g_szAMLFeatures[1024];

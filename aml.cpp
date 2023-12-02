@@ -360,57 +360,57 @@ bool AML::HookBLX(void* handle, void* fnAddress, void** orgFnAddress)
     return ARMPatch::hookBranchLinkXInternal(handle, fnAddress, orgFnAddress);
 }
 
-void AML::SaveFile()
+void AML::MLSSaveFile()
 {
     MLS::SaveFile();
 }
 
-bool AML::HasValue(const char* key)
+bool AML::MLSHasValue(const char* key)
 {
     return MLS::HasValue(key);
 }
 
-void AML::DeleteValue(const char* key)
+void AML::MLSDeleteValue(const char* key)
 {
     MLS::DeleteValue(key);
 }
 
-void AML::SetInt(const char* key, int32_t val)
+void AML::MLSSetInt(const char* key, int32_t val)
 {
     MLS::SetInt(key, val);
 }
 
-void AML::SetFloat(const char* key, float val)
+void AML::MLSSetFloat(const char* key, float val)
 {
     MLS::SetFloat(key, val);
 }
 
-void AML::SetInt64(const char* key, int64_t val)
+void AML::MLSSetInt64(const char* key, int64_t val)
 {
     MLS::SetInt64(key, val);
 }
 
-void AML::SetStr(const char* key, const char *val)
+void AML::MLSSetStr(const char* key, const char *val)
 {
     MLS::SetStr(key, val);
 }
 
-bool AML::GetInt(const char* key, int32_t *val)
+bool AML::MLSGetInt(const char* key, int32_t *val)
 {
     return MLS::GetInt(key, val);
 }
 
-bool AML::GetFloat(const char* key, float *val)
+bool AML::MLSGetFloat(const char* key, float *val)
 {
     return MLS::GetFloat(key, val);
 }
 
-bool AML::GetInt64(const char* key, int64_t *val)
+bool AML::MLSGetInt64(const char* key, int64_t *val)
 {
     return MLS::GetInt64(key, val);
 }
 
-bool AML::GetStr(const char* key, char *val, size_t len)
+bool AML::MLSGetStr(const char* key, char *val, size_t len)
 {
     return MLS::GetStr(key, val, len);
 }
