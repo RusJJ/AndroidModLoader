@@ -108,10 +108,10 @@ inline int clampint(int min, int max, int v)
     else if(v > max) return max;
     return v;
 }
-inline void clampint(int min, int max, int& v)
+inline void clampint(int min, int max, int* v)
 {
-    if(v < min) v = min;
-    else if(v > max) v = max;
+    if(*v < min) *v = min;
+    else if(*v > max) *v = max;
 }
 inline float clampfloat(float min, float max, float v)
 {
@@ -119,10 +119,10 @@ inline float clampfloat(float min, float max, float v)
     else if(v > max) return max;
     return v;
 }
-inline void clampfloat(float min, float max, float& v)
+inline void clampfloat(float min, float max, float* v)
 {
-    if(v < min) v = min;
-    else if(v > max) v = max;
+    if(*v < min) *v = min;
+    else if(*v > max) *v = max;
 }
 
 class ModInfo
