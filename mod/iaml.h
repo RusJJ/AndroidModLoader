@@ -154,10 +154,8 @@ inline IAML* GetAMLInterface() { return aml; }
 #define HOOKBL(_name, _fnAddr)                                  \
     aml->HookBL((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a branch with link (and registers exchange) */
-#ifdef AML32
-    #define HOOKBLX(_name, _fnAddr)                             \
-        aml->HookBLX((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
-#endif
+#define HOOKBLX(_name, _fnAddr)                                 \
+    aml->HookBLX((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a function hidden behind IL2CPP */
 #define HOOK_IL2CPP(_name, _methodInfo)                         \
     aml->Hook((void*)_methodInfo->methodPointer, (void*)(&HookOf_##_name), (void**)(&_name))

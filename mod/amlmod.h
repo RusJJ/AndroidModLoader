@@ -1,7 +1,6 @@
 #ifndef _AMLMOD
 #define _AMLMOD
 
-#include "iaml.h"
 #include <stdio.h>
 #include <ctype.h>
 #include <cstring>
@@ -177,5 +176,9 @@ private:
 };
 
 typedef ModInfo* (*GetModInfoFn)();
+
+
+
+#include "iaml.h"
 
 #endif // _AMLMOD
