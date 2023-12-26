@@ -117,6 +117,10 @@ public:
     virtual bool        MLSGetFloat(const char* key, float *val);
     virtual bool        MLSGetInt64(const char* key, int64_t *val);
     virtual bool        MLSGetStr(const char* key, char *val, size_t len);
+    
+    /* AML 1.2.1 */
+    virtual bool        IsThumbAddr(uintptr_t addr);
+    virtual uintptr_t   GetBranchDest(uintptr_t addr);
 };
 
 extern IAML* aml;
@@ -144,6 +148,9 @@ inline IAML* GetAMLInterface() { return aml; }
 /* Just a hook of a function */
 #define HOOK(_name, _fnAddr)                                    \
     aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
+/* Just a hook of a function (but simpler usage) */
+#define HOOKSYM(_name, _libHndl, _fnSym)                        \
+    ARMPatch::Hook((void*)(aml->GetSym(_libHndl, _fnSym)), (void*)(&HookOf_##_name), (void**)(&_name));
 /* Just a hook of a function located in PLT section (by address!) */
 #define HOOKPLT(_name, _fnAddr)                                 \
     aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))

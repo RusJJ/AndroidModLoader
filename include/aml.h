@@ -75,6 +75,9 @@ public:
     bool        MLSGetFloat(const char* key, float *val);
     bool        MLSGetInt64(const char* key, int64_t *val);
     bool        MLSGetStr(const char* key, char *val, size_t len);
+    /* AML 1.2.1 */
+    bool        IsThumbAddr(uintptr_t addr);
+    uintptr_t   GetBranchDest(uintptr_t addr);
 };
 
 extern char g_szAMLFeatures[1024];

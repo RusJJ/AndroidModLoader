@@ -63,8 +63,8 @@ LOCAL_SRC_FILES         := main.cpp interface.cpp aml.cpp modpaks.cpp signal.cpp
                            mod/logger.cpp mod/config.cpp
 
  ## FLAGS ##
-LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -DNO_HOOKDEFINES -std=c17 -mthumb
-LOCAL_CXXFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -DNO_HOOKDEFINES -std=c++17 -mthumb -fexceptions
+LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -DNO_HOOKDEFINES -D__USEGLOSS -std=c17 -mthumb
+LOCAL_CXXFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -DNO_HOOKDEFINES -D__USEGLOSS -std=c++17 -mthumb -fexceptions
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include $(LOCAL_PATH)/curl $(LOCAL_PATH)/curl/include $(LOCAL_PATH)/wolfssl $(LOCAL_PATH)/AML_PrecompiledLibs/include
 LOCAL_LDLIBS += -llog -ldl -landroid
 

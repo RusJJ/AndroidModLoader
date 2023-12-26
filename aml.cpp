@@ -1,4 +1,5 @@
 #include <aml.h>
+#include <mod/logger.h>
 #include <ARMPatch/armpatch_src/ARMPatch.h>
 #include <vtable_hooker.h>
 #include <modslist.h>
@@ -10,6 +11,8 @@
 #include <stdio.h>
 #include <time.h>
 #include <jnifn.h>
+
+#include <Gloss.h>
 
 char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
 extern char g_szAppName[256], g_szFakeAppName[256];
@@ -413,6 +416,44 @@ bool AML::MLSGetInt64(const char* key, int64_t *val)
 bool AML::MLSGetStr(const char* key, char *val, size_t len)
 {
     return MLS::GetStr(key, val, len);
+}
+
+bool AML::IsThumbAddr(uintptr_t addr)
+{
+    return ARMPatch::IsThumbAddr(addr);
+}
+
+uintptr_t AML::GetBranchDest(uintptr_t addr)
+{
+    #ifdef __USEGLOSS
+        #ifdef AML32
+            if(ARMPatch::IsThumbAddr(addr))
+            {
+                switch(Gloss::Inst::GetBranch(addr, $THUMB))
+                {
+                    case Gloss::Inst::branchs::B_16:
+                        return (uintptr_t)Gloss::Inst::GetThumb16BranchDestination(addr);
+
+                    case Gloss::Inst::branchs::B_COND:
+                    case Gloss::Inst::branchs::B_32:
+                    case Gloss::Inst::branchs::BL:
+                    case Gloss::Inst::branchs::BLX:
+                        return (uintptr_t)Gloss::Inst::GetThumb32BranchDestination(addr);
+
+                    default:
+                        return 0;
+                }
+            }
+            else
+            {
+                return (uintptr_t)Gloss::Inst::GetArmBranchDestination(addr);
+            }
+        #else
+            return (uintptr_t)Gloss::Inst::GetArm64BranchDestination(addr);
+        #endif
+    #else
+        return 0;
+    #endif
 }
 
 static AML amlLocal;

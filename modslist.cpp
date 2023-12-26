@@ -202,7 +202,7 @@ void ModsList::ProcessDependencies()
                 {
                     if(!HasModOfVersion(depList[i].szGUID, depList[i].szVersion))
                     {
-                        logger->Error("Mod (GUID %s) requires a mod %s of version %s+", info->szGUID, depList[i].szGUID, depList[i].szVersion);
+                        logger->Error("Mod (GUID %s) requires a mod %s of version %s and newer", info->szGUID, depList[i].szGUID, depList[i].szVersion);
                         ModsList::RemoveMod(info);
                         goto label_run_dependencies_check;
                     }
@@ -211,7 +211,7 @@ void ModsList::ProcessDependencies()
                 {
                     if(!HasMod(depList[i].szGUID))
                     {
-                        logger->Error("Mod (GUID %s) requires a mod %s of any veesion", info->szGUID, depList[i].szGUID);
+                        logger->Error("Mod (GUID %s) requires a mod %s of any version", info->szGUID, depList[i].szGUID);
                         ModsList::RemoveMod(info);
                         goto label_run_dependencies_check;
                     }
