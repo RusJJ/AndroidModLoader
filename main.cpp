@@ -3,7 +3,6 @@
     #define sprintf stbsp_sprintf
     #define snprintf stbsp_snprintf
 #endif
-#include <jnifn.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h> // mkdir
@@ -18,6 +17,8 @@
 #include <mod/amlmod.h>
 #include <mod/logger.h>
 #include <mod/config.h>
+
+#include <jnifn.h>
 
 #ifdef __IL2CPPUTILS
     #include <il2cpp/functions.h>
@@ -48,7 +49,7 @@ jobject appContext;
 JNIEnv* env;
 
 // Main
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.2", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.2.1", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;

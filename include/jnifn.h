@@ -72,6 +72,52 @@ inline jobject GetExternalFilesDir(JNIEnv* env, jobject jActivity) // getExterna
     return (jstring)env->CallObjectMethod(jActivity, method, NULL);
 }
 
+// fastman92
+inline void GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath, size_t bufferSize)
+{
+    jobject objectFile;
+    bool bReadFromF92launcher = false;
+    jmethodID methodIDgetExternalFilesDir;
+
+    jclass classF92launcherSettings = env->FindClass("com/fastman92/main_activity_launcher/Settings");
+
+    if (classF92launcherSettings)
+    {
+        methodIDgetExternalFilesDir = env->GetStaticMethodID(classF92launcherSettings, "getExternalFilesDir", "(Landroid/content/Context;)Ljava/io/File;");
+        
+        if (methodIDgetExternalFilesDir)
+        {
+            objectFile = env->CallStaticObjectMethod(classF92launcherSettings, methodIDgetExternalFilesDir, context);
+            bReadFromF92launcher = true;
+        }
+    }
+
+    if (!bReadFromF92launcher)
+    {
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+
+        jclass android_content_Context = env->GetObjectClass(context);
+
+        methodIDgetExternalFilesDir = env->GetMethodID(android_content_Context, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
+
+        objectFile = (jstring)env->CallObjectMethod(context, methodIDgetExternalFilesDir, nullptr);
+    }
+        
+    jclass classFile = env->GetObjectClass(objectFile);
+
+    jmethodID methodIDgetAbsolutePath = env->GetMethodID(classFile, "getAbsolutePath", "()Ljava/lang/String;");
+    jstring stringPath = (jstring)env->CallObjectMethod(objectFile, methodIDgetAbsolutePath);
+
+    if (stringPath)
+    {
+        const char* strPathValueStr = env->GetStringUTFChars(stringPath, NULL);
+
+        strxcpy(strPath, strPathValueStr, bufferSize);
+        env->ReleaseStringUTFChars(stringPath, strPathValueStr);
+    }
+}
+
 inline jobject GetStorageDir(JNIEnv* env) // /storage/emulated/0 instead of /sdcard (example)
 {
     jclass classEnvironment = env->FindClass("android/os/Environment");
