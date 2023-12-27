@@ -33,7 +33,7 @@
 #include <modslist.h>
 
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
-bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves;
+bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind;
 int g_nEnableNews, g_nDownloadTimeout;
 ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256],
@@ -345,6 +345,8 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_bNoSPInLog = cfg->GetBool("NoStackInCrashLog", false, "DevTools");
     g_bNoModsInLog = cfg->GetBool("NoModsInCrashLog", false, "DevTools");
     g_bMLSOnlyManualSaves = cfg->GetBool("MLSOnlyManualSaves", false, "DevTools");
+    g_bDumpAllThreads = cfg->GetBool("CrashLogFromAllThreads", true, "DevTools");
+    g_bEHUnwind = cfg->GetBool("EHUnwindCrashLog", false, "DevTools");
 
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;

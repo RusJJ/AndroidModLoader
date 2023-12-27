@@ -6,12 +6,14 @@
 #include <aml.h>
 #include "xunwind.h"
 
-#define STACKDUMP_SIZE 1024
+#define STACKDUMP_SIZE 0x510
 std::ofstream g_pLogFile;
 
 struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
-extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog;
+extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads, g_bEHUnwind;
+
+static uintptr_t g_frames[128];
 
 int SignalInnerId(int code)
 {
@@ -201,6 +203,13 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     char* stackLog;
     if(!g_pLogFile.is_open()) goto skip_logging;
 
+
+    g_pLogFile << "!!! THIS IS A CRASH LOG !!!\nIf you are experiencing a crash, give us this file.\n>>> DO NOT SEND US A SCREENSHOT OF THIS FILE <<<" << std::endl << std::endl;
+
+    #define DEVVAR_LOG(__v) g_pLogFile << #__v << (__v ? " = 1 | " : " = 0 | ")
+    g_pLogFile << "| "; DEVVAR_LOG(g_bSimplerCrashLog); DEVVAR_LOG(g_bNoSPInLog);
+    DEVVAR_LOG(g_bNoModsInLog); DEVVAR_LOG(g_bDumpAllThreads); DEVVAR_LOG(g_bEHUnwind); g_pLogFile << std::endl;
+
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
     g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << std::nouppercase << std::endl;
     g_pLogFile << "An overall reason of the crash:\n- ";
@@ -350,10 +359,28 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #ifdef IO_GITHUB_HEXHACKING_XUNWIND
         if(!g_bSimplerCrashLog)
         {
-            stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, XUNWIND_CURRENT_THREAD, ucontext, "");
+            if(g_bEHUnwind)
+            {
+                stackLog = NULL;
+
+                size_t frames_sz = xunwind_eh_unwind(g_frames, sizeof(g_frames) / sizeof(g_frames[0]), ucontext);
+                if(frames_sz > 0)
+                {
+                    stackLog = xunwind_frames_get(g_frames, frames_sz, "");
+                }
+            }
+            else
+            {
+                stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, g_bDumpAllThreads ? XUNWIND_ALL_THREADS : XUNWIND_CURRENT_THREAD, ucontext, "");
+            }
             if(stackLog && stackLog[0])
             {
                 g_pLogFile << "\n----------------------------------------------------\nCall stack:\n" << stackLog;
+                free(stackLog);
+            }
+            else
+            {
+                g_pLogFile << "\n----------------------------------------------------\nCall stack:\nA system returned no crash log!";
             }
         }
     #endif

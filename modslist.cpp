@@ -322,7 +322,7 @@ int ModsList::GetModsNum()
 
 void ModsList::PrintModsList(std::ofstream& logfile)
 {
-    logfile << "\n----------------------------------------------------\nList of loaded mods (count=" << listMods->Count() << "):\n";
+    logfile << "\n----------------------------------------------------\nList of loaded mods (count=" << std::dec << listMods->Count() << "):\n";
 
     ModInfo* info = NULL;
     ModDesc* desc = NULL;
