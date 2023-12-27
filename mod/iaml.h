@@ -1,6 +1,12 @@
 #ifndef _IAML
 #define _IAML
 
+// Usage: place 3 lines somewhere in the code AFTER #include <mod/amlmod.h>
+// #if !defined(IAML_VER) && IAML_VER < 01020100
+//     #error "You need to update your MOD folder to 1.2.1!"
+// #endif
+#define IAML_VER 01020100
+
 #include "interface.h"
 #include <jni.h>
 #include <stdint.h>
