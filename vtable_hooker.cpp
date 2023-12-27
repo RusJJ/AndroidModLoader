@@ -8,7 +8,7 @@
 void* vtablez[MAX_VTABLE_FUNCS] = {NULL};
 int vtablez_offset = 0;
 
-// This function is not gonna work correctly if vtable has "holes" (incomplete virtual class)
+// This function is not gonna work correctly if vtable has "holes" (incomplete/abstract virtual class)
 void HookVtableFunc(void* ptr, unsigned int funcNum, void* func, void** original, bool instantiate)
 {
     if(!ptr || !func || funcNum < 0) return;
