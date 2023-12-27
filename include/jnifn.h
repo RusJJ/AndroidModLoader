@@ -73,6 +73,7 @@ inline jobject GetExternalFilesDir(JNIEnv* env, jobject jActivity) // getExterna
 }
 
 // fastman92
+#ifdef FASTMAN92_CODE
 inline void GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath, size_t bufferSize)
 {
     jobject objectFile;
@@ -117,6 +118,7 @@ inline void GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
         env->ReleaseStringUTFChars(stringPath, strPathValueStr);
     }
 }
+#endif
 
 inline jobject GetStorageDir(JNIEnv* env) // /storage/emulated/0 instead of /sdcard (example)
 {

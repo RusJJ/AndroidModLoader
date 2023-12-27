@@ -18,6 +18,7 @@
 #include <mod/logger.h>
 #include <mod/config.h>
 
+#define FASTMAN92_CODE
 #include <jnifn.h>
 
 #ifdef __IL2CPPUTILS
@@ -42,7 +43,8 @@ char g_szInternalStoragePath[256],
      g_szInternalModsDir[256],
      g_szAndroidDataRootDir[256],
      g_szAndroidDataDir[256],
-     g_szCfgPath[256];
+     g_szCfgPath[256],
+     g_szFastman92Android[256];
 const char* g_szDataDir;
 
 jobject appContext;
@@ -60,6 +62,31 @@ inline size_t __strlen(const char *str)
     const char* s = str;
     while(*s) ++s;
     return (s - str);
+}
+
+inline bool __ispathdel(char s)
+{
+    return (s == '\\' || s == '/');
+}
+
+inline void __pathback(char *str)
+{
+    const char* s = str;
+    uint16_t i = 0;
+    while(*s) ++s;
+    while(s != str)
+    {
+        if(!__ispathdel(*(--s))) break;
+    }
+    while(s != str)
+    {
+        if(__ispathdel(*(--s)))
+        {
+            i = (uint16_t)(s - str);
+        }
+        else if(i != 0) break;
+    }
+    if(i > 0) str[i] = 0;
 }
 
 inline bool EndsWith(const char* base, const char* str)
@@ -250,6 +277,26 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     env->ReleaseStringUTFChars(jTmp, szTmp);
     logger->Info("Determined app info: %s", g_szAppName);
 
+  #ifdef FASTMAN92_CODE
+    /* Fastman92 Part */
+    GetExternalFilesDir_FLA(env, appContext, g_szFastman92Android, sizeof(g_szFastman92Android));
+    __pathback(g_szFastman92Android);
+
+    // Android/data/... dir
+    snprintf(g_szAndroidDataRootDir, sizeof(g_szAndroidDataRootDir), "%s/", g_szFastman92Android);
+    
+    // Android/data/.../mods dir
+    snprintf(g_szModsDir, sizeof(g_szModsDir), "%s/mods/", g_szFastman92Android);
+    mkdir(g_szModsDir, 0777);
+
+    // Android/data/.../files dir
+    snprintf(g_szAndroidDataDir, sizeof(g_szAndroidDataDir), "%s/files/", g_szFastman92Android);
+    mkdir(g_szAndroidDataDir, 0777);
+    
+    // Android/data/.../configs dir
+    snprintf(g_szCfgPath, sizeof(g_szCfgPath), "%s/configs/", g_szFastman92Android);
+    mkdir(g_szCfgPath, 0777);
+  #else
     /* Create a folder in /Android/data/.../ */
     snprintf(g_szAndroidDataRootDir, sizeof(g_szAndroidDataRootDir), "%s/Android/data/%s/", g_szInternalStoragePath, g_szAppName);
     DIR* dir = opendir(g_szAndroidDataRootDir);
@@ -267,6 +314,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Create "configs" folder in /Android/data/.../ */
     snprintf(g_szCfgPath, sizeof(g_szCfgPath), "%s/Android/data/%s/configs/", g_szInternalStoragePath, g_szAppName);
     mkdir(g_szCfgPath, 0777);
+  #endif
 
     /* root/data/data Folder */
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
