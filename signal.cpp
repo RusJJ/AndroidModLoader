@@ -269,6 +269,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     {
         g_pLogFile << std::endl;
     }
+    g_pLogFile.flush();
 
     g_pLogFile << "\n----------------------------------------------------\nRegisters:" << std::endl;
     #ifdef AML32
@@ -325,6 +326,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << "PC:   " << std::dec << mcontext->pc <<       " 0x" << std::hex << std::uppercase << mcontext->pc       << std::endl;
         g_pLogFile << "CPSR: " << std::dec << mcontext->pstate <<   " 0x" << std::hex << std::uppercase << mcontext->pstate   << std::endl;
     #endif
+    g_pLogFile.flush();
 
     #ifdef AML32
         stack = (char*)mcontext->arm_sp;
@@ -350,12 +352,17 @@ void Handler(int sig, siginfo_t *si, void *ptr)
                     else g_pLogFile << '.';
                 }
                 g_pLogFile << "]" << std::endl;
+                g_pLogFile.flush();
             }
         }
     }
 
-    if(!g_bNoModsInLog) modlist->PrintModsList(g_pLogFile);
-
+    if(!g_bNoModsInLog)
+    {
+        modlist->PrintModsList(g_pLogFile);
+        g_pLogFile.flush();
+    }
+        
     #ifdef IO_GITHUB_HEXHACKING_XUNWIND
         if(!g_bSimplerCrashLog)
         {
@@ -382,12 +389,14 @@ void Handler(int sig, siginfo_t *si, void *ptr)
             {
                 g_pLogFile << "\n----------------------------------------------------\nCall stack:\nA system returned no crash log!";
             }
+            g_pLogFile.flush();
         }
     #endif
 
     g_pLogFile << "\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n";
     g_pLogFile << "If you`re having problems using official mods, please report about this problem on our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!";
-
+    g_pLogFile.flush();
+    
   skip_logging:
     logger->Info("Notifying mods about the crash...");
     modlist->ProcessCrash(dlInfo.dli_fname ? GetFilenamePart(dlInfo.dli_fname) : "", sig, si->si_code, (uintptr_t)dlInfo.dli_fbase, mcontext);
