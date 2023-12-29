@@ -16,6 +16,8 @@ struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
 extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads, g_bEHUnwind;
 
+static stack_t stackstruct;
+static char signalstack[SIGSTKSZ];
 static uintptr_t g_frames[128];
 
 int SignalInnerId(int code)
@@ -367,7 +369,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     }
         
     #ifdef IO_GITHUB_HEXHACKING_XUNWIND
-        std::this_thread::sleep_for(300ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
         if(!g_bSimplerCrashLog)
         {
             if(g_bEHUnwind)
@@ -413,12 +415,10 @@ void Handler(int sig, siginfo_t *si, void *ptr)
                          sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND; sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
 void StartSignalHandler()
 {
-    static char stack[SIGSTKSZ];
-    stack_t ss;
-    ss.ss_sp = stack;
-    ss.ss_size = SIGSTKSZ;
-    ss.ss_flags = 0;
-    sigaltstack(&ss, NULL);
+    stackstruct.ss_sp = &signalstack[0];
+    stackstruct.ss_size = SIGSTKSZ;
+    stackstruct.ss_flags = 0;
+    sigaltstack(&stackstruct, NULL);
 
     struct sigaction* sigbreak = NULL;
 
