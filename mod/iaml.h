@@ -134,6 +134,7 @@ inline IAML* GetAMLInterface() { return aml; }
 
 /* Do not use big conversions */
 #define SET_TO(__a1, __a2)  *(void**)&(__a1) = (void*)(__a2)
+#define SETSYM_TO(__a1, __a2, __a3)  *(void**)&(__a1) = (void*)(aml->GetSym(__a2, __a3))
 #define AS_ADDR(__a1)       *(uintptr_t*)&(__a1)
 
 /* Unprotect that memory chunk for making changes */
@@ -165,7 +166,7 @@ inline IAML* GetAMLInterface() { return aml; }
     aml->Hook((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
 /* Just a hook of a function (but simpler usage) */
 #define HOOKSYM(_name, _libHndl, _fnSym)                        \
-    ARMPatch::Hook((void*)(aml->GetSym(_libHndl, _fnSym)), (void*)(&HookOf_##_name), (void**)(&_name));
+    aml->Hook((void*)(aml->GetSym(_libHndl, _fnSym)), (void*)(&HookOf_##_name), (void**)(&_name));
 /* Just a hook of a function located in PLT section (by address!) */
 #define HOOKPLT(_name, _fnAddr)                                 \
     aml->HookPLT((void*)(_fnAddr), (void*)(&HookOf_##_name), (void**)(&_name))
