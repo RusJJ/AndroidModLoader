@@ -358,7 +358,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Catch another fish! */
     if(cfg->GetBool("PrintLogsToFile", false)) HookALog();
     bAndroidLog_OnlyImportant = !cfg->GetBool("PrintLogsToFile_Verbose", false);
-    bAndroidLog_NoAfter = cfg->GetBool("rintLogsToFile_NoLogCat", false);
+    bAndroidLog_NoAfter = cfg->GetBool("PrintLogsToFile_NoLogCat", false);
 
     /* Mods? */
     logger->Info("Working with mods...");
@@ -422,7 +422,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         logger->Info("Mods were launched!");
     }
 
-    /* Fake crash for crash handler testing */
+    /* Fake crash for crash handler testing (does not work?) */
     if(g_bCrashAML) __builtin_trap();
     
     /* Return the value it needs */
