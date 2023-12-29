@@ -6,6 +6,9 @@
 #include <aml.h>
 #include "xunwind.h"
 
+#include <thread>
+#include <chrono>
+
 #define STACKDUMP_SIZE 0x510
 std::ofstream g_pLogFile;
 
@@ -364,6 +367,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     }
         
     #ifdef IO_GITHUB_HEXHACKING_XUNWIND
+        std::this_thread::sleep_for(300ms);
         if(!g_bSimplerCrashLog)
         {
             if(g_bEHUnwind)
