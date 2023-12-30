@@ -16,10 +16,10 @@ LOCAL_MODULE := substrate
 LOCAL_SRC_FILES := obj/local/$(TARGET_ARCH_ABI)/libsubstrate.a
 include $(PREBUILT_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
-LOCAL_MODULE := dobby
-LOCAL_SRC_FILES := AML_PrecompiledLibs/$(TARGET_ARCH_ABI)/libdobby.a
-include $(PREBUILT_STATIC_LIBRARY)
+# include $(CLEAR_VARS)
+# LOCAL_MODULE := dobby
+# LOCAL_SRC_FILES := AML_PrecompiledLibs/$(TARGET_ARCH_ABI)/libdobby.a
+# include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := gloss
@@ -56,7 +56,7 @@ include $(PREBUILT_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION     := .cpp .cc
-LOCAL_SHARED_LIBRARIES  := armpatch substrate curl dobby gloss xUnwind
+LOCAL_SHARED_LIBRARIES  := armpatch substrate curl gloss xUnwind
 LOCAL_MODULE            := AML
 LOCAL_SRC_FILES         := main.cpp interface.cpp aml.cpp modpaks.cpp signal.cpp \
                            modslist.cpp icfg.cpp vtable_hooker.cpp alog.cpp mls.cpp \

@@ -116,6 +116,8 @@ public:
     virtual bool        IsThumbAddr(uintptr_t addr);
     virtual uintptr_t   GetBranchDest(uintptr_t addr);
 
+
+
     // Inlines (shortcuts for you!)
     inline void         Write(uintptr_t dest, const char* str, size_t size) { Write(dest, (uintptr_t)str, size); } // Inline
     inline void         Write(uintptr_t dest, const char* str) { Write(dest, (uintptr_t)str, strlen(str)); } // Inline
@@ -160,6 +162,10 @@ inline IAML* GetAMLInterface() { return aml; }
 #define DECL_HOOKi(_name, ...)                                  \
     int (*_name)(__VA_ARGS__);	                                \
 	int HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = void* */
+#define DECL_HOOKp(_name, ...)                                  \
+    void* (*_name)(__VA_ARGS__);	                            \
+	void* HookOf_##_name(__VA_ARGS__)
 
 /* Just a hook of a function */
 #define HOOK(_name, _fnAddr)                                    \

@@ -33,7 +33,7 @@
 #include <modslist.h>
 
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
-bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind;
+bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo;
 int g_nEnableNews, g_nDownloadTimeout;
 ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256],
@@ -222,6 +222,7 @@ void LoadMods(const char* path)
     }
 }
 
+extern ModDesc* pLastModProcessed;
 void StartSignalHandler();
 void HookALog();
 extern bool bAndroidLog_OnlyImportant, bAndroidLog_NoAfter;
@@ -347,6 +348,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_bMLSOnlyManualSaves = cfg->GetBool("MLSOnlyManualSaves", false, "DevTools");
     g_bDumpAllThreads = cfg->GetBool("CrashLogFromAllThreads", true, "DevTools");
     g_bEHUnwind = cfg->GetBool("EHUnwindCrashLog", false, "DevTools");
+    g_bMoreRegsInfo = cfg->GetBool("MoreRegistersInfo", true, "DevTools");
 
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
@@ -356,9 +358,9 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(cfg->GetBool("SignalHandler", true)) StartSignalHandler();
 
     /* Catch another fish! */
-    if(cfg->GetBool("PrintLogsToFile", false)) HookALog();
     bAndroidLog_OnlyImportant = !cfg->GetBool("PrintLogsToFile_Verbose", false);
     bAndroidLog_NoAfter = cfg->GetBool("PrintLogsToFile_NoLogCat", false);
+    if(cfg->GetBool("PrintLogsToFile", false)) HookALog();
 
     /* Mods? */
     logger->Info("Working with mods...");
@@ -421,6 +423,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
         modlist->OnAllModsLoaded();
         logger->Info("Mods were launched!");
     }
+    pLastModProcessed = NULL;
 
     /* Fake crash for crash handler testing (does not work?) */
     if(g_bCrashAML) __builtin_trap();
@@ -433,5 +436,5 @@ JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
 {
     /* Not sure if it'll work... */
     /* It worked once, lol */
-    //modlist->ProcessUnloading();
+    modlist->ProcessUnloading();
 }

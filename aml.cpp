@@ -216,7 +216,7 @@ void AML::ShowToast(bool longerDuration, const char* fmt, ...)
 {
     if(!fmt) return;
     
-    char txt[2048];
+    static char txt[512];
     va_list args;
     va_start(args, fmt);
     vsnprintf(txt, sizeof(txt), fmt, args);

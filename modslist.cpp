@@ -2,8 +2,8 @@
 #include <modpaks.h>
 #include <mod/logger.h>
 #include <mod/listitem.h>
-//#include <dlfcn.h>
 
+extern ModDesc* pLastModProcessed;
 
 Mods* listMods = NULL;
 LIST_START(Mods)
@@ -235,6 +235,7 @@ void ModsList::ProcessPreLoading()
         if(handle != NULL)
         {
             desc = item->pModDesc;
+            pLastModProcessed = desc;
 
             onModPreLoadFn = (OnModLoadFn)dlsym(handle, "OnModPreLoad");
             //if(onModPreLoadFn == NULL) onModPreLoadFn = (OnModLoadFn)dlsym(handle, "_Z12OnModPreLoadv");
@@ -268,6 +269,7 @@ void ModsList::ProcessLoading()
     LIST_FOR(listMods)
     {
         desc = item->pModDesc;
+        pLastModProcessed = desc;
         if(desc->m_fnOnModLoaded) desc->m_fnOnModLoaded();
     }
     logger->Info("Mods were loaded!");
@@ -279,6 +281,7 @@ void ModsList::ProcessUnloading()
     LIST_FOR(listMods)
     {
         desc = item->pModDesc;
+        pLastModProcessed = desc;
         if(desc->m_fnOnModUnloaded) desc->m_fnOnModUnloaded();
     }
 }
@@ -289,6 +292,7 @@ void ModsList::ProcessUpdater()
     LIST_FOR(listMods)
     {
         desc = item->pModDesc;
+        pLastModProcessed = desc;
         if(desc->m_fnRequestUpdaterURL)
         {
             const char* url = desc->m_fnRequestUpdaterURL();
@@ -311,6 +315,7 @@ void ModsList::ProcessCrash(const char* szLibName, int sig, int code, uintptr_t 
     LIST_FOR(listMods)
     {
         desc = item->pModDesc;
+        pLastModProcessed = desc;
         if(desc->m_fnGameCrashedCB) desc->m_fnGameCrashedCB(szLibName, sig, code, libaddr, mcontext);
     }
 }
@@ -342,6 +347,7 @@ void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
     LIST_FOR(listMods)
     {
         desc = item->pModDesc;
+        pLastModProcessed = desc;
         if(desc->m_fnInterfaceAddedCB) desc->m_fnInterfaceAddedCB(name, ptr);
     }
 }
@@ -352,6 +358,7 @@ void ModsList::OnAllModsLoaded()
     LIST_FOR(listMods)
     {
         desc = item->pModDesc;
+        pLastModProcessed = desc;
         if(desc->m_fnOnAllModsLoaded) desc->m_fnOnAllModsLoaded();
     }
     logger->Info("Mods were postloaded!");
