@@ -452,7 +452,9 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         {
             if(g_bEHUnwind)
             {
+              go_EHUnwind:
                 stackLog = NULL;
+                g_bDumpAllThreads = false;
 
                 size_t frames_sz = xunwind_eh_unwind(g_frames, sizeof(g_frames) / sizeof(g_frames[0]), ucontext);
                 if(frames_sz > 0)
@@ -463,6 +465,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
             else
             {
                 stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, g_bDumpAllThreads ? XUNWIND_ALL_THREADS : XUNWIND_CURRENT_THREAD, ucontext, "");
+                if(!stackLog && g_nAndroidSDKVersion >= 34) goto go_EHUnwind; // Android 14 does not have libbacktrace?
             }
             if(stackLog)
             {
