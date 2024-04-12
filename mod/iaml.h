@@ -115,6 +115,9 @@ public:
     /* AML 1.2.1 */
     virtual bool        IsThumbAddr(uintptr_t addr);
     virtual uintptr_t   GetBranchDest(uintptr_t addr);
+    
+    /* AML 1.2.2 */
+    virtual int         GetAndroidVersion();
 
 
 

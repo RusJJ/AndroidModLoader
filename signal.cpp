@@ -464,21 +464,25 @@ void Handler(int sig, siginfo_t *si, void *ptr)
             {
                 stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, g_bDumpAllThreads ? XUNWIND_ALL_THREADS : XUNWIND_CURRENT_THREAD, ucontext, "");
             }
-            if(stackLog && stackLog[0])
+            if(stackLog)
             {
-                g_pLogFile << "\n----------------------------------------------------\n" << (g_bDumpAllThreads ? "Call stack (of all threads):\n" : "Call stack:\n") << stackLog;
+                if(stackLog[0])
+                {
+                    g_pLogFile << "\n----------------------------------------------------\n" << (g_bDumpAllThreads ? "Call stack (of all threads):\n" : "Call stack:\n") << stackLog;
+                    g_pLogFile.flush();
+                }
                 free(stackLog);
             }
             else
             {
                 g_pLogFile << "\n----------------------------------------------------\nCall stack:\nA system returned no crash log!";
+                g_pLogFile.flush();
             }
-            g_pLogFile.flush();
         }
     #endif
 
     g_pLogFile << "\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n";
-    g_pLogFile << "If you`re having problems using official mods, please report about this problem on our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!";
+    g_pLogFile << "If you`re having problems using OFFICIAL mods, please report about this problem in our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!";
     g_pLogFile.flush();
     
   skip_logging:

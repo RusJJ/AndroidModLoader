@@ -14,7 +14,7 @@
 
 #include <Gloss.h>
 
-char g_szAMLFeatures[1024] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
+char g_szAMLFeatures[2048] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
 extern char g_szAppName[256], g_szFakeAppName[256];
 extern char g_szCfgPath[256];
 extern char g_szAndroidDataDir[256];
@@ -263,7 +263,7 @@ bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
     if(!curl) return false;
     curl_easy_reset(curl);
     
-    MemChunk_t chunk = { out, outLen };
+    MemChunk_t chunk = { out, outLen - 1 };
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
@@ -271,6 +271,7 @@ bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
     
     CURLcode res = curl_easy_perform(curl);
+    out[outLen - 1] = 0;
     return res == CURLE_OK;
 }
 
@@ -426,6 +427,11 @@ bool AML::IsThumbAddr(uintptr_t addr)
 uintptr_t AML::GetBranchDest(uintptr_t addr)
 {
     return ARMPatch::GetBranchDest(addr);
+}
+
+int AML::GetAndroidVersion()
+{
+    return g_nAndroidSDKVersion;
 }
 
 static AML amlLocal;

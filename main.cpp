@@ -33,8 +33,9 @@
 #include <modslist.h>
 
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
-bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo;
+bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog = false, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo;
 int g_nEnableNews, g_nDownloadTimeout;
+int g_nAndroidSDKVersion = 0;
 ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256],
      g_szAppName[256],
@@ -51,7 +52,7 @@ jobject appContext;
 JNIEnv* env;
 
 // Main
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.2.1", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.2.2", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -342,7 +343,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
     g_bCrashAML = cfg->GetBool("CrashAML", false, "DevTools");
     g_bNoMods = cfg->GetBool("DontLoadMods", false, "DevTools");
-    g_bSimplerCrashLog = cfg->GetBool("SimplerCrashLogs", false, "DevTools");
+    //g_bSimplerCrashLog = cfg->GetBool("SimplerCrashLogs", g_bSimplerCrashLog, "DevTools");
     g_bNoSPInLog = cfg->GetBool("NoStackInCrashLog", false, "DevTools");
     g_bNoModsInLog = cfg->GetBool("NoModsInCrashLog", false, "DevTools");
     g_bMLSOnlyManualSaves = cfg->GetBool("MLSOnlyManualSaves", false, "DevTools");
@@ -353,6 +354,26 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
     else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
     cfg->Save();
+
+    /* Android version */
+    char sdk_ver_str[92]; // PROPERTY_VALUE_MAX
+    if(__system_property_get("ro.build.version.sdk", sdk_ver_str))
+    {
+        g_nAndroidSDKVersion = atoi(sdk_ver_str);
+    }
+    else if(g_nAndroidSDKVersion == 0)
+    {
+        if(__system_property_get("ro.build.version.release", sdk_ver_str))
+        {
+            g_nAndroidSDKVersion = atoi(sdk_ver_str);
+        }
+        else
+        {
+            jclass versionClass = env->FindClass("android/os/Build$VERSION");
+            jfieldID sdkIntFieldID = env->GetStaticFieldID(versionClass, "SDK_INT", "I");
+            g_nAndroidSDKVersion = env->GetStaticIntField(versionClass, sdkIntFieldID);
+        }
+    }
 
     /* Catch the fish! */
     if(cfg->GetBool("SignalHandler", true)) StartSignalHandler();
@@ -371,8 +392,15 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(!g_bNoMods)
     {
         MLS::LoadFile();
-        LoadMods(internalModsPriority ? g_szInternalModsDir : g_szModsDir);
-        LoadMods(internalModsPriority ? g_szModsDir : g_szInternalModsDir);
+        if(g_szInternalModsDir[0] != 0)
+        {
+            LoadMods(internalModsPriority ? g_szInternalModsDir : g_szModsDir);
+            LoadMods(internalModsPriority ? g_szModsDir : g_szInternalModsDir);
+        }
+        else
+        {
+            LoadMods(g_szModsDir);
+        }
     }
 
     /* All mods are loaded now. We should check for dependencies! */

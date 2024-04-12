@@ -78,7 +78,10 @@ public:
     /* AML 1.2.1 */
     bool        IsThumbAddr(uintptr_t addr);
     uintptr_t   GetBranchDest(uintptr_t addr);
+    /* AML 1.2.2 */
+    int         GetAndroidVersion();
 };
 
-extern char g_szAMLFeatures[1024];
+extern char g_szAMLFeatures[2048];
 extern AML* g_pAML;
+extern int g_nAndroidSDKVersion;
