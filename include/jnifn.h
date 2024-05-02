@@ -155,4 +155,3 @@ inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, j
 
     env->DeleteLocalRef(message);
 }
-

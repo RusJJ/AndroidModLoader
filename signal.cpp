@@ -450,7 +450,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #ifdef IO_GITHUB_HEXHACKING_XUNWIND
         if(!g_bSimplerCrashLog)
         {
-            if(g_bEHUnwind)
+            if(g_bEHUnwind || g_nAndroidSDKVersion >= 34)
             {
               go_EHUnwind:
                 stackLog = NULL;
