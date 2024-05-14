@@ -1,1 +1,2 @@
-If someone is trying to play SA v2.10 on Android 14, but the game crashes before menu, please report that problem in our Discord!
+Hello SA v2.10 players! If you still dont have JPatch, you should get it as it's fixing a crash!
+Also, an AML v1.2.2 is coming out VERY soon!
