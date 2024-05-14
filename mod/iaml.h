@@ -23,6 +23,48 @@ enum eManifestPermissions
     P_READ_EXTERNAL_STORAGE = 0,
     P_WRITE_EXTERNAL_STORAGE,
 }; // Unused
+
+// I`m redoing this because i dont want to include additional file
+// Thanks @XMDS, maybe someone will use it
+struct GlossRegisters
+{
+#ifdef AML32
+    enum e_reg
+    {
+        R0 = 0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, FP = R11, R12, IP = R12, R13, SP = R13, R14, LR = R14, R15, PC = R15, CPSR
+    };
+
+    union
+    {
+        uint32_t reg[17];
+        struct
+        {
+            uint32_t r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, sp, lr, pc, cpsr;
+        } regs;
+    };
+#else
+    enum e_reg
+    {
+        X0 = 0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17, X18, X19, X20, X21, X22, X23, X24, X25, X26, X27, X28, X29, FP = X29,
+        Q0, Q1, Q2, Q3, Q4, Q5, Q6, Q7, Q8, Q9, Q10, Q11, Q12, Q13, Q14, Q15, Q16, Q17, Q18, Q19, Q20, Q21, Q22, Q23, Q24, Q25, Q26, Q27, Q28, Q29, Q30, Q31,
+        X30, LR = X30, X31, SP = X31, PC, CPSR
+    };
+
+    union
+    {
+        uint64_t reg[66];
+        struct
+        {
+            uint64_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, x29;
+            double q0, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q17, q18, q19, q20, q21, q22, q23, q24, q25, q26, q27, q28, q29, q30, q31;
+            uint64_t lr, sp, pc, cpsr;
+        } regs;
+    };
+#endif
+};
+typedef void* PHookHandle;
+typedef void (*HookWithRegistersFn)(GlossRegisters* regs, PHookHandle hook);
+
 #if defined(__cplusplus)
     extern "C"
 #endif
@@ -119,6 +161,16 @@ public:
     /* AML 1.2.2 */
     virtual int         GetAndroidVersion();
     virtual bool        CopyFile(const char* file, const char* dest);
+    // Gloss things
+  #ifdef AML32
+    virtual void        RedirectReg(...);
+  #else
+    virtual void        RedirectReg(uintptr_t addr, uintptr_t to, bool doShortHook = false, GlossRegisters::e_reg targetReg = GlossRegisters::e_reg::X16); // Move directly to "to" from "addr" with the same stack and registers (X16 is the same as "Redirect")
+  #endif  
+    virtual bool        HasAddrExecFlag(uintptr_t addr);
+    virtual void        ToggleHook(PHookHandle hook, bool enable);
+    virtual void        DeHook(PHookHandle hook);
+    virtual PHookHandle HookInline(void* fnAddress, HookWithRegistersFn newFn, bool doShortHook = false);
 
 
 
@@ -155,24 +207,24 @@ inline IAML* GetAMLInterface() { return aml; }
 
 /* Just a hook declaration */
 #define DECL_HOOK(_ret, _name, ...)                             \
-    _ret (*_name)(__VA_ARGS__);	                                \
-	_ret HookOf_##_name(__VA_ARGS__)
+    _ret (*_name)(__VA_ARGS__);                                    \
+    _ret HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = void */
 #define DECL_HOOKv(_name, ...)                                  \
-    void (*_name)(__VA_ARGS__);	                                \
-	void HookOf_##_name(__VA_ARGS__)
+    void (*_name)(__VA_ARGS__);                                    \
+    void HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = bool */
 #define DECL_HOOKb(_name, ...)                                  \
-    bool (*_name)(__VA_ARGS__);	                                \
-	bool HookOf_##_name(__VA_ARGS__)
+    bool (*_name)(__VA_ARGS__);                                    \
+    bool HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = int */
 #define DECL_HOOKi(_name, ...)                                  \
-    int (*_name)(__VA_ARGS__);	                                \
-	int HookOf_##_name(__VA_ARGS__)
+    int (*_name)(__VA_ARGS__);                                    \
+    int HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = void* */
 #define DECL_HOOKp(_name, ...)                                  \
-    void* (*_name)(__VA_ARGS__);	                            \
-	void* HookOf_##_name(__VA_ARGS__)
+    void* (*_name)(__VA_ARGS__);                                \
+    void* HookOf_##_name(__VA_ARGS__)
 
 /* Just a hook of a function */
 #define HOOK(_name, _fnAddr)                                    \

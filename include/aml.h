@@ -81,6 +81,11 @@ public:
     /* AML 1.2.2 */
     int         GetAndroidVersion();
     bool        CopyFile(const char* file, const char* dest);
+    void        RedirectReg(uintptr_t addr, uintptr_t to, bool doShortHook, GlossRegisters::e_reg targetReg);
+    bool        HasAddrExecFlag(uintptr_t addr);
+    void        ToggleHook(PHookHandle hook, bool enable);
+    void        DeHook(PHookHandle hook);
+    PHookHandle HookInline(void* fnAddress, HookWithRegistersFn newFn, bool doShortHook = false);
 };
 
 extern char g_szAMLFeatures[2048];

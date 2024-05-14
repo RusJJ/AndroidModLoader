@@ -448,6 +448,44 @@ bool AML::CopyFile(const char* file, const char* dest)
     return AML_CopyFile(file, dest);
 }
 
+void AML::RedirectReg(uintptr_t addr, uintptr_t to, bool doShortHook, GlossRegisters::e_reg targetReg)
+{
+#ifdef AML64
+    if(doShortHook) Gloss::Inst::MakeArm64AbsoluteJump32(addr, to, (gloss_reg::e_reg)targetReg);
+    else Gloss::Inst::MakeArm64AbsoluteJump(addr, to, (gloss_reg::e_reg)targetReg);
+#endif
+}
+
+bool AML::HasAddrExecFlag(uintptr_t addr)
+{
+    return IsAddrExecute(addr);
+}
+
+void AML::ToggleHook(PHookHandle hook, bool enable)
+{
+    if(!hook) return;
+    if(enable) GlossHookEnable(hook);
+    else GlossHookDisable(hook);
+}
+
+void AML::DeHook(PHookHandle hook)
+{
+    if(!hook) return;
+    GlossHookDelete(hook);
+}
+
+PHookHandle AML::HookInline(void* fnAddress, HookWithRegistersFn newFn, bool doShortHook)
+{
+#ifdef AML32
+    uintptr_t addr = (uintptr_t)fnAddress;
+    if(ARMPatch::IsThumbAddr(addr)) addr |= 0x1;
+    return GlossHookInternal((void*)addr, (GlossHookInternalCallback)newFn, doShortHook, (addr & 0x1) ? i_set::$THUMB : i_set::$ARM);
+#else
+    return GlossHookInternal(fnAddress, (GlossHookInternalCallback)newFn, doShortHook, i_set::$ARM64);
+#endif
+}
+
+
 static AML amlLocal;
 IAML* aml = (IAML*)&amlLocal;
 AML* g_pAML = &amlLocal;
