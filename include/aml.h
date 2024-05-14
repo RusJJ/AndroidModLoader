@@ -80,6 +80,7 @@ public:
     uintptr_t   GetBranchDest(uintptr_t addr);
     /* AML 1.2.2 */
     int         GetAndroidVersion();
+    bool        CopyFile(const char* file, const char* dest);
 };
 
 extern char g_szAMLFeatures[2048];

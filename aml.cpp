@@ -133,7 +133,11 @@ void AML::PlaceBL(uintptr_t addr, uintptr_t dest)
 
 void AML::PlaceBLX(uintptr_t addr, uintptr_t dest)
 {
+#ifdef AML32
     ARMPatch::WriteBLX(addr, dest);
+#else
+    ARMPatch::WriteBL(addr, dest);
+#endif
 }
 
 uintptr_t AML::PatternScan(const char* pattern, const char* soLib)
@@ -361,7 +365,11 @@ bool AML::HookBL(void* handle, void* fnAddress, void** orgFnAddress)
 
 bool AML::HookBLX(void* handle, void* fnAddress, void** orgFnAddress)
 {
+#ifdef AML32
     return ARMPatch::hookBranchLinkXInternal(handle, fnAddress, orgFnAddress);
+#else
+    return ARMPatch::hookBranchLinkInternal(handle, fnAddress, orgFnAddress);
+#endif
 }
 
 void AML::MLSSaveFile()
@@ -432,6 +440,12 @@ uintptr_t AML::GetBranchDest(uintptr_t addr)
 int AML::GetAndroidVersion()
 {
     return g_nAndroidSDKVersion;
+}
+
+bool AML_CopyFile(const char* file, const char* dest);
+bool AML::CopyFile(const char* file, const char* dest)
+{
+    return AML_CopyFile(file, dest);
 }
 
 static AML amlLocal;

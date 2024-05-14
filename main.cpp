@@ -146,6 +146,11 @@ inline bool CopyFile(const char* file, const char* dest)
     return true;
 }
 
+bool AML_CopyFile(const char* file, const char* dest)
+{
+    return (!CopyFileFaster(file, dest) && !CopyFile(file, dest));
+}
+
 inline bool HasFakeAppName()
 {
     return (g_szFakeAppName[0] != 0 && strlen(g_szFakeAppName) > 5);

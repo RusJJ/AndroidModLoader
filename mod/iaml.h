@@ -118,6 +118,7 @@ public:
     
     /* AML 1.2.2 */
     virtual int         GetAndroidVersion();
+    virtual bool        CopyFile(const char* file, const char* dest);
 
 
 
@@ -140,7 +141,9 @@ inline IAML* GetAMLInterface() { return aml; }
 
 /* Do not use big conversions */
 #define SET_TO(__a1, __a2)  *(void**)&(__a1) = (void*)(__a2)
+#define SET_TO_PTR(__a1, __a2)  *(void**)&(__a1) = *(void**)(__a2)
 #define SETSYM_TO(__a1, __a2, __a3)  *(void**)&(__a1) = (void*)(aml->GetSym(__a2, __a3))
+#define SETSYM_TO_PTR(__a1, __a2, __a3)  *(void**)&(__a1) = *(void**)(aml->GetSym(__a2, __a3))
 #define AS_ADDR(__a1)       *(uintptr_t*)&(__a1)
 
 /* Unprotect that memory chunk for making changes */
