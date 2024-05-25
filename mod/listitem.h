@@ -14,6 +14,7 @@ public: \
     { \
         if(!this) return NULL; \
         __cls_name *first = this; \
+        if(first->pPrev == this) { first->pPrev = NULL; return this; } \
         while(first->pPrev != NULL) first = first->pPrev; \
         return first; \
     } \
@@ -58,7 +59,7 @@ public: \
             --(*listPtr)->nCount; \
         } else if(pPrev) { \
             pPrev->pNext = NULL; \
-            --(*listPtr)->nCount; \
+            --((*listPtr)->nCount); \
         } else if(pNext) { \
             *listPtr = pNext; \
             pNext->pPrev = NULL; \
