@@ -291,6 +291,21 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile.flush();
         g_pLogFile << "Device: " << sysprop_str << std::endl;
     }
+    if(__system_property_get("ro.system.product.cpu.abilist", sysprop_str))
+    {
+        g_pLogFile.flush();
+        g_pLogFile << "Supported ABIs: " << sysprop_str << std::endl;
+    }
+    if(__system_property_get("ro.build.date", sysprop_str))
+    {
+        g_pLogFile.flush();
+        g_pLogFile << "OS Build Date: " << sysprop_str << std::endl;
+    }
+    if(__system_property_get("ro.build.id", sysprop_str) || __system_property_get("ro.system.build.id", sysprop_str))
+    {
+        g_pLogFile.flush();
+        g_pLogFile << "OS Build ID: " << sysprop_str << std::endl;
+    }
     g_pLogFile.flush();
 
 
@@ -447,7 +462,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << std::hex << std::uppercase;
         for(int i = 1; i <= STACKDUMP_SIZE; ++i)
         {
-            g_pLogFile << " " << std::setfill('0') << std::setw(2) << (uint8_t)(stack[i - 1]);
+            g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(stack[i - 1]);
             if(i % 16 == 0)
             {
                 g_pLogFile << " (SP+0x" << std::setfill('0') << std::setw(3) << 16 * ((i / 16) - 1) << ") [";
