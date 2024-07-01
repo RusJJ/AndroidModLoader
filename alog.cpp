@@ -53,7 +53,8 @@ DECL_HOOKv(__aml_log_vprint, int prio, const char *tag, const char *fmt, va_list
     time_t rawtime;
     time ( &rawtime );
 
-    oAndroidLogFile << asctime(localtime ( &rawtime )) << " [" << EnumPriority(prio) << "][" << tag << "] " << text << std::endl << std::endl;
+    oAndroidLogFile << asctime(localtime ( &rawtime )) << " [" << EnumPriority(prio) << "][AML Hook: " << tag << "] " << text << std::endl << std::endl;
+    oAndroidLogFile.flush();
 }
 
 DECL_HOOKv(__aml_log_print, int prio, const char *tag, const char *fmt, ...)

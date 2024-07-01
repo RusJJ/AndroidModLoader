@@ -1,7 +1,6 @@
 #ifndef _AMLMOD
 #define _AMLMOD
 
-#include "iaml.h"
 #include <stdio.h>
 #include <ctype.h>
 #include <cstring>
@@ -10,8 +9,10 @@
 
 #ifdef __arm__
     #define AML32
+    #define BYBIT(__32val, __64val) (__32val)
 #elif defined __aarch64__
     #define AML64
+    #define BYBIT(__32val, __64val) (__64val)
 #else
     #error This lib is supposed to work on ARM only!
 #endif
@@ -100,6 +101,29 @@ inline char *strxcpy(char* __restrict__ dst, const char* __restrict__ src, int l
     }
 }
 
+inline int clampint(int min, int max, int v)
+{
+    if(v < min) return min;
+    else if(v > max) return max;
+    return v;
+}
+inline void clampint(int min, int max, int* v)
+{
+    if(*v < min) *v = min;
+    else if(*v > max) *v = max;
+}
+inline float clampfloat(float min, float max, float v)
+{
+    if(v < min) return min;
+    else if(v > max) return max;
+    return v;
+}
+inline void clampfloat(float min, float max, float* v)
+{
+    if(*v < min) *v = min;
+    else if(*v > max) *v = max;
+}
+
 class ModInfo
 {
 public:
@@ -152,5 +176,9 @@ private:
 };
 
 typedef ModInfo* (*GetModInfoFn)();
+
+
+
+#include "iaml.h"
 
 #endif // _AMLMOD

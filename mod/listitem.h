@@ -2,8 +2,7 @@
 
 #include <stddef.h> // use of undeclared identifier 'NULL'
 
-#define LIST_START(__cls_name) class __cls_name { \
-public: \
+#define LIST_START(__cls_name) struct __cls_name { \
     __cls_name *pPrev; \
     __cls_name *pNext; \
     unsigned int nCount; \
@@ -27,7 +26,6 @@ public: \
     } \
     inline void Push(__cls_name **listPtr) \
     { \
-        if(pPrev || pNext) Remove(); \
         __cls_name*& list = *listPtr; \
         pPrev = NULL; \
         if(list == NULL) { \
@@ -52,7 +50,6 @@ public: \
     } \
     inline bool Remove(__cls_name **listPtr) \
     { \
-        if(First() != *listPtr) return false; \
         if(pPrev && pNext) { \
             pPrev->pNext = pNext; \
             pNext->pPrev = pPrev; \
@@ -64,10 +61,15 @@ public: \
             *listPtr = pNext; \
             pNext->pPrev = NULL; \
             pNext->nCount = nCount - 1; \
-        } else { \
-            *listPtr = NULL; \
-        } \
+        } else { *listPtr = NULL; } \
         return true; \
+    } \
+    inline bool InList(__cls_name **listPtr) \
+    { \
+        LIST_FOR(*listPtr) { \
+            if(item == this) return true; \
+        } \
+        return false; \
     }
 
 #define LIST_END() \

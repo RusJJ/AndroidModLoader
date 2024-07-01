@@ -18,7 +18,6 @@
 #include <mod/logger.h>
 #include <mod/config.h>
 
-#define FASTMAN92_CODE
 #include <jnifn.h>
 
 #ifdef __IL2CPPUTILS
@@ -52,7 +51,7 @@ jobject appContext;
 JNIEnv* env;
 
 // Main
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.2.2", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.2.3", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -129,7 +128,7 @@ inline bool CopyFileFaster(const char* file, const char* dest)
     close(outFd);
     return true;
 }
-
+// Slower version (because it copies the file contents byte-by-byte)
 inline bool CopyFile(const char* file, const char* dest)
 {
     FILE* source = fopen(file, "r");
@@ -231,7 +230,7 @@ void LoadMods(const char* path)
 extern ModDesc* pLastModProcessed;
 void StartSignalHandler();
 void HookALog();
-extern bool bAndroidLog_OnlyImportant, bAndroidLog_NoAfter;
+extern bool bAndroidLog_OnlyImportant, bAndroidLog_NoAfter, bAML_HasFastmanModified;
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     logger->SetTag("AndroidModLoader");
@@ -286,7 +285,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
   #ifdef FASTMAN92_CODE
     /* Fastman92 Part */
-    GetExternalFilesDir_FLA(env, appContext, g_szFastman92Android, sizeof(g_szFastman92Android));
+    bAML_HasFastmanModified = GetExternalFilesDir_FLA(env, appContext, g_szFastman92Android, sizeof(g_szFastman92Android));
     __pathback(g_szFastman92Android);
 
     // Android/data/... dir
@@ -357,7 +356,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_bMoreRegsInfo = cfg->GetBool("MoreRegistersInfo", true, "DevTools");
 
     if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
-    else if(g_nDownloadTimeout > 10) g_nDownloadTimeout = 10;
+    else if(g_nDownloadTimeout > 5) g_nDownloadTimeout = 5;
     cfg->Save();
 
     /* Android version */
@@ -381,12 +380,20 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     }
 
     /* Catch the fish! */
-    if(cfg->GetBool("SignalHandler", true)) StartSignalHandler();
+    if(cfg->GetBool("SignalHandler", true))
+    {
+        g_pAML->AddFeature("SIGNAL");
+        StartSignalHandler();
+    }
 
     /* Catch another fish! */
     bAndroidLog_OnlyImportant = !cfg->GetBool("PrintLogsToFile_Verbose", false);
     bAndroidLog_NoAfter = cfg->GetBool("PrintLogsToFile_NoLogCat", false);
-    if(cfg->GetBool("PrintLogsToFile", false)) HookALog();
+    if(cfg->GetBool("PrintLogsToFile", false))
+    {
+        g_pAML->AddFeature("LOGHOOK");
+        HookALog();
+    }
 
     /* Mods? */
     logger->Info("Working with mods...");
@@ -433,12 +440,15 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
             if(strncmp(g_pLastNewsId->GetString(), newsBuf, 16) != 0)
             {
                 for(int i = 0; i < g_nEnableNews; ++i)
+                {
                     aml->ShowToast(true, newsBuf);
-                    
+                }
+
                 newsBuf[16] = 0;
                 g_pLastNewsId->SetString(newsBuf);
                 cfg->Save();
             }
+            delete g_pLastNewsId;
         }
     }
     

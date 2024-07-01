@@ -1,30 +1,31 @@
 #pragma once
 
-#define LIST_START(__cls_name) class __cls_name { \
-public: \
+#include <stddef.h> // use of undeclared identifier 'NULL'
+
+#define LIST_START(__cls_name) struct __cls_name { \
     __cls_name *pPrev; \
     __cls_name *pNext; \
     unsigned int nCount; \
     typedef __cls_name MyClass; \
     \
-    unsigned int Count() { return !this ? 0 : First()->nCount; } \
-    __cls_name *First() \
+    inline unsigned int Count() { return !this ? 0 : First()->nCount; } \
+    inline __cls_name *First() \
     { \
         if(!this) return NULL; \
         __cls_name *first = this; \
+        if(first->pPrev == this) { first->pPrev = NULL; return this; } \
         while(first->pPrev != NULL) first = first->pPrev; \
         return first; \
     } \
-    __cls_name *Last() \
+    inline __cls_name *Last() \
     { \
         if(!this) return NULL; \
         __cls_name *last = this; \
         while(last->pNext != NULL) last = last->pNext; \
         return last; \
     } \
-    void Push(__cls_name **listPtr) \
+    inline void Push(__cls_name **listPtr) \
     { \
-        if(pPrev || pNext) Remove(); \
         __cls_name*& list = *listPtr; \
         pPrev = NULL; \
         if(list == NULL) { \
@@ -37,7 +38,7 @@ public: \
         } \
         list = this; \
     } \
-    void Remove() /* risky removal! */ \
+    inline void Remove() /* risky removal! */ \
     { \
         if(pPrev) { \
             --(First()->nCount); \
@@ -47,24 +48,28 @@ public: \
         } \
         if(pNext) pNext->pPrev = pPrev; \
     } \
-    bool Remove(__cls_name **listPtr) \
+    inline bool Remove(__cls_name **listPtr) \
     { \
-        if(First() != *listPtr) return false; \
         if(pPrev && pNext) { \
             pPrev->pNext = pNext; \
             pNext->pPrev = pPrev; \
             --(*listPtr)->nCount; \
         } else if(pPrev) { \
             pPrev->pNext = NULL; \
-            --(*listPtr)->nCount; \
+            --((*listPtr)->nCount); \
         } else if(pNext) { \
             *listPtr = pNext; \
             pNext->pPrev = NULL; \
             pNext->nCount = nCount - 1; \
-        } else { \
-            *listPtr = NULL; \
-        } \
+        } else { *listPtr = NULL; } \
         return true; \
+    } \
+    inline bool InList(__cls_name **listPtr) \
+    { \
+        LIST_FOR(*listPtr) { \
+            if(item == this) return true; \
+        } \
+        return false; \
     }
 
 #define LIST_END() \

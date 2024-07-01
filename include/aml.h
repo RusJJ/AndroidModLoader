@@ -86,6 +86,10 @@ public:
     void        ToggleHook(PHookHandle hook, bool enable);
     void        DeHook(PHookHandle hook);
     PHookHandle HookInline(void* fnAddress, HookWithRegistersFn newFn, bool doShortHook = false);
+    /* AML 1.2.3 */
+    bool        HasFastmanAPKModified();
+    const char* GetInternalPath();
+    const char* GetInternalModsPath();
 };
 
 extern char g_szAMLFeatures[2048];

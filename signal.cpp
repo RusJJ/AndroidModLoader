@@ -13,6 +13,7 @@ std::ofstream g_pLogFile;
 struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
 extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo;
+extern int g_nAndroidSDKVersion;
 
 static stack_t stackstruct;
 static char signalstack[SIGSTKSZ];
@@ -27,13 +28,13 @@ int SignalInnerId(int code)
 {
     switch(code)
     {
-        case SIGABRT: return 0;
-        case SIGBUS: return 1;
-        case SIGFPE: return 2;
-        case SIGSEGV: return 3;
-        case SIGILL: return 4;
+        case SIGABRT:   return 0;
+        case SIGBUS:    return 1;
+        case SIGFPE:    return 2;
+        case SIGSEGV:   return 3;
+        case SIGILL:    return 4;
         case SIGSTKFLT: return 5;
-        case SIGTRAP: return 6;
+        case SIGTRAP:   return 6;
     }
     return -1;
 }
@@ -277,6 +278,22 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     }
     g_pLogFile.flush();
 
+    char sysprop_str[92];
+    g_pLogFile << "\n----------------------------------------------------\nShort device info:" << std::endl;
+    g_pLogFile << "Android SDK: " << g_nAndroidSDKVersion << std::endl;
+    if(__system_property_get("ro.product.brand", sysprop_str) || __system_property_get("ro.product.system.brand", sysprop_str))
+    {
+        g_pLogFile.flush();
+        g_pLogFile << "Brand: " << sysprop_str << std::endl;
+    }
+    if(__system_property_get("ro.product.device", sysprop_str) || __system_property_get("ro.product.system.device", sysprop_str))
+    {
+        g_pLogFile.flush();
+        g_pLogFile << "Device: " << sysprop_str << std::endl;
+    }
+    g_pLogFile.flush();
+
+
     g_pLogFile << "\n----------------------------------------------------\nRegisters:" << std::endl;
     #define SHOWREG(__t, __v)   g_pLogFile << #__t ":\t" << std::dec << __v << "\t0x" << std::hex << std::uppercase << __v; \
                                 if(dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) { \
@@ -404,19 +421,33 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #endif
     g_pLogFile.flush();
 
+    if(!g_bNoModsInLog)
+    {
+        modlist->PrintModsList(g_pLogFile);
+        g_pLogFile.flush();
+    }
+
+    if(pLastModProcessed)
+    {
+        g_pLogFile << "\n----------------------------------------------------\nLatest mod processed:\n";
+        g_pLogFile << pLastModProcessed->m_pInfo->Name() << " (" << pLastModProcessed->m_pInfo->Author() << ", version " << pLastModProcessed->m_pInfo->VersionString() << ")\n";
+        g_pLogFile << " - GUID: " << pLastModProcessed->m_pInfo->GUID() << " | Base: 0x" << std::hex << std::uppercase << (uintptr_t)pLastModProcessed->m_pHandle << " | Path: " << pLastModProcessed->m_szLibPath << "\n";
+        g_pLogFile.flush();
+    }
+
     #ifdef AML32
         stack = (char*)mcontext->arm_sp;
     #else
         stack = (char*)mcontext->sp;
     #endif
 
-    if(!g_bNoSPInLog)
+    if(!g_bNoSPInLog && stack)
     {
         g_pLogFile << "\n----------------------------------------------------\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
         g_pLogFile << std::hex << std::uppercase;
         for(int i = 1; i <= STACKDUMP_SIZE; ++i)
         {
-            g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(stack[i - 1]);
+            g_pLogFile << " " << std::setfill('0') << std::setw(2) << (uint8_t)(stack[i - 1]);
             if(i % 16 == 0)
             {
                 g_pLogFile << " (SP+0x" << std::setfill('0') << std::setw(3) << 16 * ((i / 16) - 1) << ") [";
@@ -432,18 +463,9 @@ void Handler(int sig, siginfo_t *si, void *ptr)
             }
         }
     }
-
-    if(!g_bNoModsInLog)
+    else if(!stack)
     {
-        modlist->PrintModsList(g_pLogFile);
-        g_pLogFile.flush();
-    }
-
-    if(pLastModProcessed)
-    {
-        g_pLogFile << "\n----------------------------------------------------\nLatest mod processed:\n";
-        g_pLogFile << pLastModProcessed->m_pInfo->Name() << " (" << pLastModProcessed->m_pInfo->Author() << ", version " << pLastModProcessed->m_pInfo->VersionString() << ")\n";
-        g_pLogFile << " - GUID: " << pLastModProcessed->m_pInfo->GUID() << " | Base: 0x" << std::hex << std::uppercase << (uintptr_t)pLastModProcessed->m_pHandle << " | Path: " << pLastModProcessed->m_szLibPath << "\n";
+        g_pLogFile << "\n----------------------------------------------------\nA program stack is unknown!\n";
         g_pLogFile.flush();
     }
         

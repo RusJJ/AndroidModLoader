@@ -14,11 +14,13 @@
 
 #include <Gloss.h>
 
-char g_szAMLFeatures[2048] = "AML ARMPATCH HOOK CONFIG INTERFACE SUBSTRATE ";
+char g_szAMLFeatures[2048] = "AML ARMPATCH HOOK CONFIG INTERFACE GLOSS ";
 extern char g_szAppName[256], g_szFakeAppName[256];
 extern char g_szCfgPath[256];
 extern char g_szAndroidDataDir[256];
 extern char g_szAndroidDataRootDir[256];
+extern char g_szInternalStoragePath[256];
+extern char g_szInternalModsDir[256];
 extern const char* g_szDataDir;
 extern jobject appContext;
 extern JNIEnv* env;
@@ -135,7 +137,7 @@ void AML::PlaceBLX(uintptr_t addr, uintptr_t dest)
 {
 #ifdef AML32
     ARMPatch::WriteBLX(addr, dest);
-#else
+#else // AML64
     ARMPatch::WriteBL(addr, dest);
 #endif
 }
@@ -367,7 +369,7 @@ bool AML::HookBLX(void* handle, void* fnAddress, void** orgFnAddress)
 {
 #ifdef AML32
     return ARMPatch::hookBranchLinkXInternal(handle, fnAddress, orgFnAddress);
-#else
+#else // AML64
     return ARMPatch::hookBranchLinkInternal(handle, fnAddress, orgFnAddress);
 #endif
 }
@@ -480,9 +482,25 @@ PHookHandle AML::HookInline(void* fnAddress, HookWithRegistersFn newFn, bool doS
     uintptr_t addr = (uintptr_t)fnAddress;
     if(ARMPatch::IsThumbAddr(addr)) addr |= 0x1;
     return GlossHookInternal((void*)addr, (GlossHookInternalCallback)newFn, doShortHook, (addr & 0x1) ? i_set::$THUMB : i_set::$ARM);
-#else
+#else // AML64
     return GlossHookInternal(fnAddress, (GlossHookInternalCallback)newFn, doShortHook, i_set::$ARM64);
 #endif
+}
+
+bool bAML_HasFastmanModified = false;
+bool AML::HasFastmanAPKModified()
+{
+    return bAML_HasFastmanModified;
+}
+
+const char* AML::GetInternalPath()
+{
+    return g_szInternalStoragePath;
+}
+
+const char* AML::GetInternalModsPath()
+{
+    return g_szInternalModsDir;
 }
 
 

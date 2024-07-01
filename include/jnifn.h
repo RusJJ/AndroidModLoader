@@ -74,7 +74,7 @@ inline jobject GetExternalFilesDir(JNIEnv* env, jobject jActivity) // getExterna
 
 // fastman92
 #ifdef FASTMAN92_CODE
-inline void GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath, size_t bufferSize)
+inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath, size_t bufferSize)
 {
     jobject objectFile;
     bool bReadFromF92launcher = false;
@@ -117,6 +117,7 @@ inline void GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
         strxcpy(strPath, strPathValueStr, bufferSize);
         env->ReleaseStringUTFChars(stringPath, strPathValueStr);
     }
+    return bReadFromF92launcher;
 }
 #endif
 

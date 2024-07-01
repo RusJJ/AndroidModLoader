@@ -2,10 +2,10 @@
 #define _IAML
 
 // Usage: place 3 lines somewhere in the code AFTER #include <mod/amlmod.h>
-// #if !defined(IAML_VER) && IAML_VER < 01020100
-//     #error "You need to update your MOD folder to 1.2.1!"
+// #if !defined(IAML_VER) && IAML_VER < 01020300
+//     #error "You need to update your MOD folder to 1.2.3!"
 // #endif
-#define IAML_VER 01020100
+#define IAML_VER 01020300
 
 #include "interface.h"
 #include <jni.h>
@@ -171,7 +171,11 @@ public:
     virtual void        ToggleHook(PHookHandle hook, bool enable);
     virtual void        DeHook(PHookHandle hook);
     virtual PHookHandle HookInline(void* fnAddress, HookWithRegistersFn newFn, bool doShortHook = false);
-
+    
+    /* AML 1.2.3 */
+    virtual bool        HasFastmanAPKModified();
+    virtual const char* GetInternalPath(); // /sdcard/
+    virtual const char* GetInternalModsPath(); // /sdcard/AMLMods/*game*/ (by default)
 
 
     // Inlines (shortcuts for you!)
