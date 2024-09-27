@@ -5,6 +5,7 @@
 #define LIST_START(__cls_name) struct __cls_name { \
     __cls_name *pPrev; \
     __cls_name *pNext; \
+    __cls_name *pLast; \
     unsigned int nCount; \
     typedef __cls_name MyClass; \
     \
@@ -17,12 +18,16 @@
         while(first->pPrev != NULL) first = first->pPrev; \
         return first; \
     } \
-    inline __cls_name *Last() \
+    inline __cls_name *CalcLast() \
     { \
         if(!this) return NULL; \
         __cls_name *last = this; \
         while(last->pNext != NULL) last = last->pNext; \
         return last; \
+    } \
+    inline __cls_name *Last() \
+    { \
+        return pLast; \
     } \
     inline void Push(__cls_name **listPtr) \
     { \
@@ -30,38 +35,38 @@
         pPrev = NULL; \
         if(list == NULL) { \
             pNext = NULL; \
+            pLast = this; \
             nCount = 1; \
         } else { \
             pNext = list; \
+            pLast = list->pLast; \
             list->pPrev = this; \
             nCount = list->nCount + 1; \
         } \
         list = this; \
     } \
-    inline void Remove() /* risky removal! */ \
-    { \
-        if(pPrev) { \
-            --(First()->nCount); \
-            pPrev->pNext = pNext; \
-        } else { \
-            pNext->nCount = nCount - 1; \
+    inline bool Remove(__cls_name **listPtr) { \
+        __cls_name*& list = *listPtr; \
+        if(!pPrev && !pNext && !pLast) return false; \
+        if(list == this) { \
+            if(pNext) { \
+                list = pNext; \
+                pNext->nCount = nCount - 1; \
+                pNext->pPrev = NULL; \
+            } else { \
+                list = NULL; \
+            } \
         } \
-        if(pNext) pNext->pPrev = pPrev; \
-    } \
-    inline bool Remove(__cls_name **listPtr) \
-    { \
-        if(pPrev && pNext) { \
-            pPrev->pNext = pNext; \
-            pNext->pPrev = pPrev; \
-            --(*listPtr)->nCount; \
-        } else if(pPrev) { \
+        else if(list->pLast == this) { \
+            list->pLast = pPrev; \
             pPrev->pNext = NULL; \
-            --((*listPtr)->nCount); \
-        } else if(pNext) { \
-            *listPtr = pNext; \
-            pNext->pPrev = NULL; \
-            pNext->nCount = nCount - 1; \
-        } else { *listPtr = NULL; } \
+            --(list->nCount); \
+        } else { \
+            pPrev->pNext = pNext; \
+            if(pNext) pNext->pPrev = pPrev; \
+            --(list->nCount); \
+        } \
+        pNext = NULL; pPrev = NULL; pLast = NULL; \
         return true; \
     } \
     inline bool InList(__cls_name **listPtr) \
@@ -81,8 +86,13 @@
 #define LIST_INITEND() \
         pPrev = NULL; \
         pNext = NULL; \
+        pLast = NULL; \
         nCount = 1; \
     }
 
-#define LIST_FOR(__list) for(auto item = __list; item != NULL; item = item->pNext)
-#define LIST_FOR2(__list, __itemname) for(auto __itemname = __list; __itemname != NULL; __itemname = __itemname->pNext)
+#define LIST_FOR(__list) for(auto item = __list, itemNext = item ? item->pNext : NULL; item != NULL; item = itemNext, itemNext = item ? item->pNext : NULL)
+#define LIST_FOR_FAST(__list) for(auto item = __list; item != NULL; item = item->pNext)
+#define LIST_FOR2(__list, __itemname) for(auto __itemname = __list, itemNext = __itemname ? __itemname->pNext : NULL; __itemname != NULL; __itemname = itemNext, itemNext = __itemname ? __itemname->pNext : NULL)
+#define LIST_FOR2_FAST(__list, __itemname) for(auto __itemname = __list; __itemname != NULL; __itemname = __itemname->pNext)
+#define LIST_FOR_REVERSE(__list) for(auto item = __list ? __list->pLast : NULL, itemPrev = item ? item->pPrev : NULL; item != NULL; item = itemPrev, itemPrev = item ? item->pPrev : NULL)
+#define LIST_RESET(__list, __resetFunc) LIST_FOR(__list) { __resetFunc(); item->Remove(&__list); }

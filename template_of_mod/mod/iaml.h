@@ -172,7 +172,7 @@ public:
     virtual void        DeHook(PHookHandle hook);
     virtual PHookHandle HookInline(void* fnAddress, HookWithRegistersFn newFn, bool doShortHook = false);
     
-    /* AML 1.2.2 */
+    /* AML 1.2.3 */
     virtual bool        HasFastmanAPKModified();
     virtual const char* GetInternalPath(); // /sdcard/
     virtual const char* GetInternalModsPath(); // /sdcard/AMLMods/*game*/ (by default)
