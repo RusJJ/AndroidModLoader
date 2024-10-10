@@ -433,7 +433,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     /* Load news first! */
     if(g_nEnableNews > 0)
     {
-        char newsBuf[1024]; newsBuf[0] = 0;
+        char newsBuf[512]; memset(newsBuf, 0, sizeof(newsBuf));
         
         if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", newsBuf, sizeof(newsBuf)) && newsBuf[0])
         {

@@ -219,14 +219,14 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
     g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << std::nouppercase << std::endl;
-    g_pLogFile << "An overall reason of the crash:\n- ";
+    g_pLogFile << "A POSSIBLE (!) reason of the crash:\n- ";
     switch(sig)
     {
     case SIGABRT:
-        g_pLogFile << "Because an application is killed by something (Android`s Low Memory Killer?)" << std::endl;
+        g_pLogFile << "Probably the game is closed by something (Android`s Low Memory Killer?)" << std::endl;
         break;
     case SIGBUS:
-        g_pLogFile << "Not enough memory, or invalid execution address, or bad mod patch" << std::endl;
+        g_pLogFile << "Not enough memory, or invalid execution address, or a bad mod patch" << std::endl;
         break;
     case SIGFPE:
         g_pLogFile << "An error somewhere in the code, often - dividing by zero" << std::endl;
@@ -241,7 +241,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << "Stack fault on coprocessor" << std::endl;
         break;
     case SIGTRAP:
-        g_pLogFile << "It`s a trap! Somewhere in the application is called \"it`s a trap! stop the application!\"" << std::endl;
+        g_pLogFile << "It`s a trap! Somewhere in the game was called \"it`s a trap! stop the application!\"" << std::endl;
         break;
     }
 
@@ -265,7 +265,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     {
         // Unsuccess
       label_unsuccess:
-        g_pLogFile << "Program counter: Unknown Lib, 0x" << std::hex << std::uppercase << PC;
+        g_pLogFile << "Program counter: Unknown Lib + 0x" << std::hex << std::uppercase << PC;
     }
 
     if(dlInfo.dli_sname)
@@ -280,7 +280,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     char sysprop_str[92];
     g_pLogFile << "\n----------------------------------------------------\nShort device info:" << std::endl;
-    g_pLogFile << "Android SDK: " << g_nAndroidSDKVersion << std::endl;
+    g_pLogFile << "Android SDK Version: " << std::dec << g_nAndroidSDKVersion << std::endl;
     if(__system_property_get("ro.product.brand", sysprop_str) || __system_property_get("ro.product.system.brand", sysprop_str))
     {
         g_pLogFile.flush();
@@ -294,7 +294,9 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     if(__system_property_get("ro.system.product.cpu.abilist", sysprop_str))
     {
         g_pLogFile.flush();
-        g_pLogFile << "Supported ABIs: " << sysprop_str << std::endl;
+        g_pLogFile << "Supported ABIs: " << sysprop_str;
+        if(strstr(sysprop_str, "86") != NULL) g_pLogFile << " (it looks like you`re on emulator?)";
+        g_pLogFile << std::endl;
     }
     if(__system_property_get("ro.build.date", sysprop_str))
     {
@@ -528,6 +530,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
   skip_logging:
     logger->Info("Notifying mods about the crash...");
     modlist->ProcessCrash(dlInfo.dli_fname ? GetFilenamePart(dlInfo.dli_fname) : "", sig, si->si_code, (uintptr_t)dlInfo.dli_fbase, mcontext);
+    logger->Info("Telling mods to unload after the crash...");
     modlist->ProcessUnloading();
 
     oldSigaction[SignalInnerId(sig)].sa_sigaction(sig, si, ptr);

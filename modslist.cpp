@@ -37,7 +37,7 @@ LIST_START(Mods)
     }
     static Mods* Get(const char* guid)
     {
-        LIST_FOR(listMods)
+        LIST_FOR_FAST(listMods)
         {
             if (!strcmp(item->pModInfo->szGUID, guid)) return item;
         }
@@ -94,7 +94,7 @@ bool ModsList::RemoveMod(const char* szGUID)
 
 bool ModsList::HasMod(const char* szGUID)
 {
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         if(!strcmp(item->pModInfo->szGUID, szGUID))
         {
@@ -122,7 +122,7 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
     }
 
     ModInfo* pInfo = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         pInfo = item->pModInfo;
         if(!strcmp(pInfo->szGUID, szGUID))
@@ -161,7 +161,7 @@ bool ModsList::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
     }
 
     ModInfo* pInfo = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         pInfo = item->pModInfo;
         if(!strcmp(pInfo->szGUID, szGUID))
@@ -189,7 +189,7 @@ void ModsList::ProcessDependencies()
 
   label_run_dependencies_check:
     //logger->Info("Checking dependencies from the start! Mods count: %d", modlist->GetModsNum());
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         // If the mod is already ok or doesnt require check, depList = NULL
         depList = item->pModDesc->m_aDependencies;
@@ -229,7 +229,7 @@ void ModsList::ProcessPreLoading()
     OnModLoadFn onModPreLoadFn;
     ModDesc* desc;
     void* handle;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         handle = item->pHandle;
         if(handle != NULL)
@@ -266,7 +266,7 @@ void ModsList::ProcessPreLoading()
 void ModsList::ProcessLoading()
 {
     ModDesc* desc = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         desc = item->pModDesc;
         pLastModProcessed = desc;
@@ -278,7 +278,7 @@ void ModsList::ProcessLoading()
 void ModsList::ProcessUnloading()
 {
     ModDesc* desc = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         desc = item->pModDesc;
         pLastModProcessed = desc;
@@ -289,7 +289,7 @@ void ModsList::ProcessUnloading()
 void ModsList::ProcessUpdater()
 {
     ModDesc* desc = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         desc = item->pModDesc;
         pLastModProcessed = desc;
@@ -312,7 +312,7 @@ void ModsList::ProcessUpdater()
 void ModsList::ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext)
 {
     ModDesc* desc = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         desc = item->pModDesc;
         pLastModProcessed = desc;
@@ -331,7 +331,7 @@ void ModsList::PrintModsList(std::ofstream& logfile)
 
     ModInfo* info = NULL;
     ModDesc* desc = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         info = item->pModInfo;
         desc = item->pModDesc;
@@ -344,7 +344,7 @@ void ModsList::PrintModsList(std::ofstream& logfile)
 void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
 {
     ModDesc* desc = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         desc = item->pModDesc;
         pLastModProcessed = desc;
@@ -355,7 +355,7 @@ void ModsList::OnInterfaceAdded(const char* name, const void* ptr)
 void ModsList::OnAllModsLoaded()
 {
     ModDesc* desc = NULL;
-    LIST_FOR(listMods)
+    LIST_FOR_FAST(listMods)
     {
         desc = item->pModDesc;
         pLastModProcessed = desc;

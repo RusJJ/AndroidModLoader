@@ -23,7 +23,7 @@ LIST_START(Interfaces)
     }
     static void* Get(const char* name)
     {
-        LIST_FOR(listInterfaces)
+        LIST_FOR_FAST(listInterfaces)
         {
             if (!strcmp(item->szName, name)) return item->pInterface;
         }

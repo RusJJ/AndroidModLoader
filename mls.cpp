@@ -67,7 +67,7 @@ void MLS::SaveFile()
     FILE* f = fopen(path, "wb");
     if(!f) return;
 
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         fwrite(&item->storage, sizeof(MLSStorage), 1, f);
     }
@@ -75,7 +75,7 @@ void MLS::SaveFile()
 }
 bool MLS::HasValue(const char* key)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key)) return true;
     }
@@ -96,7 +96,7 @@ void MLS::DeleteValue(const char* key)
 
 void MLS::SetInt(const char* key, int32_t val)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {
@@ -116,7 +116,7 @@ void MLS::SetInt(const char* key, int32_t val)
 }
 void MLS::SetFloat(const char* key, float val)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {
@@ -138,7 +138,7 @@ void MLS::SetFloat(const char* key, float val)
 #pragma clang diagnostic ignored "-Wformat" // dumb ass clang cries about "ld needs to be lld" and "lld needs to be ld" at the SAME TIME
 void MLS::SetInt64(const char* key, int64_t val)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {
@@ -159,7 +159,7 @@ void MLS::SetInt64(const char* key, int64_t val)
 #pragma clang diagnostic pop
 void MLS::SetStr(const char* key, const char *val)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {
@@ -180,7 +180,7 @@ void MLS::SetStr(const char* key, const char *val)
 
 bool MLS::GetInt(const char* key, int32_t *val)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {
@@ -192,7 +192,7 @@ bool MLS::GetInt(const char* key, int32_t *val)
 }
 bool MLS::GetFloat(const char* key, float *val)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {
@@ -204,7 +204,7 @@ bool MLS::GetFloat(const char* key, float *val)
 }
 bool MLS::GetInt64(const char* key, int64_t *val)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {
@@ -216,7 +216,7 @@ bool MLS::GetInt64(const char* key, int64_t *val)
 }
 bool MLS::GetStr(const char* key, char *val, size_t len)
 {
-    LIST_FOR(listSets)
+    LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
         {

@@ -7,6 +7,7 @@ inline jobject GetGlobalContext(JNIEnv *env)
     jobject at = env->CallStaticObjectMethod(activityThread, currentActivityThread);
     jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
     jobject context = env->CallObjectMethod(at, getApplication);
+    if (env->ExceptionCheck()) env->ExceptionClear();
     return context;
 }
 
@@ -17,32 +18,41 @@ inline jobject GetGlobalActivity(JNIEnv *env)
     jobject at = env->CallStaticObjectMethod(activityThread, currentActivityThread);
     jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
     jobject context = env->CallObjectMethod(at, getApplication);
+    if (env->ExceptionCheck()) env->ExceptionClear();
     return context;
 }
 
 inline jstring GetPackageName(JNIEnv *env, jobject jActivity)
 {
     jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getPackageName", "()Ljava/lang/String;");
-    return (jstring)env->CallObjectMethod(jActivity, method);
+    jstring ret = (jstring)env->CallObjectMethod(jActivity, method);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    return ret;
 }
 
 inline jobject GetFilesDir(JNIEnv *env, jobject jActivity)
 {
     jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getFilesDir", "()Ljava/io/File;");
-    return (jstring)env->CallObjectMethod(jActivity, method);
+    jstring ret = (jstring)env->CallObjectMethod(jActivity, method);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    return ret;
 }
 
 inline jstring GetAbsolutePath(JNIEnv *env, jobject jFile)
 {
     jmethodID method = env->GetMethodID(env->GetObjectClass(jFile), "getAbsolutePath", "()Ljava/lang/String;");
-    return (jstring)env->CallObjectMethod(jFile, method);
+    jstring ret = (jstring)env->CallObjectMethod(jFile, method);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    return ret;
 }
 
 inline jstring GetAndroidPermission(JNIEnv* env, const char* szPermissionName)
 {
     jclass ClassManifestPermission = env->FindClass("android/Manifest$permission");
     jfieldID lid_PERM = env->GetStaticFieldID(ClassManifestPermission, szPermissionName, "Ljava/lang/String;");
-    return (jstring)env->GetStaticObjectField(ClassManifestPermission, lid_PERM);
+    jstring ret = (jstring)env->GetStaticObjectField(ClassManifestPermission, lid_PERM);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    return ret;
 }
 
 inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szPermissionName)
@@ -55,6 +65,7 @@ inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szP
 
     PERMISSION_GRANTED = env->GetStaticIntField(ClassPackageManager, lid_PERMISSION_GRANTED);
     jint int_result = env->CallIntMethod(jActivity, env->GetMethodID(env->FindClass("android/content/Context"), "checkSelfPermission", "(Ljava/lang/String;)I"), ls_PERM);
+    if (env->ExceptionCheck()) env->ExceptionClear();
     return (int_result == PERMISSION_GRANTED);
 }
 
@@ -69,7 +80,9 @@ inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szP
 inline jobject GetExternalFilesDir(JNIEnv* env, jobject jActivity) // getExternalFilesDir creates directory in Android/data, lol
 {
     jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
-    return (jstring)env->CallObjectMethod(jActivity, method, NULL);
+    jstring ret = (jstring)env->CallObjectMethod(jActivity, method, NULL);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    return ret;
 }
 
 // fastman92
@@ -95,8 +108,7 @@ inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
 
     if (!bReadFromF92launcher)
     {
-        if (env->ExceptionCheck())
-            env->ExceptionClear();
+        if (env->ExceptionCheck()) env->ExceptionClear();
 
         jclass android_content_Context = env->GetObjectClass(context);
 
@@ -124,7 +136,9 @@ inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
 inline jobject GetStorageDir(JNIEnv* env) // /storage/emulated/0 instead of /sdcard (example)
 {
     jclass classEnvironment = env->FindClass("android/os/Environment");
-    return (jstring)env->CallStaticObjectMethod(classEnvironment, env->GetStaticMethodID(classEnvironment, "getExternalStorageDirectory", "()Ljava/io/File;"));
+    jstring ret = (jstring)env->CallStaticObjectMethod(classEnvironment, env->GetStaticMethodID(classEnvironment, "getExternalStorageDirectory", "()Ljava/io/File;"));
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    return ret;
 }
 
 inline void ShowToastMessage(JNIEnv* env, jobject jActivity, const char* txt, int msDuration)
@@ -140,6 +154,8 @@ inline void ShowToastMessage(JNIEnv* env, jobject jActivity, const char* txt, in
     env->CallVoidMethod(toast, showMethodID);
     
     env->DeleteLocalRef(message);
+
+    if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
 inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, jint duration)
@@ -155,4 +171,6 @@ inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, j
     env->CallVoidMethod(toast, showMethodID);
 
     env->DeleteLocalRef(message);
+
+    if (env->ExceptionCheck()) env->ExceptionClear();
 }
