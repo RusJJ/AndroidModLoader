@@ -46,13 +46,14 @@
         list = this; \
     } \
     inline bool Remove(__cls_name **listPtr) { \
+        if(!listPtr || !*listPtr || !pLast) return false; \
         __cls_name*& list = *listPtr; \
-        if(!pPrev && !pNext && !pLast) return false; \
         if(list == this) { \
             if(pNext) { \
                 list = pNext; \
-                pNext->nCount = nCount - 1; \
-                pNext->pPrev = NULL; \
+                list->nCount = nCount - 1; \
+                list->pPrev = NULL; \
+                list->pLast = pLast; \
             } else { \
                 list = NULL; \
             } \
@@ -90,9 +91,12 @@
         nCount = 1; \
     }
 
+// Never use FAST versions if you do "Remove" or "Push" in a loop! Or maintain it by yourself!
+
 #define LIST_FOR(__list) for(auto item = __list, itemNext = item ? item->pNext : NULL; item != NULL; item = itemNext, itemNext = item ? item->pNext : NULL)
 #define LIST_FOR_FAST(__list) for(auto item = __list; item != NULL; item = item->pNext)
 #define LIST_FOR2(__list, __itemname) for(auto __itemname = __list, itemNext = __itemname ? __itemname->pNext : NULL; __itemname != NULL; __itemname = itemNext, itemNext = __itemname ? __itemname->pNext : NULL)
 #define LIST_FOR2_FAST(__list, __itemname) for(auto __itemname = __list; __itemname != NULL; __itemname = __itemname->pNext)
 #define LIST_FOR_REVERSE(__list) for(auto item = __list ? __list->pLast : NULL, itemPrev = item ? item->pPrev : NULL; item != NULL; item = itemPrev, itemPrev = item ? item->pPrev : NULL)
+#define LIST_FOR_REVERSE_FAST(__list) for(auto item = __list ? __list->pLast : NULL; item != NULL; item = item->pPrev)
 #define LIST_RESET(__list, __resetFunc) LIST_FOR(__list) { __resetFunc(); item->Remove(&__list); }
