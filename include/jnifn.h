@@ -1,5 +1,7 @@
 #include <jni.h>
 
+extern JavaVM *myVM;
+
 inline jobject GetGlobalContext(JNIEnv *env)
 {
     jclass activityThread = env->FindClass("android/app/ActivityThread");

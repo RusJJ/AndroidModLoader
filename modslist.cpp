@@ -331,7 +331,7 @@ void ModsList::PrintModsList(std::ofstream& logfile)
 
     ModInfo* info = NULL;
     ModDesc* desc = NULL;
-    LIST_FOR_FAST(listMods)
+    LIST_FOR_REVERSE_FAST(listMods)
     {
         info = item->pModInfo;
         desc = item->pModDesc;

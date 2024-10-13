@@ -241,7 +241,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << "Stack fault on coprocessor" << std::endl;
         break;
     case SIGTRAP:
-        g_pLogFile << "It`s a trap! Somewhere in the game was called \"it`s a trap! stop the application!\"" << std::endl;
+        g_pLogFile << "It`s a trap! Somewhere in the game was called a function to FORCE CLOSE the game" << std::endl;
         break;
     }
 

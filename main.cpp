@@ -230,9 +230,12 @@ void LoadMods(const char* path)
 extern ModDesc* pLastModProcessed;
 void StartSignalHandler();
 void HookALog();
+JavaVM *myVM = NULL;
 extern bool bAndroidLog_OnlyImportant, bAndroidLog_NoAfter, bAML_HasFastmanModified;
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
+    myVM = vm;
+    
     logger->SetTag("AndroidModLoader");
     const char* szTmp; jstring jTmp;
 
