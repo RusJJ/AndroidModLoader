@@ -7,22 +7,32 @@
     #define vsnprintf stbsp_vsnprintf
 #endif
 #include "logger.h"
+#include <string.h>
 #include <android/log.h>
 
 Logger::Logger()
 {
-    m_szTag = "AML Mod";
+    strncpy(m_szTag, "AML Mod", sizeof(m_szTag));
     m_bEnabled = true;
+    m_fnLogCallback = NULL;
+    m_fnNewTagCallback = NULL;
+    m_fnToggledCallback = NULL;
 }
 
 void Logger::ToggleOutput(bool enabled)
 {
-    m_bEnabled = enabled;
+    if(m_bEnabled != enabled)
+    {
+        m_bEnabled = enabled;
+        if(m_fnToggledCallback) m_fnToggledCallback(enabled);
+    }
 }
 
 void Logger::SetTag(const char* szTag)
 {
-    m_szTag = szTag;
+    if(m_fnNewTagCallback) m_fnNewTagCallback(m_szTag, szTag);
+    strncpy(m_szTag, szTag, sizeof(m_szTag)-1);
+    m_szTag[sizeof(m_szTag)-1] = 0;
 }
 
 void Logger::Print(eLogPrio prio, const char* szMessage, ...)
@@ -34,6 +44,7 @@ void Logger::Print(eLogPrio prio, const char* szMessage, ...)
     va_list args;
     va_start(args, szMessage);
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(prio, buffer);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
     va_end(args);
 #endif
@@ -46,6 +57,7 @@ void Logger::PrintV(eLogPrio prio, const char* szMessage, va_list args)
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(prio, buffer);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
 #endif
 }
@@ -59,6 +71,7 @@ void Logger::PrintTag(eLogPrio prio, const char* szTag, const char* szMessage, .
     va_list args;
     va_start(args, szMessage);
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(prio, buffer);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
     va_end(args);
 #endif
@@ -71,6 +84,7 @@ void Logger::PrintTagV(eLogPrio prio, const char* szTag, const char* szMessage, 
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(prio, buffer);
     __android_log_write((android_LogPriority)prio, m_szTag, buffer);
 #endif
 }
@@ -84,6 +98,7 @@ void Logger::Info(const char* szMessage, ...)
     va_list args;
     va_start(args, szMessage);
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(LogP_Info, buffer);
     __android_log_write(ANDROID_LOG_INFO, m_szTag, buffer);
     va_end(args);
 #endif
@@ -96,6 +111,7 @@ void Logger::InfoV(const char* szMessage, va_list args)
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(LogP_Info, buffer);
     __android_log_write(ANDROID_LOG_INFO, m_szTag, buffer);
 #endif
 }
@@ -109,6 +125,7 @@ void Logger::Error(const char* szMessage, ...)
     va_list args;
     va_start(args, szMessage);
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(LogP_Error, buffer);
     __android_log_write(ANDROID_LOG_ERROR, m_szTag, buffer);
     va_end(args);
 #endif
@@ -121,6 +138,7 @@ void Logger::ErrorV(const char* szMessage, va_list args)
     
     char buffer[TMPBUF_SIZE];
     vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(LogP_Error, buffer);
     __android_log_write(ANDROID_LOG_ERROR, m_szTag, buffer);
 #endif
 }

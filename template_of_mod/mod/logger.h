@@ -22,10 +22,17 @@ enum eLogPrio
 
 class Logger;
 extern Logger* logger;
+
 class Logger
 {
 public:
+    typedef void (*LoggerMessageCB)(eLogPrio prio, const char* msg);
+    typedef void (*LoggerSetTagCB)(const char* oldTag, const char* newTag);
+    typedef void (*LoggerToggledCB)(bool isEnabled);
+
+    inline static Logger* GetLogger() { return logger; }
     Logger();
+
     void ToggleOutput(bool enabled);
     void SetTag(const char* szTag);
     void Print(eLogPrio prio, const char* szMessage, ...);
@@ -36,15 +43,22 @@ public:
     void InfoV(const char* szMessage, va_list args);
     void Error(const char* szMessage, ...);
     void ErrorV(const char* szMessage, va_list args);
-    #ifdef NOLOGGING
+  #ifdef NOLOGGING
     inline bool HasOutput() { return false; }
-    #else
+  #else
     inline bool HasOutput() { return m_bEnabled; }
-    #endif
-    inline static Logger* GetLogger() { return logger; }
+  #endif
+
+    inline void SetMessageCB(LoggerMessageCB fnCB) { m_fnLogCallback = fnCB; }
+    inline void SetTagCB(LoggerSetTagCB fnCB)      { m_fnNewTagCallback = fnCB; }
+    inline void SetToggleCB(LoggerToggledCB fnCB)  { m_fnToggledCallback = fnCB; }
+
 private:
-    const char* m_szTag;
+    char m_szTag[31];
     bool m_bEnabled;
+    LoggerMessageCB m_fnLogCallback;
+    LoggerSetTagCB m_fnNewTagCallback;
+    LoggerToggledCB m_fnToggledCallback;
 };
 
 #endif // _LOGGER_H
