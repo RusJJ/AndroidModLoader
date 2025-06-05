@@ -51,7 +51,7 @@ jobject appContext;
 JNIEnv* env;
 
 // Main
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.2.4", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.3.0", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
