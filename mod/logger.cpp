@@ -31,7 +31,8 @@ void Logger::ToggleOutput(bool enabled)
 void Logger::SetTag(const char* szTag)
 {
     if(m_fnNewTagCallback) m_fnNewTagCallback(m_szTag, szTag);
-    strncpy(m_szTag, szTag, sizeof(m_szTag));
+    strncpy(m_szTag, szTag, sizeof(m_szTag)-1);
+    m_szTag[sizeof(m_szTag)-1] = 0;
 }
 
 void Logger::Print(eLogPrio prio, const char* szMessage, ...)

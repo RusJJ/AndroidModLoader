@@ -1,6 +1,6 @@
 #include <jni.h>
 
-extern JavaVM *myVM;
+extern JavaVM *g_pJavaVM;
 
 inline jobject GetGlobalContext(JNIEnv *env)
 {

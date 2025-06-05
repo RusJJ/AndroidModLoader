@@ -54,11 +54,11 @@ public:
     inline void SetToggleCB(LoggerToggledCB fnCB)  { m_fnToggledCallback = fnCB; }
 
 private:
-    char m_szTag[32];
+    char m_szTag[31];
+    bool m_bEnabled;
     LoggerMessageCB m_fnLogCallback;
     LoggerSetTagCB m_fnNewTagCallback;
     LoggerToggledCB m_fnToggledCallback;
-    bool m_bEnabled;
 };
 
 #endif // _LOGGER_H

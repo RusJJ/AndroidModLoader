@@ -28,6 +28,9 @@ extern bool g_bEnableFileDownloads;
 extern CURL* curl;
 extern int g_nDownloadTimeout;
 
+extern JavaVM *g_pJavaVM;
+JNIEnv* GetCurrentJNI();
+
 inline bool HasFakeAppName()
 {
     return (g_szFakeAppName[0] != 0 && strlen(g_szFakeAppName) > 5);
@@ -226,7 +229,7 @@ void AML::ShowToast(bool longerDuration, const char* fmt, ...)
     va_list args;
     va_start(args, fmt);
     vsnprintf(txt, sizeof(txt), fmt, args);
-    ShowToastMessage(env, appContext, txt, longerDuration ? 1 : 0);
+    ShowToastMessage(GetCurrentJNI(), appContext, txt, longerDuration ? 1 : 0);
     va_end(args);
 }
 
@@ -327,7 +330,7 @@ int AML::GetModsLoadedCount()
 
 JNIEnv* AML::GetJNIEnvironment()
 {
-    return env;
+    return GetCurrentJNI();
 }
 
 jobject AML::GetAppContextObject()

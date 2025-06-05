@@ -174,7 +174,7 @@ void LoadMods(const char* path)
             if(diread->d_name[0] == '.') continue; // Skip . and ..
             if(!EndsWithSO(diread->d_name))
             {
-                // Useless info for us!
+                // Useless info for us
                 //logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
                 continue;
             }
@@ -183,7 +183,7 @@ void LoadMods(const char* path)
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
-            //if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
+            //if(removeStatus != 0) logger->Error("Failed to remove temp mod file! This might break the mod loading. Error %d", removeStatus);
             if(!CopyFileFaster(buf, dataBuf) && !CopyFile(buf, dataBuf))
             {
                 logger->Error("File %s is failed to be copied! :(", diread->d_name);
@@ -191,7 +191,7 @@ void LoadMods(const char* path)
             }
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
-            handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM!
+            handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM
             modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
             if(modInfoFn != NULL)
             {
@@ -208,7 +208,7 @@ void LoadMods(const char* path)
                     goto nextMod;
                 }
                 
-                logger->Info("Mod (GUID %s) has been processed...", pModInfo->GUID());
+                logger->Info("Mod (GUID %s) has been preprocessed.", pModInfo->GUID());
             }
             else
             {
@@ -217,33 +217,71 @@ void LoadMods(const char* path)
             }
             //unlink(dataBuf);
             removeStatus = remove(dataBuf);
-            if(removeStatus != 0) logger->Error("Failed to remove temporary mod file! This may broke the mod loading! Error %d", removeStatus);
+            if(removeStatus != 0) logger->Error("Failed to remove temp mod file! This might break the mod loading. Error %d", removeStatus);
         }
         closedir(dir);
     }
     else
     {
-        logger->Error("Failed to load mods: DIR IS NOT OPEN");
+        logger->Error("Failed to load mods: unable to open directory");
     }
 }
 
 extern ModDesc* pLastModProcessed;
+
 void StartSignalHandler();
 void HookALog();
-JavaVM *myVM = NULL;
+JavaVM *g_pJavaVM = NULL;
+void *g_pJavaReserved = NULL;
+
 extern bool bAndroidLog_OnlyImportant, bAndroidLog_NoAfter, bAML_HasFastmanModified;
-JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
+bool g_bAMLStarted = false;
+
+pthread_key_t g_JNIThreadKey;
+JNIEnv* GetCurrentJNI()
 {
-    myVM = vm;
-    
+    JNIEnv* env = NULL;
+    if(g_JNIThreadKey)
+    {
+        env = (JNIEnv*)pthread_getspecific(g_JNIThreadKey);
+        if(env) return env;
+    }
+    else
+    {
+        pthread_key_create(&g_JNIThreadKey, NULL);
+    }
+
+    if(g_pJavaVM)
+    {
+        jint result = g_pJavaVM->AttachCurrentThread(&env, NULL);
+        if(result == 0 && env)
+        {
+            pthread_setspecific(g_JNIThreadKey, env);
+            return env;
+        }
+    }
+    return NULL;
+}
+
+void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
+{
+    if(g_bAMLStarted)
+    {
+        logger->Error("Something was trying to boot-up AML again.");
+        return;
+    }
+
+    void* lib1 = libName1 ? dlopen(libName1, RTLD_NOW) : NULL;
+    void* lib2 = libName2 ? dlopen(libName2, RTLD_NOW) : NULL;
+
     logger->SetTag("AndroidModLoader");
     const char* szTmp; jstring jTmp;
 
     /* JNI Environment */
-    if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
+    if (g_pJavaVM->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
     {
         logger->Error("Cannot get JNI Environment!");
-        return -1;
+        return;
     }
 
     /* Application Context */
@@ -251,7 +289,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if(appContext == NULL)
     {
         logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
-        return JNI_VERSION_1_6;
+        return;
     }
 
     /* Must Have for mods */
@@ -472,7 +510,30 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     pLastModProcessed = NULL;
 
     /* Fake crash for crash handler testing (does not work?) */
-    if(g_bCrashAML) __builtin_trap();
+    //if(g_bCrashAML) __builtin_trap(); // Dont let really weird guys to use this...
+
+    // TODO: should be loaded in a different thread..?
+    if(lib1)
+    {
+        auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib1, "JNI_OnLoad");
+        if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
+    }
+    if(lib2)
+    {
+        auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib2, "JNI_OnLoad");
+        if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
+    }
+
+    g_bAMLStarted = true;
+}
+
+JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
+{
+    g_pJavaVM = vm;
+    g_pJavaReserved = reserved;
+    
+    /* For the delayed start-up (later) */
+    StartAMLRightNow();
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;
