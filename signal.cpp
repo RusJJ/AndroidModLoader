@@ -218,7 +218,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     DEVVAR_LOG(g_bNoModsInLog); DEVVAR_LOG(g_bDumpAllThreads); DEVVAR_LOG(g_bEHUnwind); DEVVAR_LOG(g_bMoreRegsInfo); g_pLogFile << std::endl;
 
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
-    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << std::nouppercase << std::endl;
+    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << " / " << PC << std::nouppercase << std::endl;
     g_pLogFile << "A POSSIBLE (!) reason of the crash:\n- ";
     switch(sig)
     {
@@ -245,8 +245,8 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         break;
     }
 
-    Dl_info dlInfo;
-    if(dladdr((void*)PC, &dlInfo) != 0)
+    static Dl_info dlInfo;
+    if(PC && dladdr((void*)PC, &dlInfo) != 0)
     {
         // Success
         if(dlInfo.dli_fname)
@@ -265,7 +265,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     {
         // Unsuccess
       label_unsuccess:
-        g_pLogFile << "Program counter: Unknown Lib + 0x" << std::hex << std::uppercase << PC;
+        g_pLogFile << "Failed to get a library. Program counter: 0x" << std::hex << std::uppercase << PC;
     }
 
     if(dlInfo.dli_sname)
@@ -320,7 +320,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #ifdef AML32
         if(g_bMoreRegsInfo)
         {
-            Dl_info dlRegInfo;
+            static Dl_info dlRegInfo;
             SHOWREG(R0, mcontext->arm_r0);
             SHOWREG(R1, mcontext->arm_r1);
             SHOWREG(R2, mcontext->arm_r2);
@@ -362,7 +362,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #else
         if(g_bMoreRegsInfo)
         {
-            Dl_info dlRegInfo;
+            static Dl_info dlRegInfo;
             SHOWREG(X0, mcontext->regs[0]);
             SHOWREG(X1, mcontext->regs[1]);
             SHOWREG(X2, mcontext->regs[2]);
@@ -462,6 +462,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     {
         g_pLogFile << "\n----------------------------------------------------\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
         g_pLogFile << std::hex << std::uppercase;
+        g_pLogFile.flush();
         for(int i = 1; i <= STACKDUMP_SIZE; ++i)
         {
             g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(stack[i - 1]);
