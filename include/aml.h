@@ -90,6 +90,11 @@ public:
     bool        HasFastmanAPKModified();
     const char* GetInternalPath();
     const char* GetInternalModsPath();
+    /* AML 1.3.0 */
+    JavaVM*     GetJavaVM();
+    jobject     GetCurrentContext();
+    void        DoVibro(int msTime);
+    void        DoVibro(jlong* pattern, int patternItems);
 };
 
 extern char g_szAMLFeatures[2048];

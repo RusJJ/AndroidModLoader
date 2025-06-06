@@ -2,10 +2,10 @@
 #define _IAML
 
 // Usage: place 3 lines somewhere in the code AFTER #include <mod/amlmod.h>
-// #if !defined(IAML_VER) && IAML_VER < 01020300
-//     #error "You need to update your MOD folder to 1.2.3!"
+// #if !defined(IAML_VER) && IAML_VER < 01030000
+//     #error "You need to update your MOD folder to 1.3.0!"
 // #endif
-#define IAML_VER 01020300
+#define IAML_VER 01030000
 
 #include "interface.h"
 #include <jni.h>
@@ -23,6 +23,11 @@ enum eManifestPermissions
     P_READ_EXTERNAL_STORAGE = 0,
     P_WRITE_EXTERNAL_STORAGE,
 }; // Unused
+
+// AML 1.3.0 stuff (Vibration patterns, examples)
+static jlong DEFAULT_VIBRATE_PATTERN[4] = {0, 250, 250, 250};
+static jlong g_VibroPattern_Weak[7] = { 0, 20, 80, 20, 80, 20, 80 };
+static jlong g_VibroPattern_Alert[6] = { 0, 200, 100, 200, 100, 400 };
 
 // I`m redoing this because i dont want to include additional file
 // Thanks @XMDS, maybe someone will use it
@@ -176,6 +181,12 @@ public:
     virtual bool        HasFastmanAPKModified();
     virtual const char* GetInternalPath(); // /sdcard/
     virtual const char* GetInternalModsPath(); // /sdcard/AMLMods/*game*/ (by default)
+    
+    /* AML 1.3.0 */
+    virtual JavaVM*     GetJavaVM();
+    virtual jobject     GetCurrentContext();
+    virtual void        DoVibro(int msTime); // Pretty strong feedback... If you need a small vibro, do it for like ~20ms, it's gonna be enough
+    virtual void        DoVibro(jlong* pattern, int patternItems); // Patterns might give you more control
 
 
     // Inlines (shortcuts for you!)

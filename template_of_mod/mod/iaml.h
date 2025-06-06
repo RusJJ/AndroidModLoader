@@ -2,10 +2,10 @@
 #define _IAML
 
 // Usage: place 3 lines somewhere in the code AFTER #include <mod/amlmod.h>
-// #if !defined(IAML_VER) && IAML_VER < 01020300
-//     #error "You need to update your MOD folder to 1.2.3!"
+// #if !defined(IAML_VER) && IAML_VER < 01030000
+//     #error "You need to update your MOD folder to 1.3.0!"
 // #endif
-#define IAML_VER 01020300
+#define IAML_VER 01030000
 
 #include "interface.h"
 #include <jni.h>
@@ -176,6 +176,12 @@ public:
     virtual bool        HasFastmanAPKModified();
     virtual const char* GetInternalPath(); // /sdcard/
     virtual const char* GetInternalModsPath(); // /sdcard/AMLMods/*game*/ (by default)
+    
+    /* AML 1.3.0 */
+    virtual JavaVM*     GetJavaVM();
+    virtual jobject     GetCurrentContext();
+    virtual void        DoVibro(int msTime); // Pretty strong feedback...
+    virtual void        DoVibro(jlong* pattern, int patternItems);
 
 
     // Inlines (shortcuts for you!)

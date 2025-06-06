@@ -21,6 +21,7 @@ extern char g_szAndroidDataDir[256];
 extern char g_szAndroidDataRootDir[256];
 extern char g_szInternalStoragePath[256];
 extern char g_szInternalModsDir[256];
+extern char g_szUserAgent[256];
 extern const char* g_szDataDir;
 extern jobject appContext;
 extern JNIEnv* env;
@@ -30,6 +31,7 @@ extern int g_nDownloadTimeout;
 
 extern JavaVM *g_pJavaVM;
 JNIEnv* GetCurrentJNI();
+jobject GetCurrentContext();
 
 inline bool HasFakeAppName()
 {
@@ -257,6 +259,7 @@ bool AML::DownloadFile(const char* url, const char* saveto)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, saveto);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
     
     CURLcode res = curl_easy_perform(curl);
     return res != CURLE_OK;
@@ -278,6 +281,7 @@ bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &chunk);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
     
     CURLcode res = curl_easy_perform(curl);
     out[outLen - 1] = 0;
@@ -504,6 +508,77 @@ const char* AML::GetInternalPath()
 const char* AML::GetInternalModsPath()
 {
     return g_szInternalModsDir;
+}
+
+JavaVM* AML::GetJavaVM()
+{
+    return g_pJavaVM;
+}
+
+jobject AML::GetCurrentContext()
+{
+    return ::GetCurrentContext();
+}
+
+jobject g_VibratorObject;
+jmethodID g_VibrateLongMethod, g_VibratePatternMethod;
+bool g_bVibratorInited = false;
+inline bool InitVibroJNI(JNIEnv* env)
+{
+    jobject curCtx = ::GetCurrentContext();
+    if(!curCtx) return false;
+
+    if(!g_bVibratorInited)
+    {
+        jclass vibratorCls = env->FindClass("android/os/Vibrator");
+        if(!vibratorCls) return false;
+
+        jclass contextCls = env->FindClass("android/content/Context");
+        if(!contextCls) return false;
+
+        jmethodID sysServiceMethod = env->GetMethodID(contextCls, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+        jfieldID vibratorSrvField = env->GetStaticFieldID(contextCls, "VIBRATOR_SERVICE", "Ljava/lang/String;");
+        jstring vibratorFieldStr = (jstring)env->GetStaticObjectField(contextCls, vibratorSrvField);
+        jobject localVibrateObject = env->CallObjectMethod(curCtx, sysServiceMethod, vibratorFieldStr);
+        g_VibratorObject = env->NewGlobalRef(localVibrateObject);
+        g_VibrateLongMethod = env->GetMethodID(vibratorCls, "vibrate", "(J)V");
+        g_VibratePatternMethod = env->GetMethodID(vibratorCls, "vibrate", "([JI)V");
+
+        env->DeleteLocalRef(vibratorFieldStr);
+        env->DeleteLocalRef(vibratorCls);
+        env->DeleteLocalRef(contextCls);
+
+        g_bVibratorInited = true;
+    }
+    return true;
+}
+
+void AML::DoVibro(int msTime)
+{
+    if(msTime < 1 || msTime > 3000) return; // do not vibrate THAT MUCH
+
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return;
+
+    if(InitVibroJNI(env))
+    {
+        env->CallVoidMethod(g_VibratorObject, g_VibrateLongMethod, (jlong)msTime);
+    }
+}
+
+void AML::DoVibro(jlong* pattern, int patternItems)
+{
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return;
+
+    if(InitVibroJNI(env))
+    {
+        jlongArray patternArray = env->NewLongArray(patternItems);
+        env->SetLongArrayRegion(patternArray, 0, patternItems, pattern);
+        env->CallVoidMethod(g_VibratorObject, g_VibratePatternMethod, patternArray, -1);
+
+        env->DeleteLocalRef(patternArray);
+    }
 }
 
 

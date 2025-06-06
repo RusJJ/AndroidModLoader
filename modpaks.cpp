@@ -7,6 +7,7 @@ extern int g_nDownloadTimeout;
 
 CURL* curl = NULL;
 char szFileData[FILE_DATA_SIZE] = {0};
+extern char g_szUserAgent[256];
 size_t nReadedBytes = 0;
 
 void InitCURL()
@@ -46,6 +47,7 @@ CURLcode DownloadFile(const char* url, const char* path)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, path);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
     
     CURLcode res = curl_easy_perform(curl);
     return res;
@@ -61,6 +63,7 @@ CURLcode DownloadFileToData(const char* url)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, url);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
     
     CURLcode res = curl_easy_perform(curl);
     return res;

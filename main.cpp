@@ -46,6 +46,7 @@ char g_szInternalStoragePath[256],
      g_szCfgPath[256],
      g_szFastman92Android[256];
 const char* g_szDataDir;
+char g_szUserAgent[256];
 
 jobject appContext;
 JNIEnv* env;
@@ -261,6 +262,25 @@ JNIEnv* GetCurrentJNI()
         }
     }
     return NULL;
+}
+
+// https://stackoverflow.com/questions/46869901/how-to-get-the-android-context-instance-when-calling-jni-method
+jobject g_GlobalContext = 0;
+jobject GetCurrentContext()
+{
+    if(g_GlobalContext) return g_GlobalContext;
+
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return 0;
+
+    jclass activityThread = env->FindClass("android/app/ActivityThread");
+    jmethodID currentActivityThread = env->GetStaticMethodID(activityThread, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    jobject activityThreadObj = env->CallStaticObjectMethod(activityThread, currentActivityThread);
+    jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
+
+    g_GlobalContext = env->CallObjectMethod(activityThreadObj, getApplication);
+    if(g_GlobalContext) g_GlobalContext = env->NewGlobalRef(g_GlobalContext);
+    return g_GlobalContext;
 }
 
 void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
@@ -508,6 +528,12 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
         logger->Info("Mods were launched!");
     }
     pLastModProcessed = NULL;
+
+    #ifdef AML32
+        snprintf(g_szUserAgent, sizeof(g_szUserAgent), "AndroidModLoader/%s (Android; ARM; ARM32)", amlmodinfo->VersionString());
+    #else
+        snprintf(g_szUserAgent, sizeof(g_szUserAgent), "AndroidModLoader/%s (Android; ARM; ARM64)", amlmodinfo->VersionString());
+    #endif
 
     /* Fake crash for crash handler testing (does not work?) */
     //if(g_bCrashAML) __builtin_trap(); // Dont let really weird guys to use this...
