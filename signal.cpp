@@ -5,19 +5,25 @@
 #include <dlfcn.h>
 #include <aml.h>
 #include <jnifn.h>
+#include <cxxabi.h> // char* demangled = abi::__cxa_demangle(mangled, nullptr, nullptr, &status); free(demangled);
 #include "xunwind.h"
+
+// execinfo.h
+typedef int (*backtrace_fn)(void**, int);
+typedef char** (*backtrace_symbols_fn)(void* const*, int);
 
 #define STACKDUMP_SIZE 0x510
 std::ofstream g_pLogFile;
 
 struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
-extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo;
+extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo, g_bUnixBacktrace;
 extern int g_nAndroidSDKVersion;
 
 static stack_t stackstruct;
 static char signalstack[SIGSTKSZ];
 static uintptr_t g_frames[128];
+static void* btBuffer[64];
 
 extern jobject appContext;
 extern JNIEnv* env;
@@ -188,6 +194,8 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     }
     bHasHandledError = true;
 
+    void* libC = dlopen("libc.so", RTLD_NOW | RTLD_GLOBAL);
+
     char *stack;
     ucontext_t* ucontext = (ucontext_t*)ptr;
     mcontext_t* mcontext = &ucontext->uc_mcontext;
@@ -210,15 +218,14 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     char* stackLog;
     if(!g_pLogFile.is_open()) goto skip_logging;
 
-
     g_pLogFile << "!!! THIS IS A CRASH LOG !!!\nIf you are experiencing a crash, give us this file.\n>>> DO NOT SEND US A SCREENSHOT OF THIS FILE <<<" << std::endl << std::endl;
 
     #define DEVVAR_LOG(__v) g_pLogFile << #__v << (__v ? " = 1 | " : " = 0 | ")
     g_pLogFile << "Config variables: | "; DEVVAR_LOG(g_bSimplerCrashLog); DEVVAR_LOG(g_bNoSPInLog);
-    DEVVAR_LOG(g_bNoModsInLog); DEVVAR_LOG(g_bDumpAllThreads); DEVVAR_LOG(g_bEHUnwind); DEVVAR_LOG(g_bMoreRegsInfo); g_pLogFile << std::endl;
+    DEVVAR_LOG(g_bNoModsInLog); DEVVAR_LOG(g_bDumpAllThreads); DEVVAR_LOG(g_bEHUnwind); DEVVAR_LOG(g_bMoreRegsInfo); DEVVAR_LOG(g_bUnixBacktrace); g_pLogFile << std::endl;
 
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
-    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << " / 0x" << PC << " / 0x" << (uintptr_t)si->si_addr << std::nouppercase << std::endl;
+    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << " (0x" << (uintptr_t)si->si_addr << ") at 0x" << PC << std::nouppercase << std::endl;
     g_pLogFile << "A POSSIBLE (!) reason of the crash:\n- ";
     switch(sig)
     {
@@ -312,12 +319,15 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
 
     g_pLogFile << "\n----------------------------------------------------\nRegisters:" << std::endl;
+
+    // dlInfo.dli_sname in register might point to the variable with corrupted name
     #define SHOWREG(__t, __v)   g_pLogFile << #__t ":\t" << std::dec << __v << "\t0x" << std::hex << std::uppercase << __v; \
-                                if(dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) { \
+                                if((void*)(__v) && dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) { \
                                     g_pLogFile << " (" << GetFilenamePart(dlRegInfo.dli_fname) << " + 0x" << std::hex << std::uppercase << ((uintptr_t)(__v) - (uintptr_t)dlRegInfo.dli_fbase) << ")"; \
-                                    if(dlRegInfo.dli_sname) g_pLogFile << std::nouppercase << " (" << dlInfo.dli_sname << ")"; \
+                                    /*if(dlRegInfo.dli_sname) { g_pLogFile << std::nouppercase << " (" << dlInfo.dli_sname << ")"; }*/ \
                                 } g_pLogFile << std::endl
 
+                                
     #ifdef AML32
         if(g_bMoreRegsInfo)
         {
@@ -487,43 +497,69 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         g_pLogFile << "\n----------------------------------------------------\nA program stack is missing..?!\n";
         g_pLogFile.flush();
     }
-        
-    #ifdef IO_GITHUB_HEXHACKING_XUNWIND
-        if(!g_bSimplerCrashLog)
-        {
-            if(g_bEHUnwind || g_nAndroidSDKVersion >= 34)
-            {
-              go_EHUnwind:
-                stackLog = NULL;
-                g_bDumpAllThreads = false;
 
-                size_t frames_sz = xunwind_eh_unwind(g_frames, sizeof(g_frames) / sizeof(g_frames[0]), ucontext);
-                if(frames_sz > 0)
+    if(!g_bSimplerCrashLog)
+    {
+        bool bSkipCrashLog = false;
+        if(g_bUnixBacktrace && g_nAndroidSDKVersion > 33 && libC)
+        {
+            backtrace_fn backtrace_ptr = (backtrace_fn)dlsym(libC, "backtrace");
+            backtrace_symbols_fn backtrace_symbols_ptr = (backtrace_symbols_fn)dlsym(libC, "backtrace_symbols");
+
+            if(backtrace_ptr && backtrace_symbols_ptr)
+            {
+                int symbolsCount = backtrace_ptr(btBuffer, 64);
+                char** symbols = backtrace_symbols_ptr(btBuffer, symbolsCount);
+                if(symbols)
                 {
-                    stackLog = xunwind_frames_get(g_frames, frames_sz, "");
+                    if(symbolsCount)
+                    {
+                        bSkipCrashLog = true;
+                        g_pLogFile << "\n----------------------------------------------------\n" << "Call stack:\n";
+                        for(int i = 0; i < symbolsCount; ++i)
+                        {
+                            g_pLogFile << symbols[i] << std::endl;
+                        }
+                        g_pLogFile.flush();
+                    }
+                    free(symbols);
                 }
-            }
-            else
-            {
-                stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, g_bDumpAllThreads ? XUNWIND_ALL_THREADS : XUNWIND_CURRENT_THREAD, ucontext, "");
-                if(!stackLog && g_nAndroidSDKVersion >= 34) goto go_EHUnwind; // Android 14 does not have libbacktrace?
-            }
-            if(stackLog)
-            {
-                if(stackLog[0])
-                {
-                    g_pLogFile << "\n----------------------------------------------------\n" << (g_bDumpAllThreads ? "Call stack (of all threads):\n" : "Call stack:\n") << stackLog;
-                    g_pLogFile.flush();
-                }
-                free(stackLog);
-            }
-            else
-            {
-                g_pLogFile << "\n----------------------------------------------------\nCall stack:\nA system returned no crash log!";
-                g_pLogFile.flush();
             }
         }
-    #endif
+      #ifdef IO_GITHUB_HEXHACKING_XUNWIND
+        if(!bSkipCrashLog && ( g_bEHUnwind || g_nAndroidSDKVersion > 33) )
+        {
+          go_EHUnwind:
+            stackLog = NULL;
+            g_bDumpAllThreads = false;
+
+            size_t frames_sz = xunwind_eh_unwind(g_frames, sizeof(g_frames) / sizeof(g_frames[0]), ucontext);
+            if(frames_sz > 0)
+            {
+                stackLog = xunwind_frames_get(g_frames, frames_sz, "");
+            }
+        }
+        else
+        {
+            stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, g_bDumpAllThreads ? XUNWIND_ALL_THREADS : XUNWIND_CURRENT_THREAD, ucontext, "");
+            if(!stackLog && g_nAndroidSDKVersion > 33) goto go_EHUnwind; // Android 14 and upper does not have libbacktrace?
+        }
+        if(stackLog)
+        {
+            if(stackLog[0])
+            {
+                g_pLogFile << "\n----------------------------------------------------\n" << (g_bDumpAllThreads ? "Call stack (of all threads):\n" : "Call stack:\n") << stackLog;
+                g_pLogFile.flush();
+            }
+            free(stackLog);
+        }
+        else
+        {
+            g_pLogFile << "\n----------------------------------------------------\nCall stack:\nA system returned no crash log!";
+            g_pLogFile.flush();
+        }
+      #endif
+    }
 
     g_pLogFile << "\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n";
     g_pLogFile << "If you`re having problems using OFFICIAL mods, please report about this problem in our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!";
