@@ -552,7 +552,6 @@ inline bool InitVibroJNI(JNIEnv* env)
     }
     return true;
 }
-
 void AML::DoVibro(int msTime)
 {
     if(msTime < 1 || msTime > 3000) return; // do not vibrate THAT MUCH
@@ -565,7 +564,6 @@ void AML::DoVibro(int msTime)
         env->CallVoidMethod(g_VibratorObject, g_VibrateLongMethod, (jlong)msTime);
     }
 }
-
 void AML::DoVibro(jlong* pattern, int patternItems)
 {
     JNIEnv* env = GetCurrentJNI();
@@ -579,6 +577,40 @@ void AML::DoVibro(jlong* pattern, int patternItems)
 
         env->DeleteLocalRef(patternArray);
     }
+}
+
+bool g_bBatteryInited = false;
+jstring g_pLevelStr;
+float g_fCachedScale;
+jmethodID g_GetLevelMethod;
+jobject g_BatteryIntent;
+float AML::GetBatteryLevel()
+{
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return -1.0f;
+
+    if(!g_bBatteryInited)
+    {
+        jclass intentFilterCls = env->FindClass("android/content/IntentFilter");
+        jmethodID ctor = env->GetMethodID(intentFilterCls, "<init>", "(Ljava/lang/String;)V");
+        jstring action = env->NewStringUTF("android.intent.action.BATTERY_CHANGED");
+        jobject filter = env->NewObject(intentFilterCls, ctor, action);
+        env->DeleteLocalRef(action);
+
+        jclass contextCls = env->GetObjectClass(::GetCurrentContext());
+        jmethodID registerReceiver = env->GetMethodID(contextCls, "registerReceiver", "(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;)Landroid/content/Intent;");
+        g_BatteryIntent = env->NewGlobalRef(env->CallObjectMethod(::GetCurrentContext(), registerReceiver, NULL, filter));
+
+        jclass intentCls = env->GetObjectClass(g_BatteryIntent);
+        g_GetLevelMethod = env->GetMethodID(intentCls, "getIntExtra", "(Ljava/lang/String;I)I");
+        g_pLevelStr = (jstring)env->NewGlobalRef(env->NewStringUTF("level"));
+        jstring scaleStr = env->NewStringUTF("scale");
+        g_fCachedScale = (float)env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, scaleStr, -1);
+        env->DeleteLocalRef(scaleStr);
+    }
+
+    jint level = env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, g_pLevelStr, -1);
+    return ((level * 100.0f) / g_fCachedScale);
 }
 
 

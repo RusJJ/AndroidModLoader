@@ -95,6 +95,7 @@ public:
     jobject     GetCurrentContext();
     void        DoVibro(int msTime);
     void        DoVibro(jlong* pattern, int patternItems);
+    float       GetBatteryLevel();
 };
 
 extern char g_szAMLFeatures[2048];
