@@ -218,7 +218,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     DEVVAR_LOG(g_bNoModsInLog); DEVVAR_LOG(g_bDumpAllThreads); DEVVAR_LOG(g_bEHUnwind); DEVVAR_LOG(g_bMoreRegsInfo); g_pLogFile << std::endl;
 
     g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
-    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << " / " << PC << std::nouppercase << std::endl;
+    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << " / 0x" << PC << " / 0x" << (uintptr_t)si->si_addr << std::nouppercase << std::endl;
     g_pLogFile << "A POSSIBLE (!) reason of the crash:\n- ";
     switch(sig)
     {
@@ -315,6 +315,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #define SHOWREG(__t, __v)   g_pLogFile << #__t ":\t" << std::dec << __v << "\t0x" << std::hex << std::uppercase << __v; \
                                 if(dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) { \
                                     g_pLogFile << " (" << GetFilenamePart(dlRegInfo.dli_fname) << " + 0x" << std::hex << std::uppercase << ((uintptr_t)(__v) - (uintptr_t)dlRegInfo.dli_fbase) << ")"; \
+                                    if(dlRegInfo.dli_sname) g_pLogFile << std::nouppercase << " (" << dlInfo.dli_sname << ")"; \
                                 } g_pLogFile << std::endl
 
     #ifdef AML32
@@ -483,7 +484,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     }
     else if(!stack)
     {
-        g_pLogFile << "\n----------------------------------------------------\nA program stack is unknown!\n";
+        g_pLogFile << "\n----------------------------------------------------\nA program stack is missing..?!\n";
         g_pLogFile.flush();
     }
         
