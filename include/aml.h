@@ -95,6 +95,7 @@ public:
     jobject     GetCurrentContext();
     void        DoVibro(int msTime);
     void        DoVibro(jlong* pattern, int patternItems);
+    void        CancelVibro();
     float       GetBatteryLevel();
 };
 

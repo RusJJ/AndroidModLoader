@@ -187,6 +187,7 @@ public:
     virtual jobject     GetCurrentContext();
     virtual void        DoVibro(int msTime); // Pretty strong feedback... If you need a small vibro, do it for like ~20ms, it's gonna be enough
     virtual void        DoVibro(jlong* pattern, int patternItems); // Patterns might give you more control
+    virtual void        CancelVibro();
     virtual float       GetBatteryLevel(); // returns a float from 0.0 to 100.0
 
 

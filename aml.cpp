@@ -521,7 +521,7 @@ jobject AML::GetCurrentContext()
 }
 
 jobject g_VibratorObject;
-jmethodID g_VibrateLongMethod, g_VibratePatternMethod;
+jmethodID g_VibrateLongMethod, g_VibratePatternMethod, g_VibrateCancelMethod;
 bool g_bVibratorInited = false;
 inline bool InitVibroJNI(JNIEnv* env)
 {
@@ -543,6 +543,7 @@ inline bool InitVibroJNI(JNIEnv* env)
         g_VibratorObject = env->NewGlobalRef(localVibrateObject);
         g_VibrateLongMethod = env->GetMethodID(vibratorCls, "vibrate", "(J)V");
         g_VibratePatternMethod = env->GetMethodID(vibratorCls, "vibrate", "([JI)V");
+        g_VibrateCancelMethod = env->GetMethodID(vibratorCls, "cancel", "()V");
 
         env->DeleteLocalRef(vibratorFieldStr);
         env->DeleteLocalRef(vibratorCls);
@@ -578,6 +579,11 @@ void AML::DoVibro(jlong* pattern, int patternItems)
         env->DeleteLocalRef(patternArray);
     }
 }
+void AML::CancelVibro()
+{
+    JNIEnv* env = GetCurrentJNI();
+    if(env) env->CallVoidMethod(g_VibratorObject, g_VibrateCancelMethod);
+}
 
 bool g_bBatteryInited = false;
 jstring g_pLevelStr;
@@ -607,6 +613,8 @@ float AML::GetBatteryLevel()
         jstring scaleStr = env->NewStringUTF("scale");
         g_fCachedScale = (float)env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, scaleStr, -1);
         env->DeleteLocalRef(scaleStr);
+
+        g_bBatteryInited = true;
     }
 
     jint level = env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, g_pLevelStr, -1);
