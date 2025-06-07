@@ -24,6 +24,11 @@ enum eManifestPermissions
     P_WRITE_EXTERNAL_STORAGE,
 }; // Unused
 
+// AML 1.3.0 stuff (Vibration patterns, examples)
+static jlong DEFAULT_VIBRATE_PATTERN[4] = {0, 250, 250, 250};
+static jlong g_VibroPattern_Weak[7] = { 0, 20, 80, 20, 80, 20, 80 };
+static jlong g_VibroPattern_Alert[6] = { 0, 200, 100, 200, 100, 400 };
+
 // I`m redoing this because i dont want to include additional file
 // Thanks @XMDS, maybe someone will use it
 struct GlossRegisters
@@ -180,8 +185,10 @@ public:
     /* AML 1.3.0 */
     virtual JavaVM*     GetJavaVM();
     virtual jobject     GetCurrentContext();
-    virtual void        DoVibro(int msTime); // Pretty strong feedback...
-    virtual void        DoVibro(jlong* pattern, int patternItems);
+    virtual void        DoVibro(int msTime); // Pretty strong feedback... If you need a small vibro, do it for like ~20ms, it's gonna be enough
+    virtual void        DoVibro(jlong* pattern, int patternItems); // Patterns might give you more control
+    virtual void        CancelVibro();
+    virtual float       GetBatteryLevel(); // returns a float from 0.0 to 100.0
 
 
     // Inlines (shortcuts for you!)
