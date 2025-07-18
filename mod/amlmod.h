@@ -41,6 +41,11 @@
     static Config cfgLocal(#_guid);                                     \
     Config* cfg = &cfgLocal;
 
+#define MYMODCFGNAME(_guid, _name, _version, _author, _cfgname)         \
+    MYMOD(_guid, _name, _version, _author);                             \
+    static Config cfgLocal(#_cfgname);                                  \
+    Config* cfg = &cfgLocal;
+
 #define NEEDGAME(_pkg_name)                                             \
     extern "C" const char* __INeedASpecificGame() {return #_pkg_name;}
 
@@ -61,9 +66,31 @@
     {"", ""} };                                                         \
     extern "C" ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
 
+/* Macros to stop forgetting stuff! */
+#define ON_MOD_PRELOAD()                                                \
+    extern "C" void OnModPreLoad()
+
+#define ON_MOD_LOAD()                                                   \
+    extern "C" void OnModLoad()
+
+#define ON_ALL_MODS_LOAD()                                              \
+    extern "C" void OnAllModsLoaded()
+
+#define ON_MOD_UNLOAD()                                                 \
+    extern "C" void OnModUnload() /*Not guaranteed*/
+
+#define ON_GAME_CRASH()                                                 \
+    extern "C" void OnGameCrash(const char* library, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext) /*Not guaranteed*/
+
+#define UPDATER_URL()                                                   \
+    extern "C" const char* OnUpdaterURLRequested()
+
+#define ON_NEW_INTERFACE()                                              \
+    extern "C" void OnInterfaceAdded(const char* name, const void* ptr)
+
     
 
-#define MINIMUM_MD5_BUF_SIZE 33
+#define MINIMUM_MD5_BUF_SIZE ( 32 + 1 )
 
 struct MemChunk_t
 {
