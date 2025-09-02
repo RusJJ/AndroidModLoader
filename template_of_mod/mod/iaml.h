@@ -224,24 +224,66 @@ inline IAML* GetAMLInterface() { return aml; }
 
 /* Just a hook declaration */
 #define DECL_HOOK(_ret, _name, ...)                             \
-    _ret (*_name)(__VA_ARGS__);                                    \
+    _ret (*_name)(__VA_ARGS__);                                 \
     _ret HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = void */
 #define DECL_HOOKv(_name, ...)                                  \
-    void (*_name)(__VA_ARGS__);                                    \
+    void (*_name)(__VA_ARGS__);                                 \
     void HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = bool */
 #define DECL_HOOKb(_name, ...)                                  \
-    bool (*_name)(__VA_ARGS__);                                    \
+    bool (*_name)(__VA_ARGS__);                                 \
     bool HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = int */
 #define DECL_HOOKi(_name, ...)                                  \
-    int (*_name)(__VA_ARGS__);                                    \
+    int (*_name)(__VA_ARGS__);                                  \
     int HookOf_##_name(__VA_ARGS__)
 /* Just a hook declaration with return type = void* */
 #define DECL_HOOKp(_name, ...)                                  \
     void* (*_name)(__VA_ARGS__);                                \
     void* HookOf_##_name(__VA_ARGS__)
+
+/* Just a hook declaration (but with static funcs and stuff) */
+#define SDECL_HOOK(_ret, _name, ...)                             \
+    static _ret (*_name)(__VA_ARGS__);                           \
+    static _ret HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = void */
+#define SDECL_HOOKv(_name, ...)                                  \
+    static void (*_name)(__VA_ARGS__);                           \
+    static void HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = bool */
+#define SDECL_HOOKb(_name, ...)                                  \
+    static bool (*_name)(__VA_ARGS__);                           \
+    static bool HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = int */
+#define SDECL_HOOKi(_name, ...)                                  \
+    static int (*_name)(__VA_ARGS__);                            \
+    static int HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = void* */
+#define SDECL_HOOKp(_name, ...)                                  \
+    static void* (*_name)(__VA_ARGS__);                          \
+    static void* HookOf_##_name(__VA_ARGS__)
+
+/* Just a hook declaration (but with static+inlined funcs and stuff) */
+#define SIDECL_HOOK(_ret, _name, ...)                             \
+    static inline _ret (*_name)(__VA_ARGS__);                     \
+    static _ret HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = void */
+#define SIDECL_HOOKv(_name, ...)                                  \
+    static inline void (*_name)(__VA_ARGS__);                     \
+    static void HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = bool */
+#define SIDECL_HOOKb(_name, ...)                                  \
+    static inline bool (*_name)(__VA_ARGS__);                     \
+    static bool HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = int */
+#define SIDECL_HOOKi(_name, ...)                                  \
+    static inline int (*_name)(__VA_ARGS__);                      \
+    static int HookOf_##_name(__VA_ARGS__)
+/* Just a hook declaration with return type = void* */
+#define SIDECL_HOOKp(_name, ...)                                  \
+    static inline void* (*_name)(__VA_ARGS__);                    \
+    static void* HookOf_##_name(__VA_ARGS__)
 
 /* Just a hook of a function */
 #define HOOK(_name, _fnAddr)                                    \
