@@ -7,10 +7,10 @@
 #include <stdlib.h>
 #include <signal.h>
 
-#ifdef __arm__
+#if defined(__arm__) || defined(_WIN32)
     #define AML32
     #define BYBIT(__32val, __64val) (__32val)
-#elif defined __aarch64__
+#elif defined(__aarch64__) || defined(_WIN64)
     #define AML64
     #define BYBIT(__32val, __64val) (__64val)
 #else
@@ -24,16 +24,15 @@
 
 #ifdef __GNUC__
     #define ASM_NAKED __attribute__((naked))
-    #define EXPORT __attribute__((visibility("default")))
 #else
     #define ASM_NAKED __declspec(naked)
-    #define EXPORT
 #endif
+#define EXPORT JNIEXPORT
 
 #define MYMOD(_guid, _name, _version, _author)                          \
     static ModInfo modinfoLocal(#_guid, #_name, #_version, #_author);   \
     ModInfo* modinfo = &modinfoLocal;                                   \
-    extern "C" ModInfo* __GetModInfo() { return modinfo; }              \
+    extern "C" JNIEXPORT ModInfo* __GetModInfo() { return modinfo; }    \
     IAML* aml = (IAML*)GetInterface("AMLInterface");
 
 #define MYMODCFG(_guid, _name, _version, _author)                       \
@@ -47,10 +46,7 @@
     Config* cfg = &cfgLocal;
 
 #define NEEDGAME(_pkg_name)                                             \
-    extern "C" const char* __INeedASpecificGame() {return #_pkg_name;}
-
-#define MYMODDECL()                                                     \
-    extern ModInfo* modinfo; // Just in case if you need to use that somewhere else in your mod
+    extern "C" JNIEXPORT const char* __INeedASpecificGame() { return #_pkg_name; }
 
 /* Dependencies! */
 #define BEGIN_DEPLIST()                                                 \
@@ -64,29 +60,29 @@
 
 #define END_DEPLIST()                                                   \
     {"", ""} };                                                         \
-    extern "C" ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
+    extern "C" JNIEXPORT ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
 
 /* Macros to stop forgetting stuff! */
 #define ON_MOD_PRELOAD()                                                \
-    extern "C" void OnModPreLoad()
+    extern "C" JNIEXPORT void OnModPreLoad()
 
 #define ON_MOD_LOAD()                                                   \
-    extern "C" void OnModLoad()
+    extern "C" JNIEXPORT void OnModLoad()
 
 #define ON_ALL_MODS_LOAD()                                              \
-    extern "C" void OnAllModsLoaded()
+    extern "C" JNIEXPORT void OnAllModsLoaded()
 
 #define ON_MOD_UNLOAD()                                                 \
-    extern "C" void OnModUnload() /*Not guaranteed*/
+    extern "C" JNIEXPORT void OnModUnload() /*Not guaranteed*/
 
 #define ON_GAME_CRASH()                                                 \
-    extern "C" void OnGameCrash(const char* library, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext) /*Not guaranteed*/
+    extern "C" JNIEXPORT void OnGameCrash(const char* library, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext) /*Not guaranteed*/
 
 #define UPDATER_URL()                                                   \
-    extern "C" const char* OnUpdaterURLRequested()
+    extern "C" JNIEXPORT const char* OnUpdaterURLRequested()
 
 #define ON_NEW_INTERFACE()                                              \
-    extern "C" void OnInterfaceAdded(const char* name, const void* ptr)
+    extern "C" JNIEXPORT void OnInterfaceAdded(const char* name, const void* ptr)
 
     
 
@@ -203,7 +199,7 @@ private:
 };
 
 typedef ModInfo* (*GetModInfoFn)();
-
+extern ModInfo* modinfo;
 
 
 #include "iaml.h"
