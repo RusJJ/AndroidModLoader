@@ -283,7 +283,27 @@ jobject GetCurrentContext()
     return g_GlobalContext;
 }
 
-void* AML_dlopen(const char* lib)
+struct LibraryLoadData
+{
+    LibraryLoadData() : initMembersList(NULL), initMembersCount(0) { }
+    typedef void(*initArrayMember)();
+
+    initArrayMember* initMembersList;
+    int initMembersCount;
+};
+static LibraryLoadData g_LoadDatas[2];
+void AML_PostLoadLib(int libNum)
+{
+    libNum--;
+
+    const int size = g_LoadDatas[libNum].initMembersCount;
+    for(int i = 0; i < size; ++i)
+    {
+        g_LoadDatas[libNum].initMembersList[i]();
+    }
+}
+
+void* AML_dlopen(const char* lib, int libNum)
 {
     return dlopen(lib, RTLD_NOW);
 }
@@ -314,6 +334,17 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
         return;
     }
 
+    // Preload libs
+    void *lib1 = NULL, *lib2 = NULL;
+    if(libName1 && libName1[0])
+    {
+        lib1 = AML_dlopen(libName1, 1);
+    }
+    if(libName2 && libName2[0])
+    {
+        lib2 = AML_dlopen(libName2, 2);
+    }
+    
     /* Must Have for mods */
     modlist->AddMod(amlmodinfo, 0, "localpath (core)");
     interfaces->Register("AMLInterface", aml);
@@ -541,15 +572,15 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     //if(g_bCrashAML) __builtin_trap(); // Dont let really weird guys to use this...
 
     // TODO: should be loaded in a different thread..?
-    if(libName1 && libName1[0])
+    if(lib1)
     {
-        void* lib1 = AML_dlopen(libName1);
+        AML_PostLoadLib(1);
         auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib1, "JNI_OnLoad");
         if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
     }
-    if(libName2 && libName2[0])
+    if(lib2)
     {
-        void* lib2 = AML_dlopen(libName2);
+        AML_PostLoadLib(2);
         auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib2, "JNI_OnLoad");
         if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
     }
