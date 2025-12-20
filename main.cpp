@@ -52,7 +52,7 @@ jobject appContext;
 JNIEnv* env;
 
 // Main
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.3.1", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.4", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
@@ -283,6 +283,11 @@ jobject GetCurrentContext()
     return g_GlobalContext;
 }
 
+void* AML_dlopen(const char* lib)
+{
+    return dlopen(lib, RTLD_NOW);
+}
+
 void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
 {
     if(g_bAMLStarted)
@@ -290,9 +295,6 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
         logger->Error("Something was trying to boot-up AML again.");
         return;
     }
-
-    void* lib1 = libName1 ? dlopen(libName1, RTLD_NOW) : NULL;
-    void* lib2 = libName2 ? dlopen(libName2, RTLD_NOW) : NULL;
 
     logger->SetTag("AndroidModLoader");
     const char* szTmp; jstring jTmp;
@@ -305,7 +307,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     }
 
     /* Application Context */
-    appContext = GetGlobalContext(env);
+    appContext = env->NewGlobalRef( GetGlobalContext(env) );
     if(appContext == NULL)
     {
         logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
@@ -539,18 +541,39 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     //if(g_bCrashAML) __builtin_trap(); // Dont let really weird guys to use this...
 
     // TODO: should be loaded in a different thread..?
-    if(lib1)
+    if(libName1 && libName1[0])
     {
+        void* lib1 = AML_dlopen(libName1);
         auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib1, "JNI_OnLoad");
         if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
     }
-    if(lib2)
+    if(libName2 && libName2[0])
     {
+        void* lib2 = AML_dlopen(libName2);
         auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib2, "JNI_OnLoad");
         if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
     }
 
     g_bAMLStarted = true;
+}
+
+
+extern "C" JNIEXPORT void JNICALL Java_net_rusjj_amlcore_launchAMLCore(JNIEnv *env, jclass clazz)
+{
+    // Late start
+    StartAMLRightNow();
+}
+extern "C" JNIEXPORT void JNICALL Java_net_rusjj_amlcore_earlyLaunchAMLCore(JNIEnv *env, jclass clazz, jstring lib1, jstring lib2)
+{
+    // Early stage starting
+    // LAUNCHES lib1 AND lib2 BY ITSELF!!!
+    const char* szLib1 = env->GetStringUTFChars(lib1, NULL);
+    const char* szLib2 = env->GetStringUTFChars(lib2, NULL);
+
+    StartAMLRightNow(szLib1, szLib2);
+
+    env->ReleaseStringUTFChars(lib1, szLib1);
+    env->ReleaseStringUTFChars(lib2, szLib2);
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
@@ -559,7 +582,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_pJavaReserved = reserved;
     
     /* For the delayed start-up (later) */
-    StartAMLRightNow();
+    //StartAMLRightNow();
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;
