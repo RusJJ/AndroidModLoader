@@ -33,7 +33,12 @@
     static ModInfo modinfoLocal(#_guid, #_name, #_version, #_author);   \
     ModInfo* modinfo = &modinfoLocal;                                   \
     extern "C" JNIEXPORT ModInfo* __GetModInfo() { return modinfo; }    \
-    IAML* aml = (IAML*)GetInterface("AMLInterface");
+    IAML* aml = NULL;                                                   \
+    struct AMLInitStub {                                                \
+        AMLInitStub() {                                                 \
+            aml = (IAML*)GetInterface("AMLInterface");                  \
+        }                                                               \
+    }; AMLInitStub amlStub __attribute__((init_priority(101))); // Highest init prio
 
 #define MYMODCFG(_guid, _name, _version, _author)                       \
     MYMOD(_guid, _name, _version, _author);                             \
