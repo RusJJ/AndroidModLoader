@@ -54,6 +54,7 @@ JNIEnv* env;
 // Main
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.4", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
+
 static Config cfgLocal("ModLoaderCore");
 Config* cfg = &cfgLocal;
 static CFG icfgLocal; ICFG* icfg = &icfgLocal;
@@ -192,7 +193,7 @@ void LoadMods(const char* path)
             }
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
-            handle = dlopen(dataBuf, RTLD_NOW); // Load it to RAM
+            handle = dlopen(dataBuf, RTLD_NOW); // Load it to the RAM
             modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
             if(modInfoFn != NULL)
             {
@@ -420,7 +421,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
 
     /* AML Config */
-    logger->Info("Reading config...");
+    logger->Info("Reading core config...");
     cfg->Init();
     cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]"); cfg->ClearLast();
     cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg"); cfg->ClearLast();
@@ -435,9 +436,9 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     g_bShowUpdatedToast = cfg->GetBool("ShowUpdaterToast", true);
     g_bShowUpdateFailedToast = cfg->GetBool("ShowUpdaterFailedToast", true);
     g_bEnableFileDownloads = cfg->GetBool("EnableModFileDownloads", true);
-    g_nEnableNews = cfg->GetInt("ShowNewsForFewTimes", 3);
+    g_nEnableNews = clampint(0, 3, cfg->GetInt("ShowNewsForFewTimes", 3));
     g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
-    g_nDownloadTimeout = cfg->GetInt("DownloadTimeout", 2);
+    g_nDownloadTimeout = clampint(1, 5, cfg->GetInt("DownloadTimeout", 2));
 
     g_bCrashAML = cfg->GetBool("CrashAML", false, "DevTools");
     g_bNoMods = cfg->GetBool("DontLoadMods", false, "DevTools");
@@ -449,8 +450,6 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     g_bEHUnwind = cfg->GetBool("EHUnwindCrashLog", false, "DevTools");
     g_bMoreRegsInfo = cfg->GetBool("MoreRegistersInfo", true, "DevTools");
 
-    if(g_nDownloadTimeout < 1) g_nDownloadTimeout = 1;
-    else if(g_nDownloadTimeout > 5) g_nDownloadTimeout = 5;
     cfg->Save();
 
     /* Android version */
@@ -527,8 +526,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     /* Load news first! */
     if(g_nEnableNews > 0)
     {
-        char newsBuf[512]; memset(newsBuf, 0, sizeof(newsBuf));
-        
+        char newsBuf[512] { 0 };
         if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", newsBuf, sizeof(newsBuf)) && newsBuf[0])
         {
             if(strncmp(g_pLastNewsId->GetString(), newsBuf, 16) != 0)
@@ -538,7 +536,8 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
                     aml->ShowToast(true, newsBuf);
                 }
 
-                newsBuf[16] = 0;
+                newsBuf[16] = 'E';
+                newsBuf[17] = 0;
                 g_pLastNewsId->SetString(newsBuf);
                 cfg->Save();
             }
@@ -613,7 +612,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_pJavaReserved = reserved;
     
     /* For the delayed start-up (later) */
-    //StartAMLRightNow();
+    StartAMLRightNow(); // Temporarily do it just like before!
     
     /* Return the value it needs */
     return JNI_VERSION_1_6;
@@ -622,6 +621,6 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
 {
     /* Not sure if it'll work... */
-    /* It worked once, lol */
+    /* It worked once in my tests, lol */
     modlist->ProcessUnloading();
 }
