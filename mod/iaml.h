@@ -7,9 +7,12 @@
 // #endif
 #define IAML_VER 01030000
 
+#include <stdint.h>
+
 #include "interface.h"
 #include <jni.h>
-#include <stdint.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 
 // Because the name was changed to be more understandable
 #define PlaceB PlaceJMP
@@ -168,7 +171,7 @@ public:
     virtual bool        CopyFile(const char* file, const char* dest);
     // Gloss things
   #ifdef AML32
-    virtual void        RedirectReg(...);
+    virtual void        RedirectReg(...); // Silent.
   #else
     virtual void        RedirectReg(uintptr_t addr, uintptr_t to, bool doShortHook = false, GlossRegisters::e_reg targetReg = GlossRegisters::e_reg::X16); // Move directly to "to" from "addr" with the same stack and registers (X16 is the same as "Redirect")
   #endif  
@@ -192,7 +195,15 @@ public:
 
     /* AML 1.4.0 */
     virtual const char* GetNativeLibsPath(); // /data/app/*apk-unique-folder*/lib/arm*/(here)
-    virtual bool        PushToJavaUIThread(void (*fn)(void*), void* data);
+    virtual bool        PushToJavaUIThread(void (*fn)(void*), void* data = NULL);
+    virtual AAssetManager* GetAssetManager();
+    virtual void*       OpenAsset(const char* path, int mode = AASSET_MODE_BUFFER);
+    virtual void        CloseAsset(void* asset); // Preferred way might be to DIY
+    virtual size_t      GetAssetSize(void* asset);
+    virtual const void* GetAssetBuffer(void* asset);
+    virtual void        ReadAsset(void* asset, void* buf, size_t count);
+    virtual jobject     InjectSmaliDEX(const uint8_t* dexBytes, size_t dexSize, const char* classToInit); // returns instantiated class
+    virtual jobject     GetInjectedSmaliDEX(const char* className);
 
 
 

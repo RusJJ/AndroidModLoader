@@ -50,8 +50,9 @@ char g_szInternalStoragePath[256]{0},
 const char* g_szDataDir;
 char g_szUserAgent[256]{0};
 
-jobject appContext;
-JNIEnv* env;
+jobject appContext = NULL;
+JNIEnv* g_env = NULL;
+std::unordered_map<std::string, jobject> g_InjectedInstances;
 
 // Main
 static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.4", "RusJJ aka [-=KILL MAN=-]");
@@ -278,13 +279,13 @@ JNIEnv* GetCurrentJNI()
 }
 
 // https://stackoverflow.com/questions/46869901/how-to-get-the-android-context-instance-when-calling-jni-method
-jobject g_GlobalContext = 0;
+jobject g_GlobalContext = NULL;
 jobject GetCurrentContext()
 {
     if(g_GlobalContext) return g_GlobalContext;
 
     JNIEnv* env = GetCurrentJNI();
-    if(!env) return 0;
+    if(!env) return NULL;
 
     jclass activityThread = env->FindClass("android/app/ActivityThread");
     jmethodID currentActivityThread = env->GetStaticMethodID(activityThread, "currentActivityThread", "()Landroid/app/ActivityThread;");
@@ -294,6 +295,17 @@ jobject GetCurrentContext()
     g_GlobalContext = env->CallObjectMethod(activityThreadObj, getApplication);
     if(g_GlobalContext) g_GlobalContext = env->NewGlobalRef(g_GlobalContext);
     return g_GlobalContext;
+}
+
+AAssetManager* g_AssetManager = NULL;
+AAssetManager* GetCurrentAssetManager()
+{
+    if(g_AssetManager) return g_AssetManager;
+
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return NULL;
+    
+    return ( g_AssetManager = GetAssetManager(env) );
 }
 
 struct LibraryLoadData
@@ -333,14 +345,14 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     const char* szTmp; jstring jTmp;
 
     /* JNI Environment */
-    if (g_pJavaVM->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
+    if (g_pJavaVM->GetEnv(reinterpret_cast<void**>(&g_env), JNI_VERSION_1_6) != JNI_OK)
     {
         logger->Error("Cannot get JNI Environment!");
         return;
     }
 
     /* Application Context */
-    appContext = env->NewGlobalRef( GetGlobalContext(env) );
+    appContext = g_env->NewGlobalRef( ::GetGlobalContext(g_env) );
     if(appContext == NULL)
     {
         logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
@@ -365,34 +377,34 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     InitCURL();
 
     /* Permissions! We really need them for configs! */
-    /*if(!HasPermissionGranted(env, appContext, "READ_EXTERNAL_STORAGE") ||
-       !HasPermissionGranted(env, appContext, "WRITE_EXTERNAL_STORAGE"))
+    /*if(!HasPermissionGranted(g_env, appContext, "READ_EXTERNAL_STORAGE") ||
+       !HasPermissionGranted(g_env, appContext, "WRITE_EXTERNAL_STORAGE"))
     {
         // Instead of appContext should be !!!ACTIVITY!!! <- Hard to get without SMALI-Inject (just a smali hand-rewritten, lol)
-        RequestPermissions(env, appContext);
+        RequestPermissions(g_env, appContext);
     }*/
 
     /* Internal Storage */
-    jTmp = GetAbsolutePath(env, GetStorageDir(env));
-    szTmp = env->GetStringUTFChars(jTmp, NULL);
+    jTmp = GetAbsolutePath(g_env, GetStorageDir(g_env));
+    szTmp = g_env->GetStringUTFChars(jTmp, NULL);
     snprintf(g_szInternalStoragePath, sizeof(g_szInternalStoragePath), "%s", szTmp);
-    env->ReleaseStringUTFChars(jTmp, szTmp);
+    g_env->ReleaseStringUTFChars(jTmp, szTmp);
 
     /* Package Name */
     char i = 0;
-    jTmp = GetPackageName(env, appContext);
-    szTmp = env->GetStringUTFChars(jTmp, NULL);
+    jTmp = GetPackageName(g_env, appContext);
+    szTmp = g_env->GetStringUTFChars(jTmp, NULL);
     while(szTmp[i] != 0 && i < sizeof(g_szAppName)-1)
     {
         g_szAppName[i] = tolower(szTmp[i]);
         ++i;
     } g_szAppName[i] = 0;
-    env->ReleaseStringUTFChars(jTmp, szTmp);
+    g_env->ReleaseStringUTFChars(jTmp, szTmp);
     logger->Info("Determined app info: %s", g_szAppName);
 
   #ifdef FASTMAN92_CODE
     /* Fastman92 Part */
-    bAML_HasFastmanModified = GetExternalFilesDir_FLA(env, appContext, g_szFastman92Android, sizeof(g_szFastman92Android));
+    bAML_HasFastmanModified = GetExternalFilesDir_FLA(g_env, appContext, g_szFastman92Android, sizeof(g_szFastman92Android));
     __pathback(g_szFastman92Android);
 
     // Android/data/... dir
@@ -414,7 +426,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     snprintf(g_szAndroidDataRootDir, sizeof(g_szAndroidDataRootDir), "%s/Android/data/%s/", g_szInternalStoragePath, g_szAppName);
     DIR* dir = opendir(g_szAndroidDataRootDir);
     if(dir != NULL) closedir(dir);
-    else GetExternalFilesDir(env, appContext);
+    else GetExternalFilesDir(g_env, appContext);
 
     /* Create "mods" folder in /Android/data/.../ */
     snprintf(g_szModsDir, sizeof(g_szModsDir), "%s/Android/data/%s/mods/", g_szInternalStoragePath, g_szAppName);
@@ -430,7 +442,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
   #endif
 
     /* root/data/data Folder */
-    g_szDataDir = env->GetStringUTFChars(GetAbsolutePath(env, GetFilesDir(env, appContext)), NULL);
+    g_szDataDir = g_env->GetStringUTFChars(GetAbsolutePath(g_env, GetFilesDir(g_env, appContext)), NULL);
 
     /* AML Config */
     logger->Info("Reading core config...");
@@ -478,9 +490,9 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
         }
         else
         {
-            jclass versionClass = env->FindClass("android/os/Build$VERSION");
-            jfieldID sdkIntFieldID = env->GetStaticFieldID(versionClass, "SDK_INT", "I");
-            g_nAndroidSDKVersion = env->GetStaticIntField(versionClass, sdkIntFieldID);
+            jclass versionClass = g_env->FindClass("android/os/Build$VERSION");
+            jfieldID sdkIntFieldID = g_env->GetStaticFieldID(versionClass, "SDK_INT", "I");
+            g_nAndroidSDKVersion = g_env->GetStaticIntField(versionClass, sdkIntFieldID);
         }
     }
 

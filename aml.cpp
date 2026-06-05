@@ -30,8 +30,10 @@ extern CURL* curl;
 extern int g_nDownloadTimeout;
 
 extern JavaVM *g_pJavaVM;
+extern jobject appContext;
 JNIEnv* GetCurrentJNI();
 jobject GetCurrentContext();
+AAssetManager* GetCurrentAssetManager();
 bool PushToJavaUIThread(void (*fn)(void*), void* data);
 
 inline bool HasFakeAppName()
@@ -626,7 +628,10 @@ const char* AML::GetNativeLibsPath()
 {
     if(g_szNativeLibPath[0] == 0)
     {
-        jstring jTmp = GetNativeLibDir(GetCurrentJNI());
+        JNIEnv* env = GetCurrentJNI();
+        if(!env) return "";
+
+        jstring jTmp = GetNativeLibDir(env);
         const char* szTmp = env->GetStringUTFChars(jTmp, NULL);
         snprintf(g_szNativeLibPath, sizeof(g_szNativeLibPath), "%s", szTmp);
         env->ReleaseStringUTFChars(jTmp, szTmp);
@@ -638,6 +643,52 @@ bool AML::PushToJavaUIThread(void (*fn)(void*), void* data)
 {
     return ::PushToJavaUIThread(fn, data);
 }
+
+AAssetManager* AML::GetAssetManager()
+{
+    return ::GetCurrentAssetManager();
+}
+
+void* AML::OpenAsset(const char* path, int mode)
+{
+    return AAssetManager_open(::GetCurrentAssetManager(), path, mode);
+}
+
+void AML::CloseAsset(void* asset)
+{
+    if(asset) AAsset_close((AAsset*)asset);
+}
+
+size_t AML::GetAssetSize(void* asset)
+{
+    if(!asset) return 0;
+    return AAsset_getLength((AAsset*)asset);
+}
+
+const void* AML::GetAssetBuffer(void* asset)
+{
+    if(!asset) return NULL;
+    return AAsset_getBuffer((AAsset*)asset);
+}
+
+void AML::ReadAsset(void* asset, void* buf, size_t count)
+{
+    if(!asset || !buf || count < 1) return;
+    AAsset_read((AAsset*)asset, buf, count);
+}
+
+jobject AML::InjectSmaliDEX(const uint8_t* dexBytes, size_t dexSize, const char* classToInit)
+{
+    return ::InjectSmaliDEX(GetCurrentJNI(), dexBytes, dexSize, classToInit);
+}
+
+jobject AML::GetInjectedSmaliDEX(const char* className)
+{
+    auto it = g_InjectedInstances.find(className);
+    if(it != g_InjectedInstances.end()) return it->second;
+    return NULL;
+}
+
 
 
 static AML amlLocal;

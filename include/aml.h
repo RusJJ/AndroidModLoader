@@ -100,6 +100,14 @@ public:
     /* AML 1.4.0 */
     const char* GetNativeLibsPath();
     bool        PushToJavaUIThread(void (*fn)(void*), void* data);
+    AAssetManager* GetAssetManager();
+    void*       OpenAsset(const char* path, int mode = AASSET_MODE_BUFFER);
+    void        CloseAsset(void* asset);
+    size_t      GetAssetSize(void* asset);
+    const void* GetAssetBuffer(void* asset);
+    void        ReadAsset(void* asset, void* buf, size_t count);
+    jobject     InjectSmaliDEX(const uint8_t* dexBytes, size_t dexSize, const char* classToInit);
+    jobject     GetInjectedSmaliDEX(const char* className);
 };
 
 extern char g_szAMLFeatures[2048];

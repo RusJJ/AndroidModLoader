@@ -1,6 +1,13 @@
 #include <jni.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
+#include <unordered_map>
 
 extern JavaVM *g_pJavaVM;
+
+JNIEnv* GetCurrentJNI();
+jobject GetCurrentContext();
+extern std::unordered_map<std::string, jobject> g_InjectedInstances;
 
 inline jobject GetGlobalContext(JNIEnv *env)
 {
@@ -168,10 +175,10 @@ inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, j
 
 inline jstring GetNativeLibDir(JNIEnv* env)
 {
-    jclass contextClass = env->GetObjectClass( ::GetGlobalContext(env) );
+    jclass contextClass = env->GetObjectClass(::GetCurrentContext());
 
     jmethodID getAppInfoId = env->GetMethodID(contextClass, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
-    jobject appInfo = env->CallObjectMethod(::GetGlobalContext(env), getAppInfoId);
+    jobject appInfo = env->CallObjectMethod(::GetCurrentContext(), getAppInfoId);
 
     jclass appInfoClass = env->GetObjectClass(appInfo);
     jfieldID nativeLibDirField = env->GetFieldID(appInfoClass, "nativeLibraryDir", "Ljava/lang/String;");
@@ -184,4 +191,142 @@ inline jstring GetNativeLibDir(JNIEnv* env)
     if (env->ExceptionCheck()) env->ExceptionClear();
 
     return nativeLibDir;
+}
+
+inline AAssetManager* GetAssetManager(JNIEnv* env)
+{
+    jclass contextClass = env->GetObjectClass(::GetCurrentContext());
+    jmethodID getAssetsMethod = env->GetMethodID(contextClass, "getAssets", "()Landroid/content/res/AssetManager;");
+    
+    jobject javaAssetManager = env->CallObjectMethod(::GetCurrentContext(), getAssetsMethod);
+    
+    if (env->ExceptionCheck()) env->ExceptionClear();
+
+    return AAssetManager_fromJava(env, javaAssetManager);
+}
+
+inline jobject LoadSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSize)
+{
+    static int dexCount = 0;
+    
+    jobject context = ::GetCurrentContext();
+    if (!context) return NULL;
+
+    jclass contextClass = env->GetObjectClass(context);
+
+    jmethodID getClassLoaderMethod = env->GetMethodID(contextClass, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    jobject appClassLoader = env->CallObjectMethod(context, getClassLoaderMethod);
+    if (!appClassLoader) return NULL;
+
+    jmethodID getCodeCacheDirMethod = env->GetMethodID(contextClass, "getCodeCacheDir", "()Ljava/io/File;");
+    jobject fileObj = env->CallObjectMethod(context, getCodeCacheDirMethod);
+    if (!fileObj) return NULL;
+
+    jclass fileClass = env->GetObjectClass(fileObj);
+    jmethodID getPathMethod = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
+    jstring pathStr = (jstring)env->CallObjectMethod(fileObj, getPathMethod);
+    
+    const char* nativePath = env->GetStringUTFChars(pathStr, NULL);
+    std::string cacheDir = nativePath;
+    std::string dexFilePath = cacheDir + "/amlInject_" + std::to_string(++dexCount) + ".dex";
+    env->ReleaseStringUTFChars(pathStr, nativePath);
+
+    FILE* fp = fopen(dexFilePath.c_str(), "wb");
+    if (!fp) return NULL;
+    fwrite(dexBytes, 1, dexSize, fp);
+    fclose(fp);
+
+    jclass dexLoaderClass = env->FindClass("dalvik/system/DexClassLoader");
+    jmethodID dexLoaderCtor = env->GetMethodID(dexLoaderClass, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V");
+    
+    jstring dexPathJStr = env->NewStringUTF(dexFilePath.c_str());
+    jstring optPathJStr = env->NewStringUTF(cacheDir.c_str());
+    
+    jobject dexLoader = env->NewObject(dexLoaderClass, dexLoaderCtor, dexPathJStr, optPathJStr, NULL, appClassLoader);
+
+    env->DeleteLocalRef(contextClass);
+    env->DeleteLocalRef(appClassLoader);
+    env->DeleteLocalRef(fileObj);
+    env->DeleteLocalRef(fileClass);
+    env->DeleteLocalRef(pathStr);
+    env->DeleteLocalRef(dexLoaderClass);
+    env->DeleteLocalRef(dexPathJStr);
+    env->DeleteLocalRef(optPathJStr);
+
+    return dexLoader;
+}
+
+inline jobject InjectSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSize, const char* classToInit)
+{
+    if(!env || !dexBytes || dexSize < 1 || !classToInit) return NULL;
+
+    static int dexCount = 0;
+    
+    jobject context = ::GetCurrentContext();
+    if (!context) return NULL;
+
+    jclass contextClass = env->GetObjectClass(context);
+
+    jmethodID getClassLoaderMethod = env->GetMethodID(contextClass, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    jobject appClassLoader = env->CallObjectMethod(context, getClassLoaderMethod);
+    if (!appClassLoader) return NULL;
+
+    jmethodID getCodeCacheDirMethod = env->GetMethodID(contextClass, "getCodeCacheDir", "()Ljava/io/File;");
+    jobject fileObj = env->CallObjectMethod(context, getCodeCacheDirMethod);
+    if (!fileObj) return NULL;
+
+    jclass fileClass = env->GetObjectClass(fileObj);
+    jmethodID getPathMethod = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
+    jstring pathStr = (jstring)env->CallObjectMethod(fileObj, getPathMethod);
+    
+    const char* nativePath = env->GetStringUTFChars(pathStr, NULL);
+    std::string cacheDir = nativePath;
+    std::string dexFilePath = cacheDir + "/amlInject_" + std::to_string(++dexCount) + ".dex";
+    env->ReleaseStringUTFChars(pathStr, nativePath);
+
+    FILE* fp = fopen(dexFilePath.c_str(), "wb");
+    if (!fp) return NULL;
+    fwrite(dexBytes, 1, dexSize, fp);
+    fclose(fp);
+
+    jclass dexLoaderClass = env->FindClass("dalvik/system/DexClassLoader");
+    jmethodID dexLoaderCtor = env->GetMethodID(dexLoaderClass, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V");
+    
+    jstring dexPathJStr = env->NewStringUTF(dexFilePath.c_str());
+    jstring optPathJStr = env->NewStringUTF(cacheDir.c_str());
+    
+    jobject dexLoader = env->NewObject(dexLoaderClass, dexLoaderCtor, dexPathJStr, optPathJStr, NULL, appClassLoader);
+    jobject instance = NULL;
+
+    if (/*classToInit != NULL*/ dexLoader)
+    {
+        jmethodID loadClassMethod = env->GetMethodID(dexLoaderClass, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+        jstring classNameJStr = env->NewStringUTF(classToInit);
+        
+        jclass loadedClass = (jclass)env->CallObjectMethod(dexLoader, loadClassMethod, classNameJStr);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        else if (loadedClass)
+        {
+            jmethodID classCtor = env->GetMethodID(loadedClass, "<init>", "()V");
+            if (classCtor)
+            {
+                instance = env->NewGlobalRef( env->NewObject(loadedClass, classCtor) );
+                g_InjectedInstances[classToInit] = instance;
+            }
+            env->DeleteLocalRef(loadedClass);
+        }
+        env->DeleteLocalRef(classNameJStr);
+    }
+
+    env->DeleteLocalRef(contextClass);
+    env->DeleteLocalRef(appClassLoader);
+    env->DeleteLocalRef(fileObj);
+    env->DeleteLocalRef(fileClass);
+    env->DeleteLocalRef(pathStr);
+    env->DeleteLocalRef(dexLoaderClass);
+    env->DeleteLocalRef(dexPathJStr);
+    env->DeleteLocalRef(optPathJStr);
+    env->DeleteLocalRef(dexLoader);
+    
+    return instance;
 }
