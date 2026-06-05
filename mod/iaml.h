@@ -190,6 +190,9 @@ public:
     virtual void        CancelVibro();
     virtual float       GetBatteryLevel(); // returns a float from 0.0 to 100.0
 
+    /* AML 1.4.0 */
+    virtual const char* GetNativeLibsPath(); // /data/app/*apk-unique-folder*/lib/arm*/(here)
+
 
     // Inlines (shortcuts for you!)
     inline void         Write(uintptr_t dest, const char* str, size_t size) { Write(dest, (uintptr_t)str, size); } // Inline

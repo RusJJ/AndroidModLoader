@@ -15,7 +15,7 @@
 #include <Gloss.h>
 
 char g_szAMLFeatures[2048] = "AML ARMPATCH HOOK CONFIG INTERFACE GLOSS ";
-extern char g_szAppName[256], g_szFakeAppName[256];
+extern char g_szAppName[256], g_szFakeAppName[256], g_szNativeLibPath[512];
 extern char g_szCfgPath[256];
 extern char g_szAndroidDataDir[256];
 extern char g_szAndroidDataRootDir[256];
@@ -619,6 +619,18 @@ float AML::GetBatteryLevel()
 
     jint level = env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, g_pLevelStr, -1);
     return ((level * 100.0f) / g_fCachedScale);
+}
+
+const char* AML::GetNativeLibsPath()
+{
+    if(g_szNativeLibPath[0] == 0)
+    {
+        jstring jTmp = GetNativeLibDir(GetJNIEnvironment());
+        const char* szTmp = env->GetStringUTFChars(jTmp, NULL);
+        snprintf(g_szNativeLibPath, sizeof(g_szNativeLibPath), "%s", szTmp);
+        env->ReleaseStringUTFChars(jTmp, szTmp);
+    }
+    return g_szNativeLibPath;
 }
 
 

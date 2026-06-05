@@ -36,17 +36,18 @@ bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog = false, g_bNoSPInLog, g_bNoMods
 int g_nEnableNews, g_nDownloadTimeout;
 int g_nAndroidSDKVersion = 0;
 ConfigEntry* g_pLastNewsId;
-char g_szInternalStoragePath[256],
-     g_szAppName[256],
-     g_szFakeAppName[256],
-     g_szModsDir[256],
-     g_szInternalModsDir[256],
-     g_szAndroidDataRootDir[256],
-     g_szAndroidDataDir[256],
-     g_szCfgPath[256],
-     g_szFastman92Android[256];
+char g_szInternalStoragePath[256]{0},
+     g_szAppName[256]{0},
+     g_szFakeAppName[256]{0},
+     g_szNativeLibPath[512]{0},
+     g_szModsDir[256]{0},
+     g_szInternalModsDir[256]{0},
+     g_szAndroidDataRootDir[256]{0},
+     g_szAndroidDataDir[256]{0},
+     g_szCfgPath[256]{0},
+     g_szFastman92Android[256]{0};
 const char* g_szDataDir;
-char g_szUserAgent[256];
+char g_szUserAgent[256]{0};
 
 jobject appContext;
 JNIEnv* env;
@@ -110,25 +111,35 @@ inline bool EndsWithSO(const char* base)
 // P.S. Yeah, it is!
 inline bool CopyFileFaster(const char* file, const char* dest)
 {
-    int inFd = open(file, O_RDONLY);
+    int inFd = open(file, O_RDONLY | O_CLOEXEC);
     if(inFd < 0) return false;
     struct stat statBuf;
     fstat(inFd, &statBuf);
-    int outFd = open(dest, O_WRONLY | O_CREAT, statBuf.st_mode);
+    int outFd = open(dest, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, statBuf.st_mode);
     if(outFd < 0)
     {
         close(inFd);
         return false;
     }
-    if(sendfile(outFd, inFd, NULL, statBuf.st_size) < 0)
+
+    off_t bytesLeft = statBuf.st_size;
+    unsigned char errors = 0;
+    while(bytesLeft > 0)
     {
-        close(inFd);
-        close(outFd);
-        return false;
+        ssize_t bytesCopied = sendfile(outFd, inFd, NULL, statBuf.st_size);
+        if(bytesCopied > 0) bytesLeft -= bytesCopied;
+        else if(bytesCopied == 0) break;
+        else
+        {
+            ++errors;
+            if(errors < 5 && (errno == EINTR || errno == EAGAIN) ) continue;
+            break; // Unrecoveable error here.
+        }
     }
+
     close(inFd);
     close(outFd);
-    return true;
+    return (bytesLeft <= 0);
 }
 // Slower version (because it copies the file contents byte-by-byte)
 inline bool CopyFile(const char* file, const char* dest)

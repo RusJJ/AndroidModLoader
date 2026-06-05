@@ -165,3 +165,23 @@ inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, j
 
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
+
+inline jstring GetNativeLibDir(JNIEnv* env)
+{
+    jclass contextClass = env->GetObjectClass( ::GetGlobalContext(env) );
+
+    jmethodID getAppInfoId = env->GetMethodID(contextClass, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
+    jobject appInfo = env->CallObjectMethod(::GetGlobalContext(env), getAppInfoId);
+
+    jclass appInfoClass = env->GetObjectClass(appInfo);
+    jfieldID nativeLibDirField = env->GetFieldID(appInfoClass, "nativeLibraryDir", "Ljava/lang/String;");
+    jstring nativeLibDir = (jstring)env->GetObjectField(appInfo, nativeLibDirField);
+
+    env->DeleteLocalRef(appInfo);
+    env->DeleteLocalRef(appInfoClass);
+    env->DeleteLocalRef(contextClass);
+
+    if (env->ExceptionCheck()) env->ExceptionClear();
+
+    return nativeLibDir;
+}

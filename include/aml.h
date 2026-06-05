@@ -97,6 +97,8 @@ public:
     void        DoVibro(jlong* pattern, int patternItems);
     void        CancelVibro();
     float       GetBatteryLevel();
+    /* AML 1.4.0 */
+    const char* GetNativeLibsPath();
 };
 
 extern char g_szAMLFeatures[2048];
