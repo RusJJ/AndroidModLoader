@@ -32,6 +32,7 @@ extern int g_nDownloadTimeout;
 extern JavaVM *g_pJavaVM;
 JNIEnv* GetCurrentJNI();
 jobject GetCurrentContext();
+bool PushToJavaUIThread(void (*fn)(void*), void* data);
 
 inline bool HasFakeAppName()
 {
@@ -625,12 +626,17 @@ const char* AML::GetNativeLibsPath()
 {
     if(g_szNativeLibPath[0] == 0)
     {
-        jstring jTmp = GetNativeLibDir(GetJNIEnvironment());
+        jstring jTmp = GetNativeLibDir(GetCurrentJNI());
         const char* szTmp = env->GetStringUTFChars(jTmp, NULL);
         snprintf(g_szNativeLibPath, sizeof(g_szNativeLibPath), "%s", szTmp);
         env->ReleaseStringUTFChars(jTmp, szTmp);
     }
     return g_szNativeLibPath;
+}
+
+bool AML::PushToJavaUIThread(void (*fn)(void*), void* data)
+{
+    return ::PushToJavaUIThread(fn, data);
 }
 
 

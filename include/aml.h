@@ -99,6 +99,7 @@ public:
     float       GetBatteryLevel();
     /* AML 1.4.0 */
     const char* GetNativeLibsPath();
+    bool        PushToJavaUIThread(void (*fn)(void*), void* data);
 };
 
 extern char g_szAMLFeatures[2048];

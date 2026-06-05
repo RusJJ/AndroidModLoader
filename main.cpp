@@ -8,6 +8,7 @@
 #include <sys/stat.h> // mkdir
 #include <sys/sendfile.h> // sendfile
 #include <fcntl.h> // "open" flags
+#include <android/looper.h> // ALooper
 #include <dlfcn.h>
 
 #include <aml.h>
@@ -617,10 +618,42 @@ extern "C" JNIEXPORT void JNICALL Java_net_rusjj_amlcore_earlyLaunchAMLCore(JNIE
     env->ReleaseStringUTFChars(lib2, szLib2);
 }
 
+static ALooper* g_pJavaUILooper = NULL;
+static int g_aJavaUIPipes[2];
+struct JavaUIThreadTask { void (*fn)(void*); void* data; };
+static int JavaUIThreadLoop(int fd, int events, void* data)
+{
+    JavaUIThreadTask task;
+    if(read(fd, &task, sizeof(JavaUIThreadTask)) == sizeof(JavaUIThreadTask) && task.fn != NULL)
+    {
+        task.fn(task.data);
+    }
+    return 1;
+}
+static void InitJavaUIThreadLooper()
+{
+    g_pJavaUILooper = ALooper_forThread();
+    if(g_pJavaUILooper)
+    {
+        ALooper_acquire(g_pJavaUILooper);
+        pipe(g_aJavaUIPipes);
+        ALooper_addFd(g_pJavaUILooper, g_aJavaUIPipes[0], ALOOPER_POLL_CALLBACK, ALOOPER_EVENT_INPUT, JavaUIThreadLoop, NULL);
+    }
+}
+bool PushToJavaUIThread(void (*fn)(void*), void* data)
+{
+    if(!g_pJavaUILooper || !fn) return false;
+
+    JavaUIThreadTask task = { fn, data };
+    return ( write(g_aJavaUIPipes[1], &task, sizeof(task)) == sizeof(task) );
+}
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
     g_pJavaVM = vm;
     g_pJavaReserved = reserved;
+
+    // Some important stuff to do first
+    InitJavaUIThreadLooper();
     
     /* For the delayed start-up (later) */
     StartAMLRightNow(); // Temporarily do it just like before!

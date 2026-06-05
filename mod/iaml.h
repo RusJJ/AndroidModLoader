@@ -192,6 +192,8 @@ public:
 
     /* AML 1.4.0 */
     virtual const char* GetNativeLibsPath(); // /data/app/*apk-unique-folder*/lib/arm*/(here)
+    virtual bool        PushToJavaUIThread(void (*fn)(void*), void* data);
+
 
 
     // Inlines (shortcuts for you!)
@@ -203,6 +205,10 @@ public:
     inline void         WriteFloat(uintptr_t dest, float v) { float vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
     inline void         WriteAddr(uintptr_t dest, uintptr_t addr) { uintptr_t addrPtr = addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
     inline void         WriteAddr(uintptr_t dest, void* addr) { uintptr_t addrPtr = (uintptr_t)addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
+    inline uint8_t      Read8(uintptr_t src) { uint8_t v; Read(src, (uintptr_t)&v, 1); return v; } // Inline
+    inline uint16_t     Read16(uintptr_t src) { uint16_t v; Read(src, (uintptr_t)&v, 2); return v; } // Inline
+    inline uint32_t     Read32(uintptr_t src) { uint32_t v; Read(src, (uintptr_t)&v, 4); return v; } // Inline
+    inline float        ReadFloat(uintptr_t src) { float v; Read(src, (uintptr_t)&v, 4); return v; } // Inline
     // Can be used with HookVtableFunc to not to instantiate vtable for 1000 times!
     inline void**       GetVtable(void* ptr) { return *(void***)ptr; }
     inline void         SetVtable(void* ptr, void** vtable) { *(void***)ptr = vtable; }
