@@ -46,7 +46,8 @@ char g_szInternalStoragePath[256]{0},
      g_szAndroidDataRootDir[256]{0},
      g_szAndroidDataDir[256]{0},
      g_szCfgPath[256]{0},
-     g_szFastman92Android[256]{0};
+     g_szFastman92Android[256]{0},
+     g_szNewsString[512]{0};
 const char* g_szDataDir;
 char g_szUserAgent[256]{0};
 
@@ -600,9 +601,10 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     /* Load news first! */
     if(g_nEnableNews > 0)
     {
-        char newsBuf[512] { 0 };
-        if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", newsBuf, sizeof(newsBuf)) && newsBuf[0])
+        char newsBuf[24]{0};
+        if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", g_szNewsString, sizeof(g_szNewsString)) && g_szNewsString[0])
         {
+            memcpy(newsBuf, g_szNewsString, 16);
             if(strncmp(g_pLastNewsId->GetString(), newsBuf, 16) != 0)
             {
                 for(int i = 0; i < g_nEnableNews; ++i)

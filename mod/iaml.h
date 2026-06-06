@@ -215,7 +215,7 @@ public:
     virtual uintptr_t   ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> offsets);
     virtual std::vector<uintptr_t> FindAllPatterns(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
     virtual bool        ComparePattern(uintptr_t addr, const char* pattern);
-    virtual void        ShowDialog(const char* title, const char* message, const char* buttonText = NULL);
+    virtual void        ShowDialog(const char* title, const char* message, const char* buttonText = NULL, int styleResource = 0); // style is INT value of android.R.style.*
     virtual bool        FileExists(const char* path);
     virtual size_t      FileSize(const char* path);
     virtual bool        IsDirectory(const char* path);
@@ -223,6 +223,8 @@ public:
     virtual bool        RemoveDir(const char* path, bool recursive = false);
     virtual bool        CreateDirRecursive(const char* path);
     virtual jobject     GetCurrentActivity();
+    virtual void        GetNewsString(char* buf, size_t len);
+    virtual int         GetAndroidSystemResID(const char* innerClass, const char* fieldName); // "style", "Theme_DeviceDefault_Alert"
 
 
 

@@ -23,6 +23,7 @@ extern char g_szAndroidDataDir[256];
 extern char g_szAndroidDataRootDir[256];
 extern char g_szInternalStoragePath[256];
 extern char g_szInternalModsDir[256];
+extern char g_szNewsString[512];
 extern char g_szUserAgent[256];
 extern const char* g_szDataDir;
 extern jobject appContext;
@@ -824,7 +825,7 @@ bool AML::ComparePattern(uintptr_t addr, const char* pattern)
     return ::ComparePattern((uint8_t*)addr, parsedPattern);
 }
 
-void AML::ShowDialog(const char* title, const char* message, const char* buttonText)
+void AML::ShowDialog(const char* title, const char* message, const char* buttonText, int styleResource)
 {
     if (!title || !message) return;
 
@@ -837,7 +838,15 @@ void AML::ShowDialog(const char* title, const char* message, const char* buttonT
     jclass builderClass = env->FindClass("android/app/AlertDialog$Builder");
     if(!builderClass) return;
 
-    jmethodID builderCtor = env->GetMethodID(builderClass, "<init>", "(Landroid/content/Context;)V");
+    jmethodID builderCtor;
+    if(styleResource == 0)
+    {
+        builderCtor = env->GetMethodID(builderClass, "<init>", "(Landroid/content/Context;)V");
+    }
+    else
+    {
+        builderCtor = env->GetMethodID(builderClass, "<init>", "(Landroid/content/Context;I)V");
+    }
     jmethodID setTitleMethod = env->GetMethodID(builderClass, "setTitle", "(Ljava/lang/CharSequence;)Landroid/app/AlertDialog$Builder;");
     jmethodID setMessageMethod = env->GetMethodID(builderClass, "setMessage", "(Ljava/lang/CharSequence;)Landroid/app/AlertDialog$Builder;");
     jmethodID setPosBtnMethod = env->GetMethodID(builderClass, "setPositiveButton", "(Ljava/lang/CharSequence;Landroid/content/DialogInterface$OnClickListener;)Landroid/app/AlertDialog$Builder;");
@@ -854,7 +863,16 @@ void AML::ShowDialog(const char* title, const char* message, const char* buttonT
     const char* btnLabel = buttonText ? buttonText : "OK";
     jstring btnStr = env->NewStringUTF(btnLabel);
 
-    jobject builderObj = env->NewObject(builderClass, builderCtor, activityContext);
+    jobject builderObj;
+    if(styleResource == 0)
+    {
+        builderObj = env->NewObject(builderClass, builderCtor, activityContext);
+    }
+    else
+    {
+        builderObj = env->NewObject(builderClass, builderCtor, activityContext, styleResource);
+    }
+
     if(builderObj)
     {
         env->CallObjectMethod(builderObj, setTitleMethod, titleStr);
@@ -950,6 +968,41 @@ bool AML::CreateDirRecursive(const char* path)
 jobject AML::GetCurrentActivity()
 {
     return ::GetCurrentActivity();
+}
+
+void AML::GetNewsString(char* buf, size_t len)
+{
+    strxcpy(buf, g_szNewsString, len);
+}
+
+int AML::GetAndroidSystemResID(const char* innerClass, const char* fieldName)
+{
+    JNIEnv* env = GetJNIEnvironment();
+    if(!env || !innerClass || !fieldName) return 0;
+
+    char classPath[128];
+    snprintf(classPath, sizeof(classPath), "android/R$%s", innerClass);
+
+    jclass rClass = env->FindClass(classPath);
+    if(!rClass)
+    {
+        env->ExceptionClear();
+        return 0;
+    }
+
+    int resId = 0;
+    jfieldID fieldId = env->GetStaticFieldID(rClass, fieldName, "I");
+    if(fieldId)
+    {
+        resId = env->GetStaticIntField(rClass, fieldId);
+    }
+    else
+    {
+        env->ExceptionClear();
+    }
+
+    env->DeleteLocalRef(rClass);
+    return resId;
 }
 
 
