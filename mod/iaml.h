@@ -214,6 +214,14 @@ public:
     virtual bool        FreeMemory(uintptr_t pointer);
     virtual uintptr_t   ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> offsets);
     virtual std::vector<uintptr_t> FindAllPatterns(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
+    virtual bool        ComparePattern(uintptr_t addr, const char* pattern);
+    virtual void        ShowNativeDialog(const char* title, const char* message, const char* buttonText = NULL);
+    virtual bool        FileExists(const char* path);
+    virtual size_t      FileSize(const char* path);
+    virtual bool        IsDirectory(const char* path);
+    virtual bool        RemoveFile(const char* path);
+    virtual bool        RemoveDir(const char* path, bool recursive = false);
+    virtual bool        CreateDirRecursive(const char* path);
 
 
 
@@ -237,6 +245,7 @@ public:
     inline uint16_t     Read16(uintptr_t src) { uint16_t v; Read(src, (uintptr_t)&v, 2); return v; } // Inline
     inline uint32_t     Read32(uintptr_t src) { uint32_t v; Read(src, (uintptr_t)&v, 4); return v; } // Inline
     inline float        ReadFloat(uintptr_t src) { float v; Read(src, (uintptr_t)&v, 4); return v; } // Inline
+    inline bool         IsFile(const char* path) { return !IsDirectory(path); }
     // Can be used with HookVtableFunc to not to instantiate vtable for 1000 times!
     inline void**       GetVtable(void* ptr) { return *(void***)ptr; }
     inline void         SetVtable(void* ptr, void** vtable) { *(void***)ptr = vtable; }

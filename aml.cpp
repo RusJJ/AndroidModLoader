@@ -197,7 +197,7 @@ uintptr_t AML::PatternScan(const char* pattern, uintptr_t libStart, uintptr_t sc
     for(size_t i = 0; i <= searchLength; ++i)
     {
         const uint8_t* currentAddress = scanStart + i;
-        if(ComparePattern(currentAddress, parsedPattern))
+        if(::ComparePattern(currentAddress, parsedPattern))
         {
             return (uintptr_t)currentAddress;
         }
@@ -805,12 +805,145 @@ std::vector<uintptr_t> AML::FindAllPatterns(const char* pattern, uintptr_t libSt
     for(size_t i = 0; i <= searchLength; ++i)
     {
         const uint8_t* currentAddress = scanStart + i;
-        if(ComparePattern(currentAddress, parsedPattern))
+        if(::ComparePattern(currentAddress, parsedPattern))
         {
             foundAddresses.push_back(reinterpret_cast<uintptr_t>(currentAddress));
         }
     }
     return foundAddresses;
+}
+
+bool AML::ComparePattern(uintptr_t addr, const char* pattern)
+{
+    if(!addr || !pattern || !pattern[0]) return false;
+
+    std::vector<int> parsedPattern = ParsePattern(pattern);
+    if(parsedPattern.empty()) return false;
+
+    return ::ComparePattern((uint8_t*)addr, parsedPattern);
+}
+
+void AML::ShowDialog(const char* title, const char* message, const char* buttonText)
+{
+    if (!title || !message) return;
+
+    JNIEnv* env = GetJNIEnvironment();
+    if(!env) return;
+    
+    jobject activityContext = ::GetCurrentContext();
+    if(!activityContext) return;
+
+    jclass builderClass = env->FindClass("android/app/AlertDialog$Builder");
+    if(!builderClass) return;
+
+    jmethodID builderCtor = env->GetMethodID(builderClass, "<init>", "(Landroid/content/Context;)V");
+    jmethodID setTitleMethod = env->GetMethodID(builderClass, "setTitle", "(Ljava/lang/CharSequence;)Landroid/app/AlertDialog$Builder;");
+    jmethodID setMessageMethod = env->GetMethodID(builderClass, "setMessage", "(Ljava/lang/CharSequence;)Landroid/app/AlertDialog$Builder;");
+    jmethodID setPosBtnMethod = env->GetMethodID(builderClass, "setPositiveButton", "(Ljava/lang/CharSequence;Landroid/content/DialogInterface$OnClickListener;)Landroid/app/AlertDialog$Builder;");
+    jmethodID showMethod = env->GetMethodID(builderClass, "show", "()Landroid/app/AlertDialog;");
+
+    if(!builderCtor || !setTitleMethod || !setMessageMethod || !setPosBtnMethod || !showMethod)
+    {
+        env->DeleteLocalRef(builderClass);
+        return;
+    }
+
+    jstring titleStr = env->NewStringUTF(title);
+    jstring messageStr = env->NewStringUTF(message);
+    const char* btnLabel = buttonText ? buttonText : "OK";
+    jstring btnStr = env->NewStringUTF(btnLabel);
+
+    jobject builderObj = env->NewObject(builderClass, builderCtor, activityContext);
+    if(builderObj)
+    {
+        env->CallObjectMethod(builderObj, setTitleMethod, titleStr);
+        env->CallObjectMethod(builderObj, setMessageMethod, messageStr);
+        env->CallObjectMethod(builderObj, setPosBtnMethod, btnStr, NULL);
+        
+        jobject dialogObj = env->CallObjectMethod(builderObj, showMethod);
+        ifa(dialogObj) env->DeleteLocalRef(dialogObj);
+        env->DeleteLocalRef(builderObj);
+    }
+    env->DeleteLocalRef(titleStr);
+    env->DeleteLocalRef(messageStr);
+    env->DeleteLocalRef(btnStr);
+    env->DeleteLocalRef(builderClass);
+}
+
+bool AML::FileExists(const char* path)
+{
+    if(!path || !path[0]) return false;
+    return (access(path, F_OK) == 0);
+}
+
+size_t AML::FileSize(const char* path)
+{
+    if(!path || !path[0]) return 0;
+
+    struct stat st;
+    if(stat(path, &st) == 0) return st.st_size;
+    return 0;
+}
+
+bool AML::IsDirectory(const char* path)
+{
+    if(!path || !path[0]) return false;
+
+    struct stat st;
+    return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
+}
+
+bool AML::RemoveFile(const char* path)
+{
+    return (unlink(path) == 0);
+}
+
+bool AML::RemoveDir(const char* path, bool recursive)
+{
+    if (!recursive) return (rmdir(path) == 0);
+
+    DIR *dir = opendir(path);
+    if (!dir) return false;
+
+    struct dirent *entry;
+    char fullPath[512];
+
+    while((entry = readdir(dir)) != NULL)
+    {
+        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+
+        snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
+        if(entry->d_type == DT_DIR)
+        {
+            RemoveDir(fullPath, true);
+        }
+        else
+        {
+            unlink(fullPath);
+        }
+    }
+    closedir(dir);
+    return (rmdir(path) == 0);
+}
+
+bool AML::CreateDirRecursive(const char* path)
+{
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "%s", path);
+
+    size_t len = strlen(tmp);
+    if(tmp[len - 1] == '/') tmp[len - 1] = 0;
+
+    for(char *p = tmp + 1; *p; ++p)
+    {
+        if(*p == '/')
+        {
+            *p = 0;
+            mkdir(tmp, 0777);
+            *p = '/';
+        }
+    }
+    return (mkdir(tmp, 0777) == 0 || errno == EEXIST);
 }
 
 

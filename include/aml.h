@@ -113,6 +113,14 @@ public:
     bool        FreeMemory(uintptr_t pointer);
     uintptr_t   ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> offsets);
     std::vector<uintptr_t> FindAllPatterns(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
+    bool        ComparePattern(uintptr_t addr, const char* pattern);
+    void        ShowNativeDialog(const char* title, const char* message, const char* buttonText = NULL);
+    bool        FileExists(const char* path);
+    size_t      FileSize(const char* path);
+    bool        IsDirectory(const char* path);
+    bool        RemoveFile(const char* path);
+    bool        RemoveDir(const char* path, bool recursive = false);
+    bool        CreateDirRecursive(const char* path);
 };
 
 extern char g_szAMLFeatures[2048];
