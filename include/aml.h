@@ -121,6 +121,7 @@ public:
     bool        RemoveFile(const char* path);
     bool        RemoveDir(const char* path, bool recursive = false);
     bool        CreateDirRecursive(const char* path);
+    jobject     GetCurrentActivity();
 };
 
 extern char g_szAMLFeatures[2048];

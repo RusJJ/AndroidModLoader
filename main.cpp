@@ -297,6 +297,56 @@ jobject GetCurrentContext()
     return g_GlobalContext;
 }
 
+jobject g_GlobalActivity = NULL;
+jobject GetCurrentActivity()
+{
+    if(g_GlobalActivity) return g_GlobalActivity;
+
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return NULL;
+
+    jclass activityThreadClass = env->FindClass("android/app/ActivityThread");
+    jmethodID currentActivityThreadMethod = env->GetStaticMethodID(activityThreadClass, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    jobject activityThreadObj = env->CallStaticObjectMethod(activityThreadClass, currentActivityThreadMethod);
+    if(!activityThreadObj) return NULL;
+    
+    jfieldID mActivitiesField = env->GetFieldID(activityThreadClass, "mActivities", "Landroid/util/ArrayMap;");
+    if(!mActivitiesField)
+    {
+        env->ExceptionClear();
+        return NULL;
+    }
+    
+    jobject mActivities = env->GetObjectField(activityThreadObj, mActivitiesField);
+    if(!mActivities) return NULL;
+
+    jclass arrayMapClass = env->GetObjectClass(mActivities);
+    jmethodID isEmptyMethod = env->GetMethodID(arrayMapClass, "isEmpty", "()Z");
+    
+    if(env->CallBooleanMethod(mActivities, isEmptyMethod))
+    {
+        env->DeleteLocalRef(arrayMapClass);
+        env->DeleteLocalRef(mActivities);
+        return NULL;
+    }
+
+    jmethodID valueAtMethod = env->GetMethodID(arrayMapClass, "valueAt", "(I)Ljava/lang/Object;");
+    jobject activityClientRecord = env->CallObjectMethod(mActivities, valueAtMethod, 0);
+    if(!activityClientRecord) return NULL;
+
+    jclass acrClass = env->GetObjectClass(activityClientRecord);
+    jfieldID activityField = env->GetFieldID(acrClass, "activity", "Landroid/app/Activity;");
+    g_GlobalActivity = env->GetObjectField(activityClientRecord, activityField);
+    if(g_GlobalActivity) g_GlobalActivity = env->NewGlobalRef(g_GlobalActivity);
+
+    env->DeleteLocalRef(arrayMapClass);
+    env->DeleteLocalRef(mActivities);
+    env->DeleteLocalRef(activityClientRecord);
+    env->DeleteLocalRef(acrClass);
+
+    return g_GlobalActivity;
+}
+
 AAssetManager* g_AssetManager = NULL;
 AAssetManager* GetCurrentAssetManager()
 {

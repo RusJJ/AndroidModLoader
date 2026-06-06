@@ -222,6 +222,7 @@ public:
     virtual bool        RemoveFile(const char* path);
     virtual bool        RemoveDir(const char* path, bool recursive = false);
     virtual bool        CreateDirRecursive(const char* path);
+    virtual jobject     GetCurrentActivity();
 
 
 

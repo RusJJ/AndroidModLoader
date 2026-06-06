@@ -35,6 +35,7 @@ extern JavaVM *g_pJavaVM;
 extern jobject appContext;
 JNIEnv* GetCurrentJNI();
 jobject GetCurrentContext();
+jobject GetCurrentActivity();
 AAssetManager* GetCurrentAssetManager();
 bool PushToJavaUIThread(void (*fn)(void*), void* data);
 
@@ -830,7 +831,7 @@ void AML::ShowDialog(const char* title, const char* message, const char* buttonT
     JNIEnv* env = GetJNIEnvironment();
     if(!env) return;
     
-    jobject activityContext = ::GetCurrentContext();
+    jobject activityContext = ::GetCurrentActivity();
     if(!activityContext) return;
 
     jclass builderClass = env->FindClass("android/app/AlertDialog$Builder");
@@ -944,6 +945,11 @@ bool AML::CreateDirRecursive(const char* path)
         }
     }
     return (mkdir(tmp, 0777) == 0 || errno == EEXIST);
+}
+
+jobject AML::GetCurrentActivity()
+{
+    return ::GetCurrentActivity();
 }
 
 
