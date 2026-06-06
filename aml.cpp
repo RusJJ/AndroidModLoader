@@ -4,6 +4,8 @@
 #include <vtable_hooker.h>
 #include <modslist.h>
 #include <mls.h>
+#include <unordered_map>
+#include <sstream>
 
 #include <curl/curl.h>
 #define WC_NO_HARDEN // suppress the annoying warning.
@@ -150,14 +152,57 @@ void AML::PlaceBLX(uintptr_t addr, uintptr_t dest)
 #endif
 }
 
+static std::vector<int> ParsePattern(const char* pattern)
+{
+    std::vector<int> bytes;
+    std::stringstream ss(pattern);
+    std::string hex;
+    while(ss >> hex)
+    {
+        if(hex == "?" || hex == "??")
+        {
+            bytes.push_back(-1);
+        }
+        else
+        {
+            bytes.push_back((int)(std::stoul(hex, nullptr, 16)));
+        }
+    }
+    return bytes;
+}
+static bool ComparePattern(const uint8_t* data, const std::vector<int>& parsedPattern)
+{
+    for(size_t i = 0; i < parsedPattern.size(); ++i)
+    {
+        if(parsedPattern[i] != -1 && data[i] != parsedPattern[i]) return false;
+    }
+    return true;
+}
 uintptr_t AML::PatternScan(const char* pattern, const char* soLib)
 {
-    return ARMPatch::GetAddressFromPattern(pattern, soLib);
+    uintptr_t libStart = GetLib(soLib), scanLen = GetLibLength(soLib);
+    return PatternScan(pattern, libStart, scanLen);
 }
 
 uintptr_t AML::PatternScan(const char* pattern, uintptr_t libStart, uintptr_t scanLen)
 {
-    return ARMPatch::GetAddressFromPattern(pattern, libStart, scanLen);
+    std::vector<int> parsedPattern = ParsePattern(pattern);
+    if(parsedPattern.empty()) return 0;
+
+    size_t patternLen = parsedPattern.size();
+    if(scanLen < patternLen) return 0;
+
+    uint8_t* scanStart = (uint8_t*)libStart;
+    size_t searchLength = scanLen - patternLen;
+    for(size_t i = 0; i <= searchLength; ++i)
+    {
+        const uint8_t* currentAddress = scanStart + i;
+        if(ComparePattern(currentAddress, parsedPattern))
+        {
+            return (uintptr_t)currentAddress;
+        }
+    }
+    return 0;
 }
 
 void AML::PatchForThumb(bool forThumb)
@@ -687,6 +732,85 @@ jobject AML::GetInjectedSmaliDEX(const char* className)
     auto it = g_InjectedInstances.find(className);
     if(it != g_InjectedInstances.end()) return it->second;
     return NULL;
+}
+
+void AML::GetDisplaySize(int* width, int* height)
+{
+    JNIEnv* env = GetCurrentJNI();
+    if (!env) return;
+
+    jobject resources = CallJavaMethod<jobject>(::GetCurrentContext(), "getResources", "()Landroid/content/res/Resources;");
+    jobject displayMetrics = CallJavaMethod<jobject>(resources, "getDisplayMetrics", "()Landroid/util/DisplayMetrics;");
+    
+    jclass dmClass = env->GetObjectClass(displayMetrics);
+    if(width)  *width  = env->GetIntField(displayMetrics, env->GetFieldID(dmClass, "widthPixels", "I"));
+    if(height) *height = env->GetIntField(displayMetrics, env->GetFieldID(dmClass, "heightPixels", "I"));
+    
+    env->DeleteLocalRef(dmClass);
+    env->DeleteLocalRef(displayMetrics);
+    env->DeleteLocalRef(resources);
+}
+
+std::unordered_map<uintptr_t, size_t> g_PointerSizesMap;
+uintptr_t AML::AllocateMemory(size_t size, bool executable)
+{
+    int prot = PROT_READ | PROT_WRITE;
+    if(executable) prot |= PROT_EXEC;
+
+    void* allocatedAddr = mmap(NULL, size, prot, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if(allocatedAddr == MAP_FAILED) return 0;
+
+    g_PointerSizesMap[(uintptr_t)allocatedAddr] = size;
+    return (uintptr_t)allocatedAddr;
+}
+
+bool AML::FreeMemory(uintptr_t pointer)
+{
+    auto it = g_PointerSizesMap.find(pointer);
+    if(it != g_PointerSizesMap.end())
+    {
+        munmap((void*)pointer, it->second);
+        return true;
+    }
+    return false;
+}
+
+uintptr_t AML::ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> offsets)
+{
+    // Simplify walls of the code like that:
+    //   int data = *(int*)( *(uintptr_t*)( *(uintptr_t*)player + 0x40 ) + 0x60 )
+    //   Into this: aml->ReadPointerChain((uintptr_t)player, 2, {0x40, 0x60})
+    uintptr_t currentAddr = baseAddr;
+    for(int offset : offsets)
+    {
+        if(currentAddr == 0) return 0;
+        currentAddr = *(uintptr_t*)currentAddr;
+        currentAddr += offset;
+    }
+    return currentAddr;
+}
+
+std::vector<uintptr_t> AML::FindAllPatterns(const char* pattern, uintptr_t libStart, uintptr_t scanLen)
+{
+    std::vector<uintptr_t> foundAddresses;
+
+    std::vector<int> parsedPattern = ParsePattern(pattern);
+    if(parsedPattern.empty()) return foundAddresses;
+
+    size_t patternLen = parsedPattern.size();
+    if(scanLen < patternLen) return foundAddresses;
+
+    uint8_t* scanStart = reinterpret_cast<uint8_t*>(libStart);
+    size_t searchLength = scanLen - patternLen;
+    for(size_t i = 0; i <= searchLength; ++i)
+    {
+        const uint8_t* currentAddress = scanStart + i;
+        if(ComparePattern(currentAddress, parsedPattern))
+        {
+            foundAddresses.push_back(reinterpret_cast<uintptr_t>(currentAddress));
+        }
+    }
+    return foundAddresses;
 }
 
 

@@ -108,6 +108,11 @@ public:
     void        ReadAsset(void* asset, void* buf, size_t count);
     jobject     InjectSmaliDEX(const uint8_t* dexBytes, size_t dexSize, const char* classToInit);
     jobject     GetInjectedSmaliDEX(const char* className);
+    void        GetDisplaySize(int* w = NULL, int* h = NULL);
+    uintptr_t   AllocateMemory(size_t size, bool executable = false);
+    bool        FreeMemory(uintptr_t pointer);
+    uintptr_t   ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> offsets);
+    std::vector<uintptr_t> FindAllPatterns(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
 };
 
 extern char g_szAMLFeatures[2048];
