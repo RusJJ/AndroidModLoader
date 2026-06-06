@@ -861,7 +861,7 @@ void AML::ShowDialog(const char* title, const char* message, const char* buttonT
         env->CallObjectMethod(builderObj, setPosBtnMethod, btnStr, NULL);
         
         jobject dialogObj = env->CallObjectMethod(builderObj, showMethod);
-        ifa(dialogObj) env->DeleteLocalRef(dialogObj);
+        if(dialogObj) env->DeleteLocalRef(dialogObj);
         env->DeleteLocalRef(builderObj);
     }
     env->DeleteLocalRef(titleStr);

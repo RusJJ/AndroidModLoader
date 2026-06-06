@@ -215,7 +215,7 @@ public:
     virtual uintptr_t   ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> offsets);
     virtual std::vector<uintptr_t> FindAllPatterns(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
     virtual bool        ComparePattern(uintptr_t addr, const char* pattern);
-    virtual void        ShowNativeDialog(const char* title, const char* message, const char* buttonText = NULL);
+    virtual void        ShowDialog(const char* title, const char* message, const char* buttonText = NULL);
     virtual bool        FileExists(const char* path);
     virtual size_t      FileSize(const char* path);
     virtual bool        IsDirectory(const char* path);
