@@ -6,6 +6,7 @@
 #include <mls.h>
 #include <unordered_map>
 #include <sstream>
+#include <fcntl.h>
 
 #include <curl/curl.h>
 #define WC_NO_HARDEN // suppress the annoying warning.
@@ -1003,6 +1004,228 @@ int AML::GetAndroidSystemResID(const char* innerClass, const char* fieldName)
 
     env->DeleteLocalRef(rClass);
     return resId;
+}
+
+int AML::ListDir(const char* path, ListDirCallback cb, void* data)
+{
+    DIR* dir = opendir(path);
+    if(!dir) return -1;
+
+    int count = 0;
+    struct dirent* entry;
+    while( (entry = readdir(dir)) != NULL )
+    {
+        if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+
+        bool isDir = (entry->d_type == DT_DIR);
+        if(entry->d_type == DT_UNKNOWN)
+        {
+            char full[512];
+            snprintf(full, sizeof(full), "%s/%s", path, entry->d_name);
+            struct stat st;
+            isDir = (stat(full, &st) == 0 && S_ISDIR(st.st_mode));
+        }
+        if(cb) cb(entry->d_name, isDir, data);
+        ++count;
+    }
+    closedir(dir);
+    return count;
+}
+
+int AML::ReadFileToBuffer(const char* path, char* out, size_t maxLen)
+{
+    int fd = open(path, O_RDONLY);
+    if(fd < 0) return -1;
+
+    ssize_t total = 0, r;
+    while( (r = read(fd, out + total, maxLen - total)) > 0 ) total += r;
+    close(fd);
+    return ((r < 0) ? -1 : (int)total);
+}
+
+bool AML::WriteBufferToFile(const char* path, const void* buf, size_t len)
+{
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if(fd < 0) return false;
+
+    size_t written = 0;
+    while(written < len)
+    {
+        ssize_t w = write(fd, (const char*)buf + written, len - written);
+        if (w <= 0)
+        {
+            close(fd);
+            return false;
+        }
+        written += w;
+    }
+    close(fd);
+    return true;
+}
+
+bool AML::MoveFile(const char* src, const char* dst)
+{
+    // rename() works if src and dst are on the same filesystem
+    if(rename(src, dst) == 0) return true;
+
+    struct stat st;
+    if(stat(src, &st) != 0) return false;
+
+    char* buf = (char*)malloc(st.st_size);
+    if(!buf) return false;
+
+    int inFd = open(src, O_RDONLY);
+    if(inFd < 0)
+    {
+        free(buf);
+        return false;
+    }
+    read(inFd, buf, st.st_size);
+    close(inFd);
+
+    bool ok = WriteBufferToFile(dst, buf, st.st_size);
+    free(buf);
+    if(ok) unlink(src);
+    return ok;
+}
+
+time_t AML::GetFileModTime(const char* path)
+{
+    struct stat st;
+    if(stat(path, &st) != 0) return (time_t)-1;
+    return st.st_mtime;
+}
+
+void AML::OpenURL(const char* url)
+{
+    JNIEnv* env = GetJNIEnvironment();
+    if(!env) return;
+
+    jobject ctx = ::GetCurrentActivity();
+    if(!ctx) return;
+
+    jclass intentClass = env->FindClass("android/content/Intent");
+    jfieldID actionView = env->GetStaticFieldID(intentClass, "ACTION_VIEW", "Ljava/lang/String;");
+    jstring  action = (jstring)env->GetStaticObjectField(intentClass, actionView);
+
+    jmethodID ctor = env->GetMethodID(intentClass, "<init>", "(Ljava/lang/String;Landroid/net/Uri;)V");
+
+    jclass uriClass = env->FindClass("android/net/Uri");
+    jmethodID parse = env->GetStaticMethodID(uriClass, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
+    jstring jUrl = env->NewStringUTF(url);
+    jobject uri = env->CallStaticObjectMethod(uriClass, parse, jUrl);
+
+    jobject intent = env->NewObject(intentClass, ctor, action, uri);
+
+    jclass ctxClass = env->GetObjectClass(ctx);
+    jmethodID startAct = env->GetMethodID(ctxClass, "startActivity", "(Landroid/content/Intent;)V");
+    env->CallVoidMethod(ctx, startAct, intent);
+
+    env->DeleteLocalRef(intent);
+    env->DeleteLocalRef(uri);
+    env->DeleteLocalRef(jUrl);
+    env->DeleteLocalRef(action);
+    env->DeleteLocalRef(ctxClass);
+    env->DeleteLocalRef(uriClass);
+    env->DeleteLocalRef(intentClass);
+}
+
+jobject AML::CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...)
+{
+    JNIEnv* env = GetJNIEnvironment();
+    if(!env) return NULL;
+
+    jclass jcls = env->FindClass(cls);
+    if(!jcls || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return NULL;
+    }
+
+    jmethodID mid = env->GetStaticMethodID(jcls, method, sig);
+    if(!mid || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(jcls);
+        return NULL;
+    }
+
+    va_list args;
+    va_start(args, sig);
+    jobject result = env->CallStaticObjectMethodV(jcls, mid, args);
+    va_end(args);
+
+    if(env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(jcls);
+        return NULL;
+    }
+    env->DeleteLocalRef(jcls);
+    return result; 
+}
+
+jobject AML::GetStaticJavaField(const char* cls, const char* field, const char* sig)
+{
+    JNIEnv* env = GetJNIEnvironment();
+    if(!env) return NULL;
+
+    jclass jcls = env->FindClass(cls);
+    if(!jcls || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return NULL;
+    }
+
+    jfieldID fid = env->GetStaticFieldID(jcls, field, sig);
+    if(!fid || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(jcls);
+        return NULL;
+    }
+
+    jobject result = env->GetStaticObjectField(jcls, fid);
+    if(env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(jcls);
+        return NULL;
+    }
+
+    env->DeleteLocalRef(jcls);
+    return result;
+}
+
+bool AML::SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value)
+{
+    JNIEnv* env = GetJNIEnvironment();
+    if(!env) return false;
+
+    jclass jcls = env->FindClass(cls);
+    if(!jcls || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return false;
+    }
+
+    jfieldID fid = env->GetStaticFieldID(jcls, field, sig);
+    if(!fid || env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(jcls);
+        return false;
+    }
+
+    env->SetStaticObjectField(jcls, fid, value);
+    if(env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        env->DeleteLocalRef(jcls);
+        return false;
+    }
+    env->DeleteLocalRef(jcls);
+    return true;
 }
 
 

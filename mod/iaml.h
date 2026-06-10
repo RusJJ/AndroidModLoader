@@ -86,6 +86,9 @@ size_t strlen(char const*);
 class IAML
 {
 public:
+    typedef void(*ListDirCallback)(const char* name, bool isDir, void* data);
+
+public:
     /* AML 1.0.0.0 */
     virtual const char* GetCurrentGame();
     virtual const char* GetConfigPath();
@@ -225,16 +228,27 @@ public:
     virtual jobject     GetCurrentActivity();
     virtual void        GetNewsString(char* buf, size_t len);
     virtual int         GetAndroidSystemResID(const char* innerClass, const char* fieldName); // "style", "Theme_DeviceDefault_Alert"
+    virtual int         ListDir(const char* path, ListDirCallback cb, void* data);
+    virtual int         ReadFileToBuffer(const char* path, char* out, size_t maxLen);
+    virtual bool        WriteBufferToFile(const char* path, const void* buf, size_t len);
+    virtual bool        MoveFile(const char* src, const char* dst);
+    virtual time_t      GetFileModTime(const char* path);
+    virtual void        OpenURL(const char* url);
+    virtual jobject     CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...);
+    virtual jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
+    virtual bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
 
 
 
     // Inlines (shortcuts for you!)
     inline void         Write(uintptr_t dest, const char* str, size_t size) { Write(dest, (uintptr_t)str, size); } // Inline
     inline void         Write(uintptr_t dest, const char* str) { Write(dest, (uintptr_t)str, strlen(str)); } // Inline
-    inline void         Write8(uintptr_t dest, uint8_t v) { uint8_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 1); } // Inline
-    inline void         Write16(uintptr_t dest, uint16_t v) { uint16_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 2); } // Inline
-    inline void         Write32(uintptr_t dest, uint32_t v) { uint32_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
-    inline void         WriteFloat(uintptr_t dest, float v) { float vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
+    inline void         Write8(uintptr_t dest, uint8_t v) { uint8_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         Write16(uintptr_t dest, uint16_t v) { uint16_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         Write32(uintptr_t dest, uint32_t v) { uint32_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         Write64(uintptr_t dest, uint64_t v) { uint64_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         WriteFloat(uintptr_t dest, float v) { float vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         WriteDouble(uintptr_t dest, double v) { double vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
     inline void         WriteAddr(uintptr_t dest, uintptr_t addr) { uintptr_t addrPtr = addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
     inline void         WriteAddr(uintptr_t dest, void* addr) { uintptr_t addrPtr = (uintptr_t)addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
     inline bool         PatchMemory(uintptr_t addr, std::initializer_list<uint8_t> bytes)
@@ -244,10 +258,12 @@ public:
         Write(addr, (uintptr_t)bytes.begin(), bytes.size());
         return true;
     }
-    inline uint8_t      Read8(uintptr_t src) { uint8_t v; Read(src, (uintptr_t)&v, 1); return v; } // Inline
-    inline uint16_t     Read16(uintptr_t src) { uint16_t v; Read(src, (uintptr_t)&v, 2); return v; } // Inline
-    inline uint32_t     Read32(uintptr_t src) { uint32_t v; Read(src, (uintptr_t)&v, 4); return v; } // Inline
-    inline float        ReadFloat(uintptr_t src) { float v; Read(src, (uintptr_t)&v, 4); return v; } // Inline
+    inline uint8_t      Read8(uintptr_t src) { uint8_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline uint16_t     Read16(uintptr_t src) { uint16_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline uint32_t     Read32(uintptr_t src) { uint32_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline uint64_t     Read64(uintptr_t src) { uint64_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline float        ReadFloat(uintptr_t src) { float v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline double       ReadDouble(uintptr_t src) { double v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
     inline bool         IsFile(const char* path) { return !IsDirectory(path); }
     // Can be used with HookVtableFunc to not to instantiate vtable for 1000 times!
     inline void**       GetVtable(void* ptr) { return *(void***)ptr; }

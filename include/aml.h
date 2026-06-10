@@ -124,6 +124,15 @@ public:
     jobject     GetCurrentActivity();
     void        GetNewsString(char* buf, size_t len);
     int         GetAndroidSystemResID(const char* innerClass, const char* fieldName);
+    int         ListDir(const char* path, ListDirCallback cb, void* data);
+    int         ReadFileToBuffer(const char* path, char* out, size_t maxLen);
+    bool        WriteBufferToFile(const char* path, const void* buf, size_t len);
+    bool        MoveFile(const char* src, const char* dst);
+    time_t      GetFileModTime(const char* path);
+    void        OpenURL(const char* url);
+    jobject     CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...);
+    jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
+    bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
 };
 
 extern char g_szAMLFeatures[2048];
