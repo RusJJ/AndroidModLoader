@@ -58,8 +58,8 @@ private:
     const char* m_szName;
     void* m_iniMyConfig;
 
-#ifdef _ICFG
-    /* Built-in optimizer thinks he's the best! Ha-ha... Not funny. It's 3AM... */
+#if defined(_ICFG)
+    // Built-in optimizer thinks he's the best! Ha-ha... Not funny. It's 3AM...
     ICFG* m_pICFG;
 #endif
     

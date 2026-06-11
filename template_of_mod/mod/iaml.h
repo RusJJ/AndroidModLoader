@@ -2,14 +2,20 @@
 #define _IAML
 
 // Usage: place 3 lines somewhere in the code AFTER #include <mod/amlmod.h>
-// #if !defined(IAML_VER) && IAML_VER < 01030000
-//     #error "You need to update your MOD folder to 1.3.0!"
+// #if !defined(IAML_VER) && IAML_VER < 01040000
+//     #error "You need to update your MOD folder to 1.4.0!"
 // #endif
-#define IAML_VER 01030000
+#define IAML_VER 01040000
+
+#include <stdint.h>
+#include <type_traits>
+#include <initializer_list>
+#include <vector>
 
 #include "interface.h"
 #include <jni.h>
-#include <stdint.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 
 // Because the name was changed to be more understandable
 #define PlaceB PlaceJMP
@@ -70,6 +76,8 @@ struct GlossRegisters
 typedef void* PHookHandle;
 typedef void (*HookWithRegistersFn)(GlossRegisters* regs, PHookHandle hook);
 
+
+
 #if defined(__cplusplus)
     extern "C"
 #endif
@@ -77,6 +85,10 @@ size_t strlen(char const*);
 
 class IAML
 {
+public:
+    typedef void(*ListDirCallback)(const char* name, bool isDir, void* data);
+    typedef void(*ListModsCallback)(const char* guid, const char* version, void* data);
+
 public:
     /* AML 1.0.0.0 */
     virtual const char* GetCurrentGame();
@@ -168,7 +180,7 @@ public:
     virtual bool        CopyFile(const char* file, const char* dest);
     // Gloss things
   #ifdef AML32
-    virtual void        RedirectReg(...);
+    virtual void        RedirectReg(...); // Silent.
   #else
     virtual void        RedirectReg(uintptr_t addr, uintptr_t to, bool doShortHook = false, GlossRegisters::e_reg targetReg = GlossRegisters::e_reg::X16); // Move directly to "to" from "addr" with the same stack and registers (X16 is the same as "Redirect")
   #endif  
@@ -190,16 +202,75 @@ public:
     virtual void        CancelVibro();
     virtual float       GetBatteryLevel(); // returns a float from 0.0 to 100.0
 
+    /* AML 1.4.0 */
+    virtual const char* GetNativeLibsPath(); // /data/app/*apk-unique-folder*/lib/arm*/(here)
+    virtual bool        PushToJavaUIThread(void (*fn)(void*), void* data = NULL);
+    virtual AAssetManager* GetAssetManager();
+    virtual void*       OpenAsset(const char* path, int mode = AASSET_MODE_BUFFER);
+    virtual void        CloseAsset(void* asset); // Preferred way might be to DIY
+    virtual size_t      GetAssetSize(void* asset);
+    virtual const void* GetAssetBuffer(void* asset);
+    virtual void        ReadAsset(void* asset, void* buf, size_t count);
+    virtual jobject     InjectSmaliDEX(const uint8_t* dexBytes, size_t dexSize, const char* classToInit); // returns instantiated class
+    virtual jobject     GetInjectedSmaliDEX(const char* className);
+    virtual void        GetDisplaySize(int* w = NULL, int* h = NULL);
+    virtual uintptr_t   AllocateMemory(size_t size, bool executable = false);
+    virtual bool        FreeMemory(uintptr_t pointer);
+    virtual uintptr_t   ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> offsets);
+    virtual std::vector<uintptr_t> FindAllPatterns(const char* pattern, uintptr_t libStart, uintptr_t scanLen);
+    virtual bool        ComparePattern(uintptr_t addr, const char* pattern);
+    virtual void        ShowDialog(const char* title, const char* message, const char* buttonText = NULL, int styleResource = 0); // style is INT value of android.R.style.*
+    virtual bool        FileExists(const char* path);
+    virtual size_t      FileSize(const char* path);
+    virtual bool        IsDirectory(const char* path);
+    virtual bool        RemoveFile(const char* path);
+    virtual bool        RemoveDir(const char* path, bool recursive = false);
+    virtual bool        CreateDirRecursive(const char* path);
+    virtual jobject     GetCurrentActivity();
+    virtual void        GetNewsString(char* buf, size_t len);
+    virtual int         GetAndroidSystemResID(const char* innerClass, const char* fieldName); // "style", "Theme_DeviceDefault_Alert"
+    virtual int         ListDir(const char* path, ListDirCallback cb, void* data);
+    virtual int         ReadFileToBuffer(const char* path, char* out, size_t maxLen);
+    virtual bool        WriteBufferToFile(const char* path, const void* buf, size_t len);
+    virtual bool        MoveFile(const char* src, const char* dst);
+    virtual time_t      GetFileModTime(const char* path);
+    virtual void        OpenURL(const char* url);
+    virtual jobject     CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...);
+    virtual jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
+    virtual bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
+    virtual int         GetLoadedModsCount();
+    virtual bool        IsFileDownloadsEnabled();
+    virtual bool        IsMLSInManualSave();
+    virtual int         GetDownloadTimeout();
+    virtual void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
+
+
 
     // Inlines (shortcuts for you!)
     inline void         Write(uintptr_t dest, const char* str, size_t size) { Write(dest, (uintptr_t)str, size); } // Inline
     inline void         Write(uintptr_t dest, const char* str) { Write(dest, (uintptr_t)str, strlen(str)); } // Inline
-    inline void         Write8(uintptr_t dest, uint8_t v) { uint8_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 1); } // Inline
-    inline void         Write16(uintptr_t dest, uint16_t v) { uint16_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 2); } // Inline
-    inline void         Write32(uintptr_t dest, uint32_t v) { uint32_t vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
-    inline void         WriteFloat(uintptr_t dest, float v) { float vPtr = v; Write(dest, (uintptr_t)&vPtr, 4); } // Inline
+    inline void         Write8(uintptr_t dest, uint8_t v) { uint8_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         Write16(uintptr_t dest, uint16_t v) { uint16_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         Write32(uintptr_t dest, uint32_t v) { uint32_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         Write64(uintptr_t dest, uint64_t v) { uint64_t vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         WriteFloat(uintptr_t dest, float v) { float vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
+    inline void         WriteDouble(uintptr_t dest, double v) { double vPtr = v; Write(dest, (uintptr_t)&vPtr, sizeof(vPtr)); } // Inline
     inline void         WriteAddr(uintptr_t dest, uintptr_t addr) { uintptr_t addrPtr = addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
     inline void         WriteAddr(uintptr_t dest, void* addr) { uintptr_t addrPtr = (uintptr_t)addr; Write(dest, (uintptr_t)&addrPtr, sizeof(uintptr_t)); } // Inline
+    inline bool         PatchMemory(uintptr_t addr, std::initializer_list<uint8_t> bytes)
+    {
+        if(!addr || bytes.size() == 0) return false;
+        Unprot(addr, bytes.size());
+        Write(addr, (uintptr_t)bytes.begin(), bytes.size());
+        return true;
+    }
+    inline uint8_t      Read8(uintptr_t src) { uint8_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline uint16_t     Read16(uintptr_t src) { uint16_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline uint32_t     Read32(uintptr_t src) { uint32_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline uint64_t     Read64(uintptr_t src) { uint64_t v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline float        ReadFloat(uintptr_t src) { float v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline double       ReadDouble(uintptr_t src) { double v; Read(src, (uintptr_t)&v, sizeof(v)); return v; } // Inline
+    inline bool         IsFile(const char* path) { return !IsDirectory(path); }
     // Can be used with HookVtableFunc to not to instantiate vtable for 1000 times!
     inline void**       GetVtable(void* ptr) { return *(void***)ptr; }
     inline void         SetVtable(void* ptr, void** vtable) { *(void***)ptr = vtable; }
@@ -208,6 +279,103 @@ public:
 extern IAML* aml;
 inline IAML* GetAMLInterface() { return aml; }
 
+
+
+/* Some inlined functions to speed-up modding */
+#if __cplusplus >= 201703L
+template<typename T, typename... Args>
+static inline T InternalCall(JNIEnv* env, jobject obj, jmethodID mid, Args... args)
+{
+    if constexpr(std::is_void_v<T>)
+    {
+        env->CallVoidMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jobject> || std::is_same_v<T, jstring> || 
+                       std::is_same_v<T, jclass>  || std::is_same_v<T, jobjectArray>)
+    {
+        return (T)env->CallObjectMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jboolean> || std::is_same_v<T, bool>)
+    {
+        return (T)env->CallBooleanMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jbyte>)
+    {
+        return env->CallByteMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jchar>)
+    {
+        return env->CallCharMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jshort>)
+    {
+        return env->CallShortMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jint> || std::is_same_v<T, int>)
+    {
+        return (T)env->CallIntMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jlong> || std::is_same_v<T, long long>)
+    {
+        return (T)env->CallLongMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jfloat> || std::is_same_v<T, float>)
+    {
+        return (T)env->CallFloatMethod(obj, mid, args...);
+    }
+    else if constexpr(std::is_same_v<T, jdouble> || std::is_same_v<T, double>)
+    {
+        return (T)env->CallDoubleMethod(obj, mid, args...);
+    }
+}
+template<typename T, typename... Args>
+inline T CallJavaMethod(jobject obj, const char* methodName, const char* sig, Args... args)
+{
+    JNIEnv* env = aml->GetJNIEnvironment(); 
+    if(!env || !obj)
+    {
+        if constexpr(!std::is_void_v<T>) return T{};
+        else return;
+    }
+
+    jclass clazz = env->GetObjectClass(obj);
+    jmethodID mid = env->GetMethodID(clazz, methodName, sig);
+    env->DeleteLocalRef(clazz);
+    
+    if(!mid)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        if constexpr(!std::is_void_v<T>) return T{};
+        else return;
+    }
+
+    if constexpr(std::is_void_v<T>)
+    {
+        InternalCall<T>(env, obj, mid, args...);
+        if(env->ExceptionCheck()) env->ExceptionClear();
+    }
+    else
+    {
+        T result = InternalCall<T>(env, obj, mid, args...);
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return result;
+    }
+}
+#endif
+
+template<typename ReturnType = void, typename... Args>
+ReturnType CallVirtual(void* instance, int index, Args... args)
+{
+    void** vtable = *(void***)(instance);
+    
+    using Fn = ReturnType(*)(void*, Args...);
+    Fn function = reinterpret_cast<Fn>(vtable[index]);
+    
+    return function(instance, args...);
+}
+
+
+
 /* Do not use big conversions */
 #define SET_TO(__a1, __a2)  *(void**)&(__a1) = (void*)(__a2)
 #define SET_TO_PTR(__a1, __a2)  *(void**)&(__a1) = *(void**)(__a2)
@@ -215,12 +383,16 @@ inline IAML* GetAMLInterface() { return aml; }
 #define SETSYM_TO_PTR(__a1, __a2, __a3)  *(void**)&(__a1) = *(void**)(aml->GetSym(__a2, __a3))
 #define AS_ADDR(__a1)       *(uintptr_t*)&(__a1)
 
+
+
 /* Unprotect that memory chunk for making changes */
 #define UNPROT(_addr, _count)                                   \
     aml->Unprot((uintptr_t)(_addr), ( _count ));
 /* Just write own info to the memory */
 #define WRITE(_addr, _whatToWrite, _size)                       \
     aml->Write(_addr, _whatToWrite, _size);
+
+
 
 /* Just a hook declaration */
 #define DECL_HOOK(_ret, _name, ...)                             \
@@ -243,6 +415,8 @@ inline IAML* GetAMLInterface() { return aml; }
     void* (*_name)(__VA_ARGS__);                                \
     void* HookOf_##_name(__VA_ARGS__)
 
+
+
 /* Just a hook declaration (but with static funcs and stuff) */
 #define SDECL_HOOK(_ret, _name, ...)                             \
     static _ret (*_name)(__VA_ARGS__);                           \
@@ -264,6 +438,8 @@ inline IAML* GetAMLInterface() { return aml; }
     static void* (*_name)(__VA_ARGS__);                          \
     static void* HookOf_##_name(__VA_ARGS__)
 
+
+
 /* Just a hook declaration (but with static+inlined funcs and stuff) */
 #define SIDECL_HOOK(_ret, _name, ...)                             \
     static inline _ret (*_name)(__VA_ARGS__);                     \
@@ -284,6 +460,8 @@ inline IAML* GetAMLInterface() { return aml; }
 #define SIDECL_HOOKp(_name, ...)                                  \
     static inline void* (*_name)(__VA_ARGS__);                    \
     static void* HookOf_##_name(__VA_ARGS__)
+
+
 
 /* Just a hook of a function */
 #define HOOK(_name, _fnAddr)                                    \
