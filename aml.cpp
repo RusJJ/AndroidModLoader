@@ -220,13 +220,13 @@ const char* AML::GetFeatures()
 
 void AML::AddFeature(const char* f)
 {
-    strcat(g_szAMLFeatures, f);
-    strcat(g_szAMLFeatures, " ");
+    strncat(g_szAMLFeatures, f, sizeof(g_szAMLFeatures) - strlen(g_szAMLFeatures) - 1);
+    strncat(g_szAMLFeatures, " ", sizeof(g_szAMLFeatures) - strlen(g_szAMLFeatures) - 1);
 }
 
 void AML::HookVtableFunc(void* ptr, unsigned int funcNum, void* func, void** original, bool instantiate)
 {
-    HookVtableFunc(ptr, funcNum, func, original, instantiate);
+    ::HookVtableFunc(ptr, funcNum, func, original, instantiate);
 }
 
 bool AML::IsGameFaked()
@@ -288,12 +288,8 @@ void AML::ShowToast(bool longerDuration, const char* fmt, ...)
 
 static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
 {
-    FILE* file = fopen((const char*)userdata, "wb");
-    if(!file) return 0;
-    
-    size_t written = fwrite(buffer, size, nmemb, file);
-    fclose(file);
-    return written;
+    FILE* file = (FILE*)userdata;
+    return file ? fwrite(buffer, size, nmemb, file) : 0;
 }
 bool AML::DownloadFile(const char* url, const char* saveto)
 {
@@ -301,24 +297,34 @@ bool AML::DownloadFile(const char* url, const char* saveto)
     if(!curl) return false;
     curl_easy_reset(curl);
     
-    FILE* file = fopen(saveto, "a");
-    if(!file) return false; // Dont clean it up first!
-    fclose(file);
+    FILE* file = fopen(saveto, "wb");
+    if(!file) return false;
     
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, saveto);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
     
     CURLcode res = curl_easy_perform(curl);
-    return res != CURLE_OK;
+    fclose(file);
+    return res == CURLE_OK;
 }
 
 static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, MemChunk_t* chunk)
 {
-    return snprintf(chunk->out, chunk->out_len, "%s", (const char*)buffer);
+    size_t bytes = size * nmemb;
+    if(chunk->out_len == 0) return bytes;
+
+    size_t used = strlen(chunk->out);
+    if(used >= chunk->out_len) return bytes;
+
+    size_t remaining = chunk->out_len - used;
+    size_t copyBytes = (bytes < remaining) ? bytes : remaining;
+    memcpy(chunk->out + used, buffer, copyBytes);
+    chunk->out[used + copyBytes] = 0;
+    return bytes;
 }
 bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 {
@@ -327,6 +333,7 @@ bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
     curl_easy_reset(curl);
     
     MemChunk_t chunk = { out, outLen - 1 };
+    out[0] = 0;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
@@ -400,7 +407,7 @@ bool AML::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
 
 void AML::HookVtableFunc(void* ptr, unsigned int funcNum, unsigned int count, void* func, void** original, bool instantiate)
 {
-    HookVtableFunc(ptr, funcNum, count, func, original, instantiate);
+    ::HookVtableFunc(ptr, funcNum, count, func, original, instantiate);
 }
 
 int AML::PlaceNOP4(uintptr_t addr, size_t count)
@@ -596,6 +603,7 @@ inline bool InitVibroJNI(JNIEnv* env)
         g_VibratePatternMethod = env->GetMethodID(vibratorCls, "vibrate", "([JI)V");
         g_VibrateCancelMethod = env->GetMethodID(vibratorCls, "cancel", "()V");
 
+        env->DeleteLocalRef(localVibrateObject);
         env->DeleteLocalRef(vibratorFieldStr);
         env->DeleteLocalRef(vibratorCls);
         env->DeleteLocalRef(contextCls);
@@ -656,14 +664,22 @@ float AML::GetBatteryLevel()
 
         jclass contextCls = env->GetObjectClass(::GetCurrentContext());
         jmethodID registerReceiver = env->GetMethodID(contextCls, "registerReceiver", "(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;)Landroid/content/Intent;");
-        g_BatteryIntent = env->NewGlobalRef(env->CallObjectMethod(::GetCurrentContext(), registerReceiver, NULL, filter));
+        jobject batteryIntent = env->CallObjectMethod(::GetCurrentContext(), registerReceiver, NULL, filter);
+        g_BatteryIntent = env->NewGlobalRef(batteryIntent);
 
         jclass intentCls = env->GetObjectClass(g_BatteryIntent);
         g_GetLevelMethod = env->GetMethodID(intentCls, "getIntExtra", "(Ljava/lang/String;I)I");
-        g_pLevelStr = (jstring)env->NewGlobalRef(env->NewStringUTF("level"));
+        jstring levelStr = env->NewStringUTF("level");
+        g_pLevelStr = (jstring)env->NewGlobalRef(levelStr);
         jstring scaleStr = env->NewStringUTF("scale");
         g_fCachedScale = (float)env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, scaleStr, -1);
         env->DeleteLocalRef(scaleStr);
+        env->DeleteLocalRef(levelStr);
+        env->DeleteLocalRef(batteryIntent);
+        env->DeleteLocalRef(filter);
+        env->DeleteLocalRef(intentCls);
+        env->DeleteLocalRef(contextCls);
+        env->DeleteLocalRef(intentFilterCls);
 
         g_bBatteryInited = true;
     }
@@ -683,6 +699,7 @@ const char* AML::GetNativeLibsPath()
         const char* szTmp = env->GetStringUTFChars(jTmp, NULL);
         snprintf(g_szNativeLibPath, sizeof(g_szNativeLibPath), "%s", szTmp);
         env->ReleaseStringUTFChars(jTmp, szTmp);
+        env->DeleteLocalRef(jTmp);
     }
     return g_szNativeLibPath;
 }
@@ -1034,6 +1051,8 @@ int AML::ListDir(const char* path, ListDirCallback cb, void* data)
 
 int AML::ReadFileToBuffer(const char* path, char* out, size_t maxLen)
 {
+    if(!path || !out || maxLen == 0) return -1;
+
     int fd = open(path, O_RDONLY);
     if(fd < 0) return -1;
 

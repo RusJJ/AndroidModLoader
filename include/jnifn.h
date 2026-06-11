@@ -17,30 +17,38 @@ inline jobject GetGlobalContext(JNIEnv *env)
     jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
     jobject context = env->CallObjectMethod(at, getApplication);
     if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(at);
+    env->DeleteLocalRef(activityThread);
     return context;
 }
 
 inline jstring GetPackageName(JNIEnv *env, jobject jActivity)
 {
-    jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getPackageName", "()Ljava/lang/String;");
+    jclass activityClass = env->GetObjectClass(jActivity);
+    jmethodID method = env->GetMethodID(activityClass, "getPackageName", "()Ljava/lang/String;");
     jstring ret = (jstring)env->CallObjectMethod(jActivity, method);
     if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(activityClass);
     return ret;
 }
 
 inline jobject GetFilesDir(JNIEnv *env, jobject jActivity)
 {
-    jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getFilesDir", "()Ljava/io/File;");
-    jstring ret = (jstring)env->CallObjectMethod(jActivity, method);
+    jclass activityClass = env->GetObjectClass(jActivity);
+    jmethodID method = env->GetMethodID(activityClass, "getFilesDir", "()Ljava/io/File;");
+    jobject ret = env->CallObjectMethod(jActivity, method);
     if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(activityClass);
     return ret;
 }
 
 inline jstring GetAbsolutePath(JNIEnv *env, jobject jFile)
 {
-    jmethodID method = env->GetMethodID(env->GetObjectClass(jFile), "getAbsolutePath", "()Ljava/lang/String;");
+    jclass fileClass = env->GetObjectClass(jFile);
+    jmethodID method = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
     jstring ret = (jstring)env->CallObjectMethod(jFile, method);
     if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(fileClass);
     return ret;
 }
 
@@ -77,9 +85,11 @@ inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szP
 
 inline jobject GetExternalFilesDir(JNIEnv* env, jobject jActivity) // getExternalFilesDir creates directory in Android/data, lol
 {
-    jmethodID method = env->GetMethodID(env->GetObjectClass(jActivity), "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
-    jstring ret = (jstring)env->CallObjectMethod(jActivity, method, NULL);
+    jclass activityClass = env->GetObjectClass(jActivity);
+    jmethodID method = env->GetMethodID(activityClass, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
+    jobject ret = env->CallObjectMethod(jActivity, method, NULL);
     if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(activityClass);
     return ret;
 }
 
@@ -87,7 +97,7 @@ inline jobject GetExternalFilesDir(JNIEnv* env, jobject jActivity) // getExterna
 #ifdef FASTMAN92_CODE
 inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath, size_t bufferSize)
 {
-    jobject objectFile;
+    jobject objectFile = NULL;
     bool bReadFromF92launcher = false;
     jmethodID methodIDgetExternalFilesDir;
 
@@ -113,6 +123,13 @@ inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
         methodIDgetExternalFilesDir = env->GetMethodID(android_content_Context, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
 
         objectFile = (jstring)env->CallObjectMethod(context, methodIDgetExternalFilesDir, nullptr);
+        env->DeleteLocalRef(android_content_Context);
+    }
+
+    if(!objectFile)
+    {
+        if(classF92launcherSettings) env->DeleteLocalRef(classF92launcherSettings);
+        return false;
     }
         
     jclass classFile = env->GetObjectClass(objectFile);
@@ -126,7 +143,11 @@ inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
 
         strxcpy(strPath, strPathValueStr, bufferSize);
         env->ReleaseStringUTFChars(stringPath, strPathValueStr);
+        env->DeleteLocalRef(stringPath);
     }
+    env->DeleteLocalRef(classFile);
+    env->DeleteLocalRef(objectFile);
+    if(classF92launcherSettings) env->DeleteLocalRef(classF92launcherSettings);
     return bReadFromF92launcher;
 }
 #endif
@@ -134,8 +155,9 @@ inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
 inline jobject GetStorageDir(JNIEnv* env) // /storage/emulated/0 instead of /sdcard (example)
 {
     jclass classEnvironment = env->FindClass("android/os/Environment");
-    jstring ret = (jstring)env->CallStaticObjectMethod(classEnvironment, env->GetStaticMethodID(classEnvironment, "getExternalStorageDirectory", "()Ljava/io/File;"));
+    jobject ret = env->CallStaticObjectMethod(classEnvironment, env->GetStaticMethodID(classEnvironment, "getExternalStorageDirectory", "()Ljava/io/File;"));
     if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(classEnvironment);
     return ret;
 }
 
@@ -152,6 +174,8 @@ inline void ShowToastMessage(JNIEnv* env, jobject jActivity, const char* txt, in
     env->CallVoidMethod(toast, showMethodID);
     
     env->DeleteLocalRef(message);
+    env->DeleteLocalRef(toast);
+    env->DeleteLocalRef(ToastClass);
 
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
@@ -169,6 +193,8 @@ inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, j
     env->CallVoidMethod(toast, showMethodID);
 
     env->DeleteLocalRef(message);
+    env->DeleteLocalRef(toast);
+    env->DeleteLocalRef(ToastClass);
 
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
@@ -202,7 +228,10 @@ inline AAssetManager* GetAssetManager(JNIEnv* env)
     
     if (env->ExceptionCheck()) env->ExceptionClear();
 
-    return AAssetManager_fromJava(env, javaAssetManager);
+    AAssetManager* assetManager = AAssetManager_fromJava(env, javaAssetManager);
+    env->DeleteLocalRef(javaAssetManager);
+    env->DeleteLocalRef(contextClass);
+    return assetManager;
 }
 
 inline jobject LoadSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSize)

@@ -47,8 +47,9 @@ char g_szInternalStoragePath[256]{0},
      g_szAndroidDataDir[256]{0},
      g_szCfgPath[256]{0},
      g_szFastman92Android[256]{0},
+     g_szDataDirPath[256]{0},
      g_szNewsString[512]{0};
-const char* g_szDataDir;
+const char* g_szDataDir = g_szDataDirPath;
 char g_szUserAgent[256]{0};
 
 jobject appContext = NULL;
@@ -163,7 +164,7 @@ inline bool CopyFile(const char* file, const char* dest)
 
 bool AML_CopyFile(const char* file, const char* dest)
 {
-    return (!CopyFileFaster(file, dest) && !CopyFile(file, dest));
+    return (CopyFileFaster(file, dest) || CopyFile(file, dest));
 }
 
 inline bool HasFakeAppName()
@@ -293,8 +294,11 @@ jobject GetCurrentContext()
     jobject activityThreadObj = env->CallStaticObjectMethod(activityThread, currentActivityThread);
     jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
 
-    g_GlobalContext = env->CallObjectMethod(activityThreadObj, getApplication);
-    if(g_GlobalContext) g_GlobalContext = env->NewGlobalRef(g_GlobalContext);
+    jobject localContext = env->CallObjectMethod(activityThreadObj, getApplication);
+    if(localContext) g_GlobalContext = env->NewGlobalRef(localContext);
+    env->DeleteLocalRef(localContext);
+    env->DeleteLocalRef(activityThreadObj);
+    env->DeleteLocalRef(activityThread);
     return g_GlobalContext;
 }
 
@@ -309,17 +313,28 @@ jobject GetCurrentActivity()
     jclass activityThreadClass = env->FindClass("android/app/ActivityThread");
     jmethodID currentActivityThreadMethod = env->GetStaticMethodID(activityThreadClass, "currentActivityThread", "()Landroid/app/ActivityThread;");
     jobject activityThreadObj = env->CallStaticObjectMethod(activityThreadClass, currentActivityThreadMethod);
-    if(!activityThreadObj) return NULL;
+    if(!activityThreadObj)
+    {
+        env->DeleteLocalRef(activityThreadClass);
+        return NULL;
+    }
     
     jfieldID mActivitiesField = env->GetFieldID(activityThreadClass, "mActivities", "Landroid/util/ArrayMap;");
     if(!mActivitiesField)
     {
         env->ExceptionClear();
+        env->DeleteLocalRef(activityThreadObj);
+        env->DeleteLocalRef(activityThreadClass);
         return NULL;
     }
     
     jobject mActivities = env->GetObjectField(activityThreadObj, mActivitiesField);
-    if(!mActivities) return NULL;
+    if(!mActivities)
+    {
+        env->DeleteLocalRef(activityThreadObj);
+        env->DeleteLocalRef(activityThreadClass);
+        return NULL;
+    }
 
     jclass arrayMapClass = env->GetObjectClass(mActivities);
     jmethodID isEmptyMethod = env->GetMethodID(arrayMapClass, "isEmpty", "()Z");
@@ -328,12 +343,21 @@ jobject GetCurrentActivity()
     {
         env->DeleteLocalRef(arrayMapClass);
         env->DeleteLocalRef(mActivities);
+        env->DeleteLocalRef(activityThreadObj);
+        env->DeleteLocalRef(activityThreadClass);
         return NULL;
     }
 
     jmethodID valueAtMethod = env->GetMethodID(arrayMapClass, "valueAt", "(I)Ljava/lang/Object;");
     jobject activityClientRecord = env->CallObjectMethod(mActivities, valueAtMethod, 0);
-    if(!activityClientRecord) return NULL;
+    if(!activityClientRecord)
+    {
+        env->DeleteLocalRef(arrayMapClass);
+        env->DeleteLocalRef(mActivities);
+        env->DeleteLocalRef(activityThreadObj);
+        env->DeleteLocalRef(activityThreadClass);
+        return NULL;
+    }
 
     jclass acrClass = env->GetObjectClass(activityClientRecord);
     jfieldID activityField = env->GetFieldID(acrClass, "activity", "Landroid/app/Activity;");
@@ -344,6 +368,8 @@ jobject GetCurrentActivity()
     env->DeleteLocalRef(mActivities);
     env->DeleteLocalRef(activityClientRecord);
     env->DeleteLocalRef(acrClass);
+    env->DeleteLocalRef(activityThreadObj);
+    env->DeleteLocalRef(activityThreadClass);
 
     return g_GlobalActivity;
 }
@@ -403,7 +429,9 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     }
 
     /* Application Context */
-    appContext = g_env->NewGlobalRef( ::GetGlobalContext(g_env) );
+    jobject localContext = ::GetGlobalContext(g_env);
+    appContext = g_env->NewGlobalRef(localContext);
+    g_env->DeleteLocalRef(localContext);
     if(appContext == NULL)
     {
         logger->Error("AML Library should be loaded in \"onCreate\" or by injecting it directly into the main game library!");
@@ -436,10 +464,13 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     }*/
 
     /* Internal Storage */
-    jTmp = GetAbsolutePath(g_env, GetStorageDir(g_env));
+    jobject storageDir = GetStorageDir(g_env);
+    jTmp = GetAbsolutePath(g_env, storageDir);
     szTmp = g_env->GetStringUTFChars(jTmp, NULL);
     snprintf(g_szInternalStoragePath, sizeof(g_szInternalStoragePath), "%s", szTmp);
     g_env->ReleaseStringUTFChars(jTmp, szTmp);
+    g_env->DeleteLocalRef(jTmp);
+    g_env->DeleteLocalRef(storageDir);
 
     /* Package Name */
     char i = 0;
@@ -451,6 +482,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
         ++i;
     } g_szAppName[i] = 0;
     g_env->ReleaseStringUTFChars(jTmp, szTmp);
+    g_env->DeleteLocalRef(jTmp);
     logger->Info("Determined app info: %s", g_szAppName);
 
   #ifdef FASTMAN92_CODE
@@ -493,7 +525,13 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
   #endif
 
     /* root/data/data Folder */
-    g_szDataDir = g_env->GetStringUTFChars(GetAbsolutePath(g_env, GetFilesDir(g_env, appContext)), NULL);
+    jobject filesDir = GetFilesDir(g_env, appContext);
+    jstring filesPath = GetAbsolutePath(g_env, filesDir);
+    szTmp = g_env->GetStringUTFChars(filesPath, NULL);
+    snprintf(g_szDataDirPath, sizeof(g_szDataDirPath), "%s", szTmp);
+    g_env->ReleaseStringUTFChars(filesPath, szTmp);
+    g_env->DeleteLocalRef(filesPath);
+    g_env->DeleteLocalRef(filesDir);
 
     /* AML Config */
     logger->Info("Reading core config...");
@@ -544,6 +582,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
             jclass versionClass = g_env->FindClass("android/os/Build$VERSION");
             jfieldID sdkIntFieldID = g_env->GetStaticFieldID(versionClass, "SDK_INT", "I");
             g_nAndroidSDKVersion = g_env->GetStaticIntField(versionClass, sdkIntFieldID);
+            g_env->DeleteLocalRef(versionClass);
         }
     }
 

@@ -391,11 +391,11 @@ rgba_t ConfigEntry::ParseColor()
     {
         float fr, fg, fb, fa;
         sscanfed = sscanf(m_szValue, "%f %f %f %f", &fr, &fg, &fb, &fa);
-        if(sscanfed == 4 && IsRGBFloatValue(r) && IsRGBFloatValue(g) && IsRGBFloatValue(b) && IsRGBFloatValue(a))
+        if(sscanfed == 4 && IsRGBFloatValue(fr) && IsRGBFloatValue(fg) && IsRGBFloatValue(fb) && IsRGBFloatValue(fa))
         {
             m_ColorValue = rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),(unsigned char)(255*fa)};
         }
-        else if(sscanfed == 3 && IsRGBFloatValue(r) && IsRGBFloatValue(g) && IsRGBFloatValue(b))
+        else if(sscanfed == 3 && IsRGBFloatValue(fr) && IsRGBFloatValue(fg) && IsRGBFloatValue(fb))
         {
             m_ColorValue = rgba_t{(unsigned char)(255*fr),(unsigned char)(255*fg),(unsigned char)(255*fb),255};
         }

@@ -1,6 +1,7 @@
 #include "modpaks.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <mod/logger.h>
 
 extern int g_nDownloadTimeout;
@@ -18,18 +19,21 @@ void InitCURL()
 
 static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
 {
-    FILE* file = fopen((char*)userdata, "wb");
-    if(!file) return 0;
-    
-    size_t written = fwrite(buffer, size, nmemb, file);
-    fclose(file);
-    return written;
+    FILE* file = (FILE*)userdata;
+    return file ? fwrite(buffer, size, nmemb, file) : 0;
 }
 static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userdata)
 {
-    szFileData[0] = 0;
-    nReadedBytes = size * nmemb;
-    return snprintf(szFileData, FILE_DATA_SIZE, "%s", (const char*)buffer);
+    size_t bytes = size * nmemb;
+    if(nReadedBytes >= FILE_DATA_SIZE - 1) return bytes;
+
+    size_t remaining = FILE_DATA_SIZE - 1 - nReadedBytes;
+    size_t copyBytes = (bytes < remaining) ? bytes : remaining;
+
+    memcpy(szFileData + nReadedBytes, buffer, copyBytes);
+    nReadedBytes += copyBytes;
+    szFileData[nReadedBytes] = 0;
+    return bytes;
 }
 
 CURLcode DownloadFile(const char* url, const char* path)
@@ -37,19 +41,18 @@ CURLcode DownloadFile(const char* url, const char* path)
     if(!curl) return CURLE_FAILED_INIT;
     curl_easy_reset(curl);
     
-    // Dont delete file contents at first try
-    FILE* file = fopen(path, "a");
+    FILE* file = fopen(path, "wb");
     if(!file) return CURLE_WRITE_ERROR;
-    fclose(file);
     
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, path);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
     
     CURLcode res = curl_easy_perform(curl);
+    fclose(file);
     return res;
 }
 
@@ -57,6 +60,8 @@ CURLcode DownloadFileToData(const char* url)
 {
     if(!curl) return CURLE_FAILED_INIT;
     curl_easy_reset(curl);
+    szFileData[0] = 0;
+    nReadedBytes = 0;
     
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
     curl_easy_setopt(curl, CURLOPT_URL, url);
