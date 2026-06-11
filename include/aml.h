@@ -135,6 +135,9 @@ public:
     bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
     int         GetLoadedModsCount();
     bool        IsFileDownloadsEnabled();
+    bool        IsMLSInManualSave();
+    int         GetDownloadTimeout();
+    void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
 };
 
 extern char g_szAMLFeatures[2048];

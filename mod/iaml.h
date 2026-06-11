@@ -87,6 +87,7 @@ class IAML
 {
 public:
     typedef void(*ListDirCallback)(const char* name, bool isDir, void* data);
+    typedef void(*ListModsCallback)(const char* guid, const char* version, void* data);
 
 public:
     /* AML 1.0.0.0 */
@@ -238,6 +239,10 @@ public:
     virtual jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
     virtual bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
     virtual int         GetLoadedModsCount();
+    virtual bool        IsFileDownloadsEnabled();
+    virtual bool        IsMLSInManualSave();
+    virtual int         GetDownloadTimeout();
+    virtual void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
 
 
 

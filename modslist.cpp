@@ -364,5 +364,36 @@ void ModsList::OnAllModsLoaded()
     logger->Info("Mods were postloaded!");
 }
 
+void ModsList::ListMods(_ListModsCallback cb, void* data, bool startWithLatest)
+{
+    if(!cb) return;
+
+    char szGUID[sizeof(ModInfo::szGUID)], szVersion[sizeof(ModInfo::szVersion)];
+    if(startWithLatest)
+    {
+        // Start from the latest mod
+        LIST_FOR_FAST(listMods)
+        {
+            ModInfo* info = item->pModInfo;
+
+            strxcpy(szGUID, info->GUID(), sizeof(szGUID)); szGUID[sizeof(szGUID) - 1] = '\0';
+            strxcpy(szVersion, info->VersionString(), sizeof(szVersion)); szVersion[sizeof(szVersion) - 1] = '\0';
+            cb(szGUID, info->VersionString(), data);
+        }
+    }
+    else
+    {
+        // Start from AMLCore
+        LIST_FOR_REVERSE_FAST(listMods)
+        {
+            ModInfo* info = item->pModInfo;
+            
+            strxcpy(szGUID, info->GUID(), sizeof(szGUID)); szGUID[sizeof(szGUID) - 1] = '\0';
+            strxcpy(szVersion, info->VersionString(), sizeof(szVersion)); szVersion[sizeof(szVersion) - 1] = '\0';
+            cb(szGUID, szVersion, data);
+        }
+    }
+}
+
 static ModsList modlistLocal;
 ModsList* modlist = &modlistLocal;

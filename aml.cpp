@@ -19,17 +19,12 @@
 
 char g_szAMLFeatures[2048] = "AML ARMPATCH HOOK CONFIG INTERFACE GLOSS ";
 extern char g_szAppName[256], g_szFakeAppName[256], g_szNativeLibPath[512];
-extern char g_szCfgPath[256];
-extern char g_szAndroidDataDir[256];
-extern char g_szAndroidDataRootDir[256];
-extern char g_szInternalStoragePath[256];
-extern char g_szInternalModsDir[256];
-extern char g_szNewsString[512];
+extern char g_szCfgPath[256], g_szAndroidDataDir[256], g_szAndroidDataRootDir[256];
+extern char g_szInternalStoragePath[256], g_szInternalModsDir[256], g_szNewsString[512];
 extern char g_szUserAgent[256];
 extern const char* g_szDataDir;
 extern jobject appContext;
-extern JNIEnv* env;
-extern bool g_bEnableFileDownloads;
+extern bool g_bEnableFileDownloads, g_bMLSOnlyManualSaves;
 extern CURL* curl;
 extern int g_nDownloadTimeout;
 
@@ -1255,6 +1250,21 @@ int AML::GetLoadedModsCount()
 bool AML::IsFileDownloadsEnabled()
 {
     return g_bEnableFileDownloads;
+}
+
+bool AML::IsMLSInManualSave()
+{
+    return g_bMLSOnlyManualSaves;
+}
+
+int AML::GetDownloadTimeout()
+{
+    return g_nDownloadTimeout;
+}
+
+void AML::ListMods(ListModsCallback cb, void* data, bool startWithLatest)
+{
+    modlist->ListMods(cb, data, startWithLatest);
 }
 
 

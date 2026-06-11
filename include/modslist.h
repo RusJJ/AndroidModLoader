@@ -59,8 +59,11 @@ public:
 
 // Callbacks
 public:
+    typedef void(*_ListModsCallback)(const char* guid, const char* version, void* data);
+
     void OnInterfaceAdded(const char* name, const void* ptr);
     void OnAllModsLoaded();
+    void ListMods(_ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
 };
 
 extern ModsList* modlist;

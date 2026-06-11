@@ -535,7 +535,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
 
     /* AML Config */
     logger->Info("Reading core config...");
-    cfg->Init();
+    cfg->Init(); // That's why we dont have it in config.cpp
     cfg->Bind("Author", "")->SetString("RusJJ aka [-=KILL MAN=-]"); cfg->ClearLast();
     cfg->Bind("Discord", "")->SetString("https://discord.gg/2MY7W39kBg"); cfg->ClearLast();
     bool bHasChangedCfgAuthor = cfg->IsValueChanged();
