@@ -726,9 +726,13 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     return JNI_VERSION_1_6;
 }
 
+void ClearIniPointers();
 JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved)
 {
-    /* Not sure if it'll work... */
-    /* It worked once in my tests, lol */
+    // Not sure if it'll work...
+    // It worked once in my tests, lol
+    // UPD: It is NOT safe. Android moment.
+
     modlist->ProcessUnloading();
+    ClearIniPointers();
 }
