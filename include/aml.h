@@ -134,6 +134,7 @@ public:
     jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
     bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
     int         GetLoadedModsCount();
+    bool        IsFileDownloadsEnabled();
 };
 
 extern char g_szAMLFeatures[2048];

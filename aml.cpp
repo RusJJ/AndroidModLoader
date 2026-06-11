@@ -1252,6 +1252,11 @@ int AML::GetLoadedModsCount()
     return modlist->GetModsNum();
 }
 
+bool AML::IsFileDownloadsEnabled()
+{
+    return g_bEnableFileDownloads;
+}
+
 
 
 static AML amlLocal;
