@@ -4,36 +4,48 @@
     #define snprintf stbsp_snprintf
 #endif
 #include <icfg_desc.h>
-#include <mod/thirdparty/inicpp.h>
+#include <JINI.h>
 #include <mod/logger.h>
 #include <fstream>
 
 #include <mod/iaml.h>
 
-extern char g_szCfgPath[0xFF];
+extern char g_szCfgPath[256];
 
 void* CFG::InitIniPointer()
 {
-    void* ret = new ini::IniFile;
+    void* ret = new JINI;
     return ret;
 }
 void CFG::ParseInputStream(void* iniPointer, const char* szFilename)
 {
-    char path[0xFF];
+    if(!szFilename) return;
+
+    char path[384];
     snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, szFilename);
-    ((ini::IniFile*)iniPointer)->load(path);
+    ((JINI*)iniPointer)->load(path);
 }
 void CFG::GenerateToOutputStream(void* iniPointer, const char* szFilename)
 {
-    char path[0xFF];
-    snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, szFilename);
-    ((ini::IniFile*)iniPointer)->save(path);
+    char path[384];
+    int n = snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, szFilename);
+    if(n < 0 || n >= (int)sizeof(path)) return;
+
+    ((JINI*)iniPointer)->save_as(path);
 }
 const char* CFG::GetValueFrom(void* iniPointer, const char* szSection, const char* szKey)
 {
-    return (*(ini::IniFile*)iniPointer)[szSection][szKey].as<const char*>();
+    thread_local std::string value;
+    value.clear();
+
+    if(!szSection || !szKey || !((JINI*)iniPointer)->get_into(szSection, szKey, value))
+    {
+        return "";
+    }
+    return value.c_str();
 }
 void CFG::SetValueTo(void* iniPointer, const char* szSection, const char* szKey, const char* szValue)
 {
-    (*(ini::IniFile*)iniPointer)[szSection][szKey] = szValue;
+    if(!szSection || !szKey || !szValue) return;
+    ((JINI*)iniPointer)->set(szSection, szKey, szValue);
 }

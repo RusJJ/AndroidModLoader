@@ -609,10 +609,10 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
             {
                 for(int i = 0; i < g_nEnableNews; ++i)
                 {
-                    aml->ShowToast(true, newsBuf);
+                    aml->ShowToast(true, g_szNewsString);
                 }
 
-                newsBuf[16] = 'E';
+                newsBuf[16] = '|'; // Anti- news spamming :p
                 newsBuf[17] = 0;
                 g_pLastNewsId->SetString(newsBuf);
                 cfg->Save();

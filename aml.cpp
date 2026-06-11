@@ -1228,6 +1228,11 @@ bool AML::SetStaticJavaField(const char* cls, const char* field, const char* sig
     return true;
 }
 
+int AML::GetLoadedModsCount()
+{
+    return modlist->GetModsNum();
+}
+
 
 
 static AML amlLocal;

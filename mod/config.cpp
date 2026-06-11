@@ -3,26 +3,25 @@
     #define sprintf stbsp_sprintf
     #define snprintf stbsp_snprintf
 #endif
+
 #include "config.h"
 #include <mod/logger.h>
 
 #include "amlmod.h"
 #include "iaml.h"
-#if !defined(__AML) && defined(_ICFG)
-    ICFG* icfg;
-#else
-    #include <fstream>
-    #include "thirdparty/inicpp.h"
-    ini::IniFile hINI;
+
+#if defined(__AML)
+    extern ICFG* icfg;
 #endif
+
 #ifdef __AML
-    extern char g_szCfgPath[0xFF];
+    extern char g_szCfgPath[256];
 #endif
 
 inline bool str_equal(const char* str1, const char* str2)
-{ 
+{
     for( ; *str1 == *str2 && *str1 != 0; ++str1, ++str2 ) {}
-    return *str2 == *str1; 
+    return *str2 == *str1;
 }
 
 extern ModInfo* modinfo;
@@ -30,12 +29,14 @@ ConfigEntry* Config::pLastEntry = NULL;
 
 Config::Config(const char* szName)
 {
-#if !defined(__AML) && defined(_ICFG)
-    m_pICFG = (ICFG*)GetInterface("AMLConfig");
+    #if !defined(__AML) && defined(_ICFG)
+        // GetInterface logic is for mods only.
+        m_pICFG = (ICFG*)GetInterface("AMLConfig");
+    #else
+        // And this branch is for AML itself (or if you disable the usage of AMLConfig!)
+        m_pICFG = icfg;
+    #endif
     m_iniMyConfig = m_pICFG->InitIniPointer();
-#else
-    m_iniMyConfig = &hINI;
-#endif
     m_bInitialized = false;
     m_bValueChanged = false;
     m_szName = szName;
@@ -49,18 +50,7 @@ void Config::Init()
 {
     if(m_bInitialized) return;
     m_bInitialized = true;
-    
-    #if !defined(__AML) && defined(_ICFG)
-        m_pICFG->ParseInputStream(m_iniMyConfig, m_szName);
-    #else
-        char path[0xFF];
-        #ifdef __AML
-            snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, m_szName);
-        #else
-            snprintf(path, sizeof(path), "%s/%s.ini", aml->GetConfigPath(), m_szName);
-        #endif
-        hINI.load(path);
-    #endif
+    m_pICFG->ParseInputStream(m_iniMyConfig, m_szName);
 }
 
 void Config::Save()
@@ -68,17 +58,7 @@ void Config::Save()
     if(!m_bInitialized || !m_bValueChanged) return;
     
     m_bValueChanged = false;
-    #if !defined(__AML) && defined(_ICFG)
-        m_pICFG->GenerateToOutputStream(m_iniMyConfig, m_szName);
-    #else
-        char path[0xFF];
-        #ifdef __AML
-            snprintf(path, sizeof(path), "%s/%s.ini", g_szCfgPath, m_szName);
-        #else
-            snprintf(path, sizeof(path), "%s/%s.ini", aml->GetConfigPath(), m_szName);
-        #endif
-        hINI.save(path);
-    #endif
+    m_pICFG->GenerateToOutputStream(m_iniMyConfig, m_szName);
 }
 
 ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const char* szSection)
@@ -90,11 +70,8 @@ ConfigEntry* Config::Bind(const char* szKey, const char* szDefaultValue, const c
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     strxcpy(pRet->m_szDefaultValue, szDefaultValue, sizeof(pRet->m_szDefaultValue));
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         pRet->m_bNotDefaultValue = false;
@@ -121,11 +98,8 @@ ConfigEntry* Config::Bind(const char* szKey, int nDefaultValue, const char* szSe
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d", nDefaultValue);
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         pRet->m_bNotDefaultValue = false;
@@ -152,11 +126,8 @@ ConfigEntry* Config::Bind(const char* szKey, float flDefaultValue, const char* s
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%f", flDefaultValue);
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         pRet->m_bNotDefaultValue = false;
@@ -183,11 +154,8 @@ ConfigEntry* Config::Bind(const char* szKey, bool bDefaultValue, const char* szS
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     pRet->m_szDefaultValue[0] = bDefaultValue ? '1' : '0'; pRet->m_szDefaultValue[1] = 0;
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         pRet->m_bNotDefaultValue = false;
@@ -214,11 +182,8 @@ ConfigEntry* Config::Bind(const char* szKey, rgba_t clr, const char* szSection)
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d %d %d %d", (int)clr.r, (int)clr.g, (int)clr.b, (int)clr.a);
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         pRet->m_bNotDefaultValue = false;
@@ -240,19 +205,13 @@ const char* Config::GetString(const char* szKey, const char* szDefaultValue, con
 {
     if(!m_bInitialized) return NULL;
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        #if !defined(__AML) && defined(_ICFG)
-            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, szDefaultValue);
-        #else
-            hINI[szSection][szKey] = szDefaultValue;
-        #endif
+        m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, szDefaultValue);
+
         Save();
         return szDefaultValue;
     }
@@ -268,21 +227,16 @@ int Config::GetInt(const char* szKey, int nDefaultValue, const char* szSection)
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d", nDefaultValue);
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        #if !defined(__AML) && defined(_ICFG)
-            char tmp[16];
-            snprintf(tmp, sizeof(tmp), "%d", nDefaultValue);
-            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, tmp);
-        #else
-            hINI[szSection][szKey] = nDefaultValue;
-        #endif
+
+        char tmp[16];
+        snprintf(tmp, sizeof(tmp), "%d", nDefaultValue);
+        m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, tmp);
+
         Save();
         return nDefaultValue;
     }
@@ -298,21 +252,16 @@ float Config::GetFloat(const char* szKey, float flDefaultValue, const char* szSe
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%f", flDefaultValue);
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        #if !defined(__AML) && defined(_ICFG)
-            char tmp[24];
-            snprintf(tmp, sizeof(tmp), "%f", flDefaultValue);
-            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, tmp);
-        #else
-            hINI[szSection][szKey] = flDefaultValue;
-        #endif
+
+        char tmp[24];
+        snprintf(tmp, sizeof(tmp), "%f", flDefaultValue);
+        m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, tmp);
+
         Save();
         return flDefaultValue;
     }
@@ -328,19 +277,13 @@ bool Config::GetBool(const char* szKey, bool bDefaultValue, const char* szSectio
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     pRet->m_szDefaultValue[0] = bDefaultValue ? '1' : '0'; pRet->m_szDefaultValue[1] = 0;
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
     {
         m_bValueChanged = true;
-        #if !defined(__AML) && defined(_ICFG)
-            m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, bDefaultValue ? "1" : "0");
-        #else
-            hINI[szSection][szKey] = bDefaultValue ? "1" : "0";
-        #endif
+        m_pICFG->SetValueTo(m_iniMyConfig, szSection, szKey, bDefaultValue ? "1" : "0");
+
         Save();
         return bDefaultValue;
     }
@@ -356,11 +299,8 @@ rgba_t Config::GetColor(const char* szKey, rgba_t clr, const char* szSection)
     strxcpy(pRet->m_szMyKey, szKey, sizeof(pRet->m_szMyKey));
     snprintf(pRet->m_szDefaultValue, sizeof(pRet->m_szDefaultValue), "%d %d %d %d", (int)clr.r, (int)clr.g, (int)clr.b, (int)clr.a);
     const char* tryToGetValue;
-    #if !defined(__AML) && defined(_ICFG)
-        tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
-    #else
-        tryToGetValue = hINI[szSection][szKey].as<const char*>();
-    #endif
+    
+    tryToGetValue = m_pICFG->GetValueFrom(m_iniMyConfig, szSection, szKey);
     if(tryToGetValue[0] == '\0')
         pRet->SetString(pRet->m_szDefaultValue);
     else
@@ -384,11 +324,7 @@ void ConfigEntry::SetString(const char* newValue)
     m_pBoundCfg->m_bValueChanged = true;
     m_bLoadedData = true;
 
-    #if !defined(__AML) && defined(_ICFG)
-        m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-    #else
-        hINI[m_szMySection][m_szMyKey] = m_szValue;
-    #endif
+    m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
 }
 
 void ConfigEntry::GetString(char* str, size_t len)
@@ -407,11 +343,7 @@ void ConfigEntry::SetFloat(float newValue)
     m_pBoundCfg->m_bValueChanged = true;
     m_bLoadedData = true;
 
-    #if !defined(__AML) && defined(_ICFG)
-        m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-    #else
-        hINI[m_szMySection][m_szMyKey] = m_szValue;
-    #endif
+    m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
 }
 
 void ConfigEntry::SetInt(int newValue)
@@ -425,29 +357,21 @@ void ConfigEntry::SetInt(int newValue)
     m_pBoundCfg->m_bValueChanged = true;
     m_bLoadedData = true;
 
-    #if !defined(__AML) && defined(_ICFG)
-        m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-    #else
-        hINI[m_szMySection][m_szMyKey] = m_szValue;
-    #endif
+    m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
 }
 
 void ConfigEntry::SetBool(bool newValue)
 {
     if(m_bLoadedData && m_nIntegerValue == newValue?1:0) return;
     
-    m_fFloatValue = newValue?1.0f:0.0f;
-    m_nIntegerValue = newValue?1:0;
-    m_szValue[0] = newValue ? '1' : '0'; m_szValue[1] = 0;
+    m_fFloatValue = (newValue ? 1.0f : 0.0f);
+    m_nIntegerValue = (newValue ? 1 : 0);
+    m_szValue[0] = (newValue ? '1' : '0'); m_szValue[1] = 0;
     
     m_pBoundCfg->m_bValueChanged = true;
     m_bLoadedData = true;
 
-    #if !defined(__AML) && defined(_ICFG)
-        m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-    #else
-        hINI[m_szMySection][m_szMyKey] = m_szValue;
-    #endif
+    m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
 }
 
 inline bool IsRGBValue(int value) { return value >= 0 && value <= 255; }
@@ -492,9 +416,5 @@ void ConfigEntry::SetColor(rgba_t clr, bool asFloat)
     m_pBoundCfg->m_bValueChanged = true;
     m_bLoadedData = true;
 
-    #if !defined(__AML) && defined(_ICFG)
-        m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
-    #else
-        hINI[m_szMySection][m_szMyKey] = m_szValue;
-    #endif
+    m_pBoundCfg->m_pICFG->SetValueTo(m_pBoundCfg->m_iniMyConfig, m_szMySection, m_szMyKey, m_szValue);
 }

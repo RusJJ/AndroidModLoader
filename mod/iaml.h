@@ -237,6 +237,7 @@ public:
     virtual jobject     CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...);
     virtual jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
     virtual bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
+    virtual int         GetLoadedModsCount();
 
 
 

@@ -13,6 +13,9 @@ public:
     virtual void GenerateToOutputStream(void* iniPointer, const char* szFilename) = 0;
     virtual const char* GetValueFrom(void* iniPointer, const char* szSection, const char* szKey) = 0;
     virtual void SetValueTo(void* iniPointer, const char* szSection, const char* szKey, const char* szValue) = 0;
+
+    // AML 1.4.0
+    
 };
 
 extern ICFG* icfg;
