@@ -21,7 +21,7 @@ extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads,
 extern int g_nAndroidSDKVersion;
 
 static stack_t stackstruct;
-static char signalstack[SIGSTKSZ];
+static char signalstack[128 * 1024]; // 128kB
 static uintptr_t g_frames[128];
 static void* btBuffer[64];
 
@@ -58,7 +58,7 @@ const char* SignalEnum(int sig)
         ENUMERATE_THIS(SIGSTKFLT);
         ENUMERATE_THIS(SIGTRAP);
     }
-    return "UNKNOWN";
+    return "SIGUNKNOWN";
 }
 
 const char* CodeEnum(int sig, int code)
@@ -72,6 +72,7 @@ const char* CodeEnum(int sig, int code)
         ENUMERATE_THIS(SI_MESGQ);
         default:         break;
     }
+    
     switch(sig)
     {
         case SIGILL:
@@ -86,6 +87,7 @@ const char* CodeEnum(int sig, int code)
                 ENUMERATE_THIS(ILL_PRVREG);
                 ENUMERATE_THIS(ILL_COPROC);
                 ENUMERATE_THIS(ILL_BADSTK);
+                default: return "ILL_UNKNOWN";
             }
         }
         case SIGFPE:
@@ -100,6 +102,7 @@ const char* CodeEnum(int sig, int code)
                 ENUMERATE_THIS(FPE_FLTRES);
                 ENUMERATE_THIS(FPE_FLTINV);
                 ENUMERATE_THIS(FPE_FLTSUB);
+                default: return "FPE_UNKNOWN";
             }
         }
         case SIGSEGV:
@@ -108,6 +111,7 @@ const char* CodeEnum(int sig, int code)
             {
                 ENUMERATE_THIS(SEGV_MAPERR);
                 ENUMERATE_THIS(SEGV_ACCERR);
+                default: return "SEGV_UNKNOWN";
             }
         }
         case SIGBUS:
@@ -124,6 +128,7 @@ const char* CodeEnum(int sig, int code)
                 #ifdef BUS_MCEERR_AR
                     ENUMERATE_THIS(BUS_MCEERR_AR);
                 #endif
+                default: return "SIG_UNKNOWN";
             }
         }
         case SIGTRAP:
@@ -138,6 +143,7 @@ const char* CodeEnum(int sig, int code)
                 #ifdef TRAP_HWBKPT
                     ENUMERATE_THIS(TRAP_HWBKPT);
                 #endif
+                default: return "TRAP_UNKNOWN";
             }
         }
         case SIGCHLD:
@@ -150,6 +156,7 @@ const char* CodeEnum(int sig, int code)
                 ENUMERATE_THIS(CLD_TRAPPED);
                 ENUMERATE_THIS(CLD_STOPPED);
                 ENUMERATE_THIS(CLD_CONTINUED);
+                default: return "CLD_UNKNOWN";
             }
         }
 #ifdef SIGPOLL
@@ -163,6 +170,7 @@ const char* CodeEnum(int sig, int code)
                 ENUMERATE_THIS(POLL_ERR);
                 ENUMERATE_THIS(POLL_PRI);
                 ENUMERATE_THIS(POLL_HUP);
+                default: return "POLL_UNKNOWN";
             }
         }
 #endif
@@ -205,7 +213,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #else
         uintptr_t PC = mcontext->pc;
     #endif
-    uintptr_t faultAddr = mcontext->fault_address; // == si->si_addr?
+    uintptr_t faultAddr = (uintptr_t)si->si_addr;
 
     char path[320], pathText[512];
     sprintf(path, "%s/aml_crashlog.txt", aml->GetAndroidDataRootPath());
@@ -564,6 +572,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     g_pLogFile << "\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n";
     g_pLogFile << "If you`re having problems using OFFICIAL mods, please report about this problem in our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!";
     g_pLogFile.flush();
+    g_pLogFile.close();
     
   skip_logging:
     logger->Info("Notifying mods about the crash...");
@@ -571,16 +580,24 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     logger->Info("Telling mods to unload after the crash...");
     modlist->ProcessUnloading();
 
-    oldSigaction[SignalInnerId(sig)].sa_sigaction(sig, si, ptr);
-    exit(0);
+    //oldSigaction[SignalInnerId(sig)].sa_sigaction(sig, si, ptr);
+    //exit(0);
+    int id = SignalInnerId(sig);
+    if(id >= 0)
+    {
+        sigaction(sig, &oldSigaction[id], NULL);
+        raise(sig);
+    }
+    _exit(128 + sig);
 }
 
 #define HANDLESIG(_code) sigbreak = newSigaction + SignalInnerId(_code); sigbreak->sa_sigaction = &Handler; \
-                         sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND; sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
+                         sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND; sigemptyset(&sigbreak->sa_mask); \
+                         sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
 void StartSignalHandler()
 {
     stackstruct.ss_sp = &signalstack[0];
-    stackstruct.ss_size = SIGSTKSZ;
+    stackstruct.ss_size = sizeof(signalstack);
     stackstruct.ss_flags = 0;
     sigaltstack(&stackstruct, NULL);
 
