@@ -108,6 +108,11 @@ public:
         return find_key( section, key ) != nullptr;
     }
 
+    bool has_section( std::string_view section ) const
+    {
+        return find_section_line( section ) != npos;
+    }
+
     std::string get( std::string_view section, std::string_view key, std::string_view fallback = {} ) const
     {
         const KeyRef* ref = find_key( section, key );

@@ -80,6 +80,10 @@ bool CFG::GetValueFrom(void* iniPointer, const char* szSection, const char* szKe
     strxcpy(pValue, value.c_str(), maxLen);
     return true;
 }
+bool CFG::HasSection(void* iniPointer, const char* szSection)
+{
+    return ( szSection && ((JINI*)iniPointer)->has_section(szSection) );
+}
 bool CFG::HasKey(void* iniPointer, const char* szSection, const char* szKey)
 {
     return ( szSection && szKey && ((JINI*)iniPointer)->has(szSection, szKey) );

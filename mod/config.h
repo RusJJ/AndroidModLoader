@@ -45,6 +45,12 @@ public:
     bool         GetBool(const char* szKey, bool bDefaultValue, const char* szSection = "Preferences");
     rgba_t       GetColor(const char* szKey, rgba_t clrDefaultValue, const char* szSection = "Preferences");
 
+    // AML 1.4.0+
+    bool         HasSection(const char* szSection);
+    bool         HasKey(const char* szSection, const char* szKey);
+    bool         HasSectionComment(const char* szSection);
+    bool         HasKeyComment(const char* szSection, const char* szKey);
+
     // Self-explained
     inline bool  IsValueChanged() { return m_bValueChanged; }
     inline void  ClearLast();
