@@ -322,12 +322,12 @@ void ModsList::ProcessCrash(const char* szLibName, int sig, int code, uintptr_t 
 
 int ModsList::GetModsNum()
 {
-    return listMods->Count();
+    return listMods ? listMods->Count() : 0;
 }
 
 void ModsList::PrintModsList(std::ofstream& logfile)
 {
-    logfile << "\n----------------------------------------------------\nList of loaded mods (count=" << std::dec << listMods->Count() << "):\n";
+    logfile << "\n----------------------------------------------------\nList of loaded mods (count=" << std::dec << GetModsNum() << "):\n";
 
     ModInfo* info = NULL;
     ModDesc* desc = NULL;

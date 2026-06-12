@@ -45,7 +45,7 @@ DECL_HOOKv(__aml_log_vprint, int prio, const char *tag, const char *fmt, va_list
     if(!fmt) return;
     if(!tag) tag = "AML: Untagged sender";
 
-    vsprintf(text, fmt, ap);
+    vsnprintf(text, sizeof(text), fmt, ap);
     __aml_log_print(prio, tag, text);
 
     if(bAndroidLog_OnlyImportant && !IsImportantLogLevel(prio)) return;

@@ -148,18 +148,29 @@ inline bool CopyFileFaster(const char* file, const char* dest)
 // Slower version (because it copies the file contents byte-by-byte)
 inline bool CopyFile(const char* file, const char* dest)
 {
-    FILE* source = fopen(file, "r");
+    FILE* source = fopen(file, "rb");
     if(source == NULL) return false;
-    FILE* target = fopen(dest, "w");
+    FILE* target = fopen(dest, "wb");
     if(target == NULL) 
     {
         fclose(source);
         return false;
     }
-    while(!feof(source)) fputc(fgetc(source), target);
+
+    int ch;
+    while((ch = fgetc(source)) != EOF)
+    {
+        if(fputc(ch, target) == EOF)
+        {
+            fclose(source);
+            fclose(target);
+            return false;
+        }
+    }
+
+    bool success = !ferror(source) && !ferror(target) && fclose(target) == 0;
     fclose(source);
-    fclose(target);
-    return true;
+    return success;
 }
 
 bool AML_CopyFile(const char* file, const char* dest)

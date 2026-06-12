@@ -325,6 +325,7 @@ bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 {
     if(!g_bEnableFileDownloads) return false;
     if(!curl) return false;
+    if(!out || outLen == 0) return false;
     curl_easy_reset(curl);
     
     MemChunk_t chunk = { out, outLen - 1 };

@@ -43,21 +43,27 @@ void MLS::LoadFile()
     }
 
     logger->Info("MLS file is opened, reading sets...");
-    MLSKeychain* item;
     while(true)
     {
-        item = new MLSKeychain;
-        fread(&item->storage, sizeof(MLSStorage), 1, f);
-        if(!feof(f))
+        MLSKeychain* item = new MLSKeychain;
+        size_t readCount = fread(&item->storage, sizeof(MLSStorage), 1, f);
+        if(readCount == 1)
         {
             item->Push(&listSets);
+            continue;
+        }
+
+        delete item;
+        if(ferror(f))
+        {
+            logger->Error("An error (%d) reading MLS file!", errno, strerror(errno));
         }
         else
         {
-            fclose(f);
-            logger->Info("MLS file has been readed. Sets: %d", item->Count());
-            return;
+            logger->Info("MLS file has been readed. Sets: %d", listSets ? listSets->Count() : 0);
         }
+        fclose(f);
+        return;
     }
 }
 void MLS::SaveFile()
