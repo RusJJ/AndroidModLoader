@@ -32,6 +32,7 @@
 #include <interfaces.h>
 #include <modslist.h>
 
+pid_t g_MainThreadID = 0;
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
 bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog = false, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo, g_bUnixBacktrace = false;
 int g_nEnableNews, g_nDownloadTimeout;
@@ -767,6 +768,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
     g_pJavaReserved = reserved;
 
     // Some important stuff to do first
+    g_MainThreadID = gettid();
     InitJavaUIThreadLooper();
     
     /* For the delayed start-up (later) */

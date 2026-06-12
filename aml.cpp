@@ -27,6 +27,7 @@ extern jobject appContext;
 extern bool g_bEnableFileDownloads, g_bMLSOnlyManualSaves;
 extern CURL* curl;
 extern int g_nDownloadTimeout;
+extern pid_t g_MainThreadID;
 
 extern JavaVM *g_pJavaVM;
 extern jobject appContext;
@@ -1266,6 +1267,11 @@ int AML::GetDownloadTimeout()
 void AML::ListMods(ListModsCallback cb, void* data, bool startWithLatest)
 {
     modlist->ListMods(cb, data, startWithLatest);
+}
+
+bool AML::IsMainThread()
+{
+    return (gettid() == g_MainThreadID);
 }
 
 

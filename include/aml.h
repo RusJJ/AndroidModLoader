@@ -138,6 +138,7 @@ public:
     bool        IsMLSInManualSave();
     int         GetDownloadTimeout();
     void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
+    bool        IsMainThread();
 };
 
 extern char g_szAMLFeatures[2048];

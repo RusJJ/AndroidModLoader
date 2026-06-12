@@ -243,6 +243,7 @@ public:
     virtual bool        IsMLSInManualSave();
     virtual int         GetDownloadTimeout();
     virtual void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
+    virtual bool        IsMainThread();
 
 
 
