@@ -36,7 +36,7 @@ pid_t g_MainThreadID = 0;
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
 bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog = false, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo, g_bUnixBacktrace = false;
 int g_nEnableNews, g_nDownloadTimeout;
-int g_nAndroidSDKVersion = 0;
+int g_nAndroidSDKVersion = 0, g_nFailedToLoad = 0;
 ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256]{0},
      g_szAppName[256]{0},
@@ -200,7 +200,8 @@ void LoadMods(const char* path)
         const char* gameName = HasFakeAppName() ? g_szFakeAppName : g_szAppName;
         while ((diread = readdir(dir)) != NULL)
         {
-            if(diread->d_name[0] == '.') continue; // Skip . and ..
+            if(diread->d_name[0] == '.' &&
+                (diread->d_name[1] == '.' || diread->d_name[1] == 0)) continue; // Skip . and ..
             if(!EndsWithSO(diread->d_name))
             {
                 // Useless info for us

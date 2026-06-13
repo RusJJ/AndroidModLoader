@@ -238,12 +238,13 @@ public:
     virtual jobject     CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...);
     virtual jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
     virtual bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
-    virtual int         GetLoadedModsCount();
+    virtual int         GetFailedModsCount();
     virtual bool        IsFileDownloadsEnabled();
     virtual bool        IsMLSInManualSave();
     virtual int         GetDownloadTimeout();
     virtual void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
     virtual bool        IsMainThread();
+    virtual void        DataMD5(void* data, size_t len, char* out, size_t out_len);
 
 
 

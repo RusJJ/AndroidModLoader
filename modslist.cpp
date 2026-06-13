@@ -4,6 +4,7 @@
 #include <mod/listitem.h>
 
 extern ModDesc* pLastModProcessed;
+extern int g_nFailedToLoad;
 
 Mods* listMods = NULL;
 LIST_START(Mods)
@@ -204,6 +205,7 @@ void ModsList::ProcessDependencies()
                     {
                         logger->Error("Mod (GUID %s) requires a mod %s of version %s and newer", info->szGUID, depList[i].szGUID, depList[i].szVersion);
                         ModsList::RemoveMod(info);
+                        ++g_nFailedToLoad;
                         goto label_run_dependencies_check;
                     }
                 }
@@ -213,6 +215,7 @@ void ModsList::ProcessDependencies()
                     {
                         logger->Error("Mod (GUID %s) requires a mod %s of any version", info->szGUID, depList[i].szGUID);
                         ModsList::RemoveMod(info);
+                        ++g_nFailedToLoad;
                         goto label_run_dependencies_check;
                     }
                 }

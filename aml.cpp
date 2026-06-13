@@ -7,15 +7,20 @@
 #include <unordered_map>
 #include <sstream>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <dirent.h>
 
 #include <curl/curl.h>
-#define WC_NO_HARDEN // suppress the annoying warning.
-#include <wolfssl/wolfcrypt/md5.h>
 #include <stdio.h>
 #include <time.h>
 #include <jnifn.h>
 
 #include <Gloss.h>
+
+#include <cryptutils.h>
+JMD5 g_MD5;
 
 char g_szAMLFeatures[2048] = "AML ARMPATCH HOOK CONFIG INTERFACE GLOSS ";
 extern char g_szAppName[256], g_szFakeAppName[256], g_szNativeLibPath[512];
@@ -26,7 +31,7 @@ extern const char* g_szDataDir;
 extern jobject appContext;
 extern bool g_bEnableFileDownloads, g_bMLSOnlyManualSaves;
 extern CURL* curl;
-extern int g_nDownloadTimeout;
+extern int g_nDownloadTimeout, g_nFailedToLoad;
 extern pid_t g_MainThreadID;
 
 extern JavaVM *g_pJavaVM;
@@ -346,40 +351,10 @@ bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 void AML::FileMD5(const char* path, char* out, size_t out_len)
 {
     if(!out || out_len < MINIMUM_MD5_BUF_SIZE) return;
-    
-    FILE *file;
-    wc_Md5 md5Context;
-    unsigned char md5Digest[WC_MD5_DIGEST_SIZE];
+
     out[0] = 0;
-
-    // Open file for reading
-    file = fopen(path, "rb");
-    if(!file) return;
-
-    // Initialize MD5 context
-    wc_InitMd5(&md5Context);
-
-    // Read file contents and update MD5 context
-    unsigned char buffer[1024];
-    size_t bytesRead;
-    while((bytesRead = fread(buffer, 1, sizeof(buffer), file))) {
-        wc_Md5Update(&md5Context, buffer, bytesRead);
-    }
-
-    // Finalize MD5 context and get hash value
-    wc_Md5Final(&md5Context, md5Digest);
-
-    // Save MD5 hash value as hexadecimal string
-    char hex[3];
-    for(uint8_t i = 0; i < WC_MD5_DIGEST_SIZE; ++i)
-    {
-        sprintf(hex, "%02x", md5Digest[i]);
-        strcat(out, hex);
-    }
-    out[2 * WC_MD5_DIGEST_SIZE] = 0;
-
-    // Close file
-    fclose(file);
+    g_MD5.Reset();
+    if(g_MD5.UpdateFile(path)) g_MD5.Get(out, out_len);
 }
 
 int AML::GetModsLoadedCount()
@@ -1244,9 +1219,9 @@ bool AML::SetStaticJavaField(const char* cls, const char* field, const char* sig
     return true;
 }
 
-int AML::GetLoadedModsCount()
+int AML::GetFailedModsCount()
 {
-    return modlist->GetModsNum();
+    return g_nFailedToLoad;
 }
 
 bool AML::IsFileDownloadsEnabled()
@@ -1272,6 +1247,16 @@ void AML::ListMods(ListModsCallback cb, void* data, bool startWithLatest)
 bool AML::IsMainThread()
 {
     return (gettid() == g_MainThreadID);
+}
+
+void AML::DataMD5(void* data, size_t len, char* out, size_t out_len)
+{
+    if(!out || out_len < MINIMUM_MD5_BUF_SIZE) return;
+
+    out[0] = 0;
+    g_MD5.Reset();
+    g_MD5.Update(data, len);
+    g_MD5.Get(out, out_len);
 }
 
 

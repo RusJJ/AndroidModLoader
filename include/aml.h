@@ -133,12 +133,13 @@ public:
     jobject     CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...);
     jobject     GetStaticJavaField(const char* cls, const char* field, const char* sig);
     bool        SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value);
-    int         GetLoadedModsCount();
+    int         GetFailedModsCount();
     bool        IsFileDownloadsEnabled();
     bool        IsMLSInManualSave();
     int         GetDownloadTimeout();
     void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
     bool        IsMainThread();
+    void        DataMD5(void* data, size_t len, char* out, size_t out_len);
 };
 
 extern char g_szAMLFeatures[2048];
