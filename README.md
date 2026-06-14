@@ -13,6 +13,8 @@ AML supports hard dependencies and can help you get info about mod (if it's load
 # Examples
 For any examples visit the repository for all official mods: https://github.com/AndroidModLoader?tab=repositories
 
+If you need a "base" for the plugin, please check directory named `template_of_mod`!
+
 # Discord
 Discord Server of this project located here: https://discord.gg/2MY7W39kBg
 
