@@ -334,6 +334,11 @@ bool Config::HasKeyComment(const char* szSection, const char* szKey)
     return m_pICFG->HasKeyComment(m_iniMyConfig, szSection, szKey);
 }
 
+void Config::GetString(char* out, size_t outLen, const char* szKey, const char* szDefaultValue, const char* szSection)
+{
+    strxcpy(out, GetString(szKey, szDefaultValue, szSection), outLen);
+}
+
 
 
 void ConfigEntry::SetString(const char* newValue)

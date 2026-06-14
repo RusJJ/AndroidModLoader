@@ -246,6 +246,7 @@ public:
     virtual bool        IsMainThread();
     virtual void        DataMD5(void* data, size_t len, char* out, size_t out_len);
     virtual int         GetLatestDownloadErrorCode();
+    virtual int         GetCPUCores();
 
 
 
@@ -277,6 +278,14 @@ public:
     // Can be used with HookVtableFunc to not to instantiate vtable for 1000 times!
     inline void**       GetVtable(void* ptr) { return *(void***)ptr; }
     inline void         SetVtable(void* ptr, void** vtable) { *(void***)ptr = vtable; }
+    inline void         MLSSetBool(const char* key, bool val) { MLSSetInt(key, (int32_t)val); }
+    inline bool         MLSGetBool(const char* key, bool *val)
+    {
+        int tmp = 0;
+        if(!MLSGetInt(key, &tmp)) return false;
+        *val = (tmp != 0);
+        return true;
+    }
 };
 
 extern IAML* aml;

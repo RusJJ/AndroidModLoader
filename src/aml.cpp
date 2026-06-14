@@ -1233,6 +1233,13 @@ int AML::GetLatestDownloadErrorCode()
     return g_nLatestDownloadErrorCode;
 }
 
+int AML::GetCPUCores()
+{
+    long n = sysconf(_SC_NPROCESSORS_CONF);
+    if(n < 1) n = sysconf(_SC_NPROCESSORS_ONLN);
+    return ( (n < 1) ? 1 : (int)n ); 
+}
+
 
 
 static AML amlLocal;

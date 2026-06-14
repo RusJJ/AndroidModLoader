@@ -39,7 +39,7 @@ public:
     ConfigEntry* Bind(const char* szKey, rgba_t clrDefaultValue, const char* szSection = "Preferences");
     
     // FAST GET. NO NEED TO CLEAN THE MEMORY.
-    const char*  GetString(const char* szKey, const char* szDefaultValue, const char* szSection = "Preferences");
+    const char*  GetString(const char* szKey, const char* szDefaultValue, const char* szSection = "Preferences"); // Unsafe
     int          GetInt(const char* szKey, int nDefaultValue, const char* szSection = "Preferences");
     float        GetFloat(const char* szKey, float flDefaultValue, const char* szSection = "Preferences");
     bool         GetBool(const char* szKey, bool bDefaultValue, const char* szSection = "Preferences");
@@ -50,6 +50,7 @@ public:
     bool         HasKey(const char* szSection, const char* szKey);
     bool         HasSectionComment(const char* szSection);
     bool         HasKeyComment(const char* szSection, const char* szKey);
+    void         GetString(char* out, size_t outLen, const char* szKey, const char* szDefaultValue, const char* szSection = "Preferences");
 
     // Self-explained
     inline bool  IsValueChanged() { return m_bValueChanged; }

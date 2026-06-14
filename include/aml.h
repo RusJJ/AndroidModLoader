@@ -141,6 +141,7 @@ public:
     bool        IsMainThread();
     void        DataMD5(void* data, size_t len, char* out, size_t out_len);
     int         GetLatestDownloadErrorCode();
+    int         GetCPUCores();
 };
 
 extern char g_szAMLFeatures[2048];
