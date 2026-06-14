@@ -32,8 +32,8 @@ include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION     := .cpp .cc
 LOCAL_SHARED_LIBRARIES  := armpatch gloss xUnwind
 LOCAL_MODULE            := AML
-LOCAL_SRC_FILES         := main.cpp interface.cpp aml.cpp modpaks.cpp signal.cpp \
-                           modslist.cpp icfg.cpp vtable_hooker.cpp alog.cpp mls.cpp \
+LOCAL_SRC_FILES         := main.cpp src/interface.cpp src/aml.cpp src/modpaks.cpp src/signal.cpp \
+                           src/modslist.cpp src/icfg.cpp src/vtable_hooker.cpp src/alog.cpp src/mls.cpp \
                            mod/logger.cpp mod/config.cpp
 
  ## FLAGS ##
