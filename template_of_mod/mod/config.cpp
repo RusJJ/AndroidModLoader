@@ -313,6 +313,34 @@ rgba_t Config::GetColor(const char* szKey, rgba_t clr, const char* szSection)
     return pRet->ParseColor();
 }
 
+// AML 1.4.0+
+bool Config::HasSection(const char* szSection)
+{
+    return m_pICFG->HasSection(m_iniMyConfig, szSection);
+}
+
+bool Config::HasKey(const char* szSection, const char* szKey)
+{
+    return m_pICFG->HasKey(m_iniMyConfig, szSection, szKey);
+}
+
+bool Config::HasSectionComment(const char* szSection)
+{
+    return m_pICFG->HasSectionComment(m_iniMyConfig, szSection);
+}
+
+bool Config::HasKeyComment(const char* szSection, const char* szKey)
+{
+    return m_pICFG->HasKeyComment(m_iniMyConfig, szSection, szKey);
+}
+
+void Config::GetString(char* out, size_t outLen, const char* szKey, const char* szDefaultValue, const char* szSection)
+{
+    strxcpy(out, GetString(szKey, szDefaultValue, szSection), outLen);
+}
+
+
+
 void ConfigEntry::SetString(const char* newValue)
 {
     if(m_bLoadedData && str_equal(newValue, m_szValue)) return;
