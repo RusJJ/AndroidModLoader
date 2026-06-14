@@ -12,13 +12,13 @@
 #include <unistd.h>
 #include <dirent.h>
 
-#include <curl/curl.h>
 #include <stdio.h>
 #include <time.h>
 #include <jnifn.h>
 
 #include <Gloss.h>
 
+#include <httputils.h>
 #include <cryptutils.h>
 JMD5 g_MD5;
 
@@ -30,8 +30,7 @@ extern char g_szUserAgent[256];
 extern const char* g_szDataDir;
 extern jobject appContext;
 extern bool g_bEnableFileDownloads, g_bMLSOnlyManualSaves;
-extern CURL* curl;
-extern int g_nDownloadTimeout, g_nFailedToLoad;
+extern int g_nDownloadTimeout, g_nFailedToLoad, g_nLatestDownloadErrorCode;
 extern pid_t g_MainThreadID;
 
 extern JavaVM *g_pJavaVM;
@@ -295,22 +294,7 @@ static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userd
 bool AML::DownloadFile(const char* url, const char* saveto)
 {
     if(!g_bEnableFileDownloads) return false;
-    if(!curl) return false;
-    curl_easy_reset(curl);
-    
-    FILE* file = fopen(saveto, "wb");
-    if(!file) return false;
-    
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
-    
-    CURLcode res = curl_easy_perform(curl);
-    fclose(file);
-    return res == CURLE_OK;
+    return JHTTPUtils::DownloadFile(url, saveto, g_nDownloadTimeout, g_szUserAgent, true);
 }
 
 static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, MemChunk_t* chunk)
@@ -330,22 +314,7 @@ static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, MemChunk_t*
 bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 {
     if(!g_bEnableFileDownloads) return false;
-    if(!curl) return false;
-    if(!out || outLen == 0) return false;
-    curl_easy_reset(curl);
-    
-    MemChunk_t chunk = { out, outLen - 1 };
-    out[0] = 0;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &chunk);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
-    
-    CURLcode res = curl_easy_perform(curl);
-    out[outLen - 1] = 0;
-    return res == CURLE_OK;
+    return JHTTPUtils::DownloadFileToData(url, out, outLen, g_nDownloadTimeout, g_szUserAgent);
 }
 
 void AML::FileMD5(const char* path, char* out, size_t out_len)
@@ -1257,6 +1226,11 @@ void AML::DataMD5(void* data, size_t len, char* out, size_t out_len)
     g_MD5.Reset();
     g_MD5.Update(data, len);
     g_MD5.Get(out, out_len);
+}
+
+int AML::GetLatestDownloadErrorCode()
+{
+    return g_nLatestDownloadErrorCode;
 }
 
 

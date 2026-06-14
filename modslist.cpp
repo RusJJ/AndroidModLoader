@@ -4,7 +4,7 @@
 #include <mod/listitem.h>
 
 extern ModDesc* pLastModProcessed;
-extern int g_nFailedToLoad;
+extern int g_nFailedToLoad, g_nLatestDownloadErrorCode;
 
 Mods* listMods = NULL;
 LIST_START(Mods)
@@ -299,14 +299,13 @@ void ModsList::ProcessUpdater()
         if(desc->m_fnRequestUpdaterURL)
         {
             const char* url = desc->m_fnRequestUpdaterURL();
-            CURLcode res = DownloadFileToData(url);
-            if(res != CURLE_OK)
+            if(DownloadFileToData(url))
             {
-                logger->Error("Updater failed to determine an update info for %s, err %d", desc->m_pInfo->GUID(), res);
+                ProcessData(desc);
             }
             else
             {
-                ProcessData(desc);
+                logger->Error("Updater failed to determine an update info for %s, err %d", desc->m_pInfo->GUID(), g_nLatestDownloadErrorCode);
             }
         }
     }

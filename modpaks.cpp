@@ -2,76 +2,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <httputils.h>
 #include <mod/logger.h>
 
 extern int g_nDownloadTimeout;
 
-CURL* curl = NULL;
 char szFileData[FILE_DATA_SIZE] = {0};
 extern char g_szUserAgent[256];
 size_t nReadedBytes = 0;
 
-void InitCURL()
+bool DownloadFile(const char* url, const char* path)
 {
-    curl_global_init(CURL_GLOBAL_ALL);
-    curl = curl_easy_init();
-}
-
-static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
-{
-    FILE* file = (FILE*)userdata;
-    return file ? fwrite(buffer, size, nmemb, file) : 0;
-}
-static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, void* userdata)
-{
-    size_t bytes = size * nmemb;
-    if(nReadedBytes >= FILE_DATA_SIZE - 1) return bytes;
-
-    size_t remaining = FILE_DATA_SIZE - 1 - nReadedBytes;
-    size_t copyBytes = (bytes < remaining) ? bytes : remaining;
-
-    memcpy(szFileData + nReadedBytes, buffer, copyBytes);
-    nReadedBytes += copyBytes;
-    szFileData[nReadedBytes] = 0;
-    return bytes;
-}
-
-CURLcode DownloadFile(const char* url, const char* path)
-{
-    if(!curl) return CURLE_FAILED_INIT;
-    curl_easy_reset(curl);
-    
-    FILE* file = fopen(path, "wb");
-    if(!file) return CURLE_WRITE_ERROR;
-    
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToFileCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
-    
-    CURLcode res = curl_easy_perform(curl);
-    fclose(file);
-    return res;
-}
-
-CURLcode DownloadFileToData(const char* url)
-{
-    if(!curl) return CURLE_FAILED_INIT;
-    curl_easy_reset(curl);
     szFileData[0] = 0;
-    nReadedBytes = 0;
-    
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false); // cURL fails at SSL/TLS here, for some reason
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToDataCB);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, url);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, g_nDownloadTimeout);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_szUserAgent);
-    
-    CURLcode res = curl_easy_perform(curl);
-    return res;
+    return JHTTPUtils::DownloadFile(url, path, g_nDownloadTimeout, g_szUserAgent, true);
+}
+
+bool DownloadFileToData(const char* url)
+{
+    szFileData[0] = 0;
+    return JHTTPUtils::DownloadFileToData(url, szFileData, sizeof(szFileData), g_nDownloadTimeout, g_szUserAgent);
 }
 
 inline bool str_equal(const char* str1, const char* str2) { 
@@ -88,8 +37,7 @@ static inline void ProcessLine(ModDesc* d, char* data)
     {
         if(!modlist->HasModOfVersion(d->m_pInfo->GUID(), middle))
         {
-            CURLcode res = DownloadFile(right, d->m_szLibPath);
-            if(res == CURLE_OK)
+            if(DownloadFile(right, d->m_szLibPath))
             {
                 if(g_bShowUpdatedToast) aml->ShowToast(true, "Mod %s has been updated!\nRestart the game to load new mod.", d->m_pInfo->Name());
             }

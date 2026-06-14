@@ -245,6 +245,7 @@ public:
     virtual void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
     virtual bool        IsMainThread();
     virtual void        DataMD5(void* data, size_t len, char* out, size_t out_len);
+    virtual int         GetLatestDownloadErrorCode();
 
 
 

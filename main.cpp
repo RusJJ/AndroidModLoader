@@ -36,7 +36,7 @@ pid_t g_MainThreadID = 0;
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
 bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog = false, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo, g_bUnixBacktrace = false;
 int g_nEnableNews, g_nDownloadTimeout;
-int g_nAndroidSDKVersion = 0, g_nFailedToLoad = 0;
+int g_nAndroidSDKVersion = 0, g_nFailedToLoad = 0, g_nLatestDownloadErrorCode = 0;
 ConfigEntry* g_pLastNewsId;
 char g_szInternalStoragePath[256]{0},
      g_szAppName[256]{0},
@@ -466,7 +466,6 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     modlist->AddMod(amlmodinfo, 0, "localpath (core)");
     interfaces->Register("AMLInterface", aml);
     interfaces->Register("AMLConfig", icfg);
-    InitCURL();
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(g_env, appContext, "READ_EXTERNAL_STORAGE") ||

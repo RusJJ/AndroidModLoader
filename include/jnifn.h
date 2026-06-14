@@ -1,3 +1,6 @@
+#ifndef __JNIFN_H
+#define __JNIFN_H
+
 #include <jni.h>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
@@ -359,3 +362,5 @@ inline jobject InjectSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSi
     
     return instance;
 }
+
+#endif // __JNIFN_H
