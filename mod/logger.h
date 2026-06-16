@@ -43,12 +43,14 @@ public:
     void InfoV(const char* szMessage, va_list args);
     void Error(const char* szMessage, ...);
     void ErrorV(const char* szMessage, va_list args);
+    void If(bool cond, const char* szMessage, ...);
+    void IfV(bool cond, const char* szMessage, va_list args);
   #ifdef NOLOGGING
     inline bool HasOutput() { return false; }
   #else
     inline bool HasOutput() { return m_bEnabled; }
   #endif
-    const char* EnumPrio(int prio)
+    inline const char* EnumPrio(int prio)
     {
         switch(prio)
         {
