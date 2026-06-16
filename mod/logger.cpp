@@ -168,6 +168,6 @@ void Logger::IfV(bool cond, const char* szMessage, va_list args)
     if(m_fnLogCallback) m_fnLogCallback(LogP_Fatal, buffer);
     __android_log_write(ANDROID_LOG_FATAL, m_szTag, buffer);
 #endif
-
+}
 static Logger loggerLocal;
 Logger* logger = &loggerLocal;
