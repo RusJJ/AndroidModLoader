@@ -20,7 +20,7 @@ jobs:
       uses: nttld/setup-ndk@v1
       with:
         ndk-version: r24
-        local-cache: true
+        # local-cache: true # caching breaks Unwind lib
 
     - name: Building ARMPatch...
       run: ndk-build NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=./ARMPatch/armpatch_src/Android.mk NDK_APPLICATION_MK=./ARMPatch/armpatch_src/Application.mk NDK_DEBUG=0 -j12
