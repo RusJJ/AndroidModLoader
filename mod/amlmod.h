@@ -17,6 +17,8 @@
     #error This lib is supposed to work on ARM only!
 #endif
 
+
+
 #ifdef __clang__
     #define TARGET_ARM __attribute__((target("no-thumb-mode")))
     #define TARGET_THUMB  __attribute__((target("thumb-mode")))
@@ -28,6 +30,8 @@
     #define ASM_NAKED __declspec(naked)
 #endif
 #define EXPORT JNIEXPORT
+
+// AML Mods, important stuff
 
 #define MYMOD(_guid, _name, _version, _author)                          \
     static ModInfo modinfoLocal(#_guid, #_name, #_version, #_author);   \
@@ -53,7 +57,7 @@
 #define NEEDGAME(_pkg_name)                                             \
     extern "C" JNIEXPORT const char* __INeedASpecificGame() { return #_pkg_name; }
 
-/* Dependencies! */
+// Dependencies!
 #define BEGIN_DEPLIST()                                                 \
     static ModInfoDependency g_listDependencies[] = {
 
@@ -67,7 +71,7 @@
     {"", ""} };                                                         \
     extern "C" JNIEXPORT ModInfoDependency* __GetDepsList() { return &g_listDependencies[0]; }
 
-/* Macros to stop forgetting stuff! */
+// Macros to stop forgetting stuff!
 #define ON_MOD_PRELOAD()                                                \
     extern "C" JNIEXPORT void OnModPreLoad()
 
@@ -89,7 +93,7 @@
 #define ON_NEW_INTERFACE()                                              \
     extern "C" JNIEXPORT void OnInterfaceAdded(const char* name, const void* ptr)
 
-    
+// Helpers
 
 #define MINIMUM_MD5_BUF_SIZE ( 32 + 1 )
 
@@ -148,6 +152,8 @@ inline void clampfloat(float min, float max, float* v)
     if(*v < min) *v = min;
     else if(*v > max) *v = max;
 }
+
+#define ARRAY_SIZE(__aVar)  ((size_t)( sizeof(__aVar) / sizeof(__aVar[0]) ))
 
 class ModInfo
 {
