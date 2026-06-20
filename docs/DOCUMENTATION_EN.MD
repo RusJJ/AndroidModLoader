@@ -170,14 +170,14 @@ void* GetInterface(const char* szInterfaceName);              // fetch a registe
 void  RegisterInterface(const char* szInterfaceName, void* p);// expose your own
 ```
 
-An interface is just a pointer (usually to a struct/class of function pointers or a vtable class) stored under a **versioned string name**. The name *is* the ABI contract — include a version number and bump it when the layout changes.
+An interface is just a pointer (usually to a struct/class of function pointers or a vtable class) stored under a string name you choose. The provider and consumer simply have to agree on that exact name and on the struct/class layout behind it. How you name interfaces is entirely up to you.
 
 `aml` itself is obtained this way: the `MYMOD` macro calls `GetInterface("AMLInterface")` for you.
 
 ### Convenience macro
 ```cpp
 #define WRAP_INTERFACE(name, var)  RegisterInterface(#name, var)
-WRAP_INTERFACE(IMyApi001, &g_MyApi);   // == RegisterInterface("IMyApi001", &g_MyApi)
+WRAP_INTERFACE(IMyApi, &g_MyApi);   // == RegisterInterface("IMyApi", &g_MyApi)
 ```
 
 ### A) Providing an interface
@@ -200,7 +200,7 @@ MYMOD(net.author.myapi, My API Provider, 1.0, AuthorName)
 
 ON_MOD_LOAD()
 {
-    RegisterInterface("IMyApi001", &g_MyApi);
+    RegisterInterface("IMyApi", &g_MyApi);
 }
 ```
 
@@ -221,8 +221,8 @@ END_DEPLIST()
 
 ON_MOD_LOAD()
 {
-    BASS = (IBASS*)GetInterface("IBASS001");
-    if(!BASS) { logger->Error("IBASS001 not found"); return; }
+    BASS = (IBASS*)GetInterface("IBASS");
+    if(!BASS) { logger->Error("IBASS not found"); return; }
     // BASS->...
 }
 ```
@@ -231,14 +231,14 @@ ON_MOD_LOAD()
 ```cpp
 ON_NEW_INTERFACE()   // OnInterfaceAdded(name, ptr)
 {
-    if(!strcmp(name, "IBASS001"))
+    if(!strcmp(name, "IBASS"))
         BASS = (IBASS*)ptr;
 }
 ```
 
 ### Notes
 - If you hard-depend on the provider (`ADD_DEPENDENCY*`), the interface exists by your `OnModLoad`. For optional providers, check `NULL`.
-- Keep the version suffix in the name (`IBASS001`) so mismatched clients fail cleanly instead of calling a wrong layout.
+- The exact interface name (`"IBASS"` above is only an example) is whatever the provider chose. Check the provider's header/docs and use that string verbatim.
 
 ---
 
@@ -458,8 +458,8 @@ HOOKPLT(name, fnAddr)              // PLT/GOT hook
 HOOKB(name, fnAddr)                // hook a B
 HOOKBL(name, fnAddr)               // hook a BL
 HOOKBLX(name, fnAddr)              // hook a BLX
-HOOK_IL2CPP(name, methodInfo)      // hook via IL2CPP MethodInfo->methodPointer
 ```
+> A `HOOK_IL2CPP` macro exists in the header, but IL2CPP is not ready (see §13); it is intentionally not documented here.
 
 ### Example
 ```cpp
@@ -632,18 +632,9 @@ LIST_FOR_REVERSE(list){ /* back to front */ }
 
 ## 13. IL2CPP / Unity mods
 
-`il2cpp.h` only forward-declares IL2CPP types (`IL2Object`, `IL2Class`, `MethodInfo`, `FieldInfo`, etc.). AML does not bundle a full IL2CPP toolkit — you supply your own dumped headers/SDK. Once you have a `MethodInfo*`, hook the native method with:
-```cpp
-DECL_HOOK(void*, SomeManagedMethod, void* self /*, args */)
-{
-    return SomeManagedMethod(self /*, args */);
-}
-ON_MOD_LOAD()
-{
-    MethodInfo* mi = /* resolve from your IL2CPP dump */;
-    HOOK_IL2CPP(SomeManagedMethod, mi);   // hooks mi->methodPointer
-}
-```
+**IL2CPP support is NOT ready and is NOT included in AML.** `il2cpp.h` only forward-declares a few IL2CPP type names (`IL2Object`, `IL2Class`, `MethodInfo`, `FieldInfo`, etc.) so unrelated code can compile. There is no dumper, no runtime resolver, and no SDK shipped with AML, and this document does not provide an IL2CPP modding guide.
+
+If you want to mod a Unity/IL2CPP game, you must do the IL2CPP side entirely yourself with your own external tooling (dumping the game, obtaining headers and method/field addresses, resolving methods at runtime, etc.). AML only provides the generic hooking and memory-patching primitives described elsewhere in this document; once you have resolved a raw address on your own, you hook it like any other native function.
 
 ---
 
@@ -732,7 +723,7 @@ ON_MOD_UNLOAD()
 | `aml->GetJNIEnvironment / CallStaticJavaMethod / GetCurrentActivity` | JNI bridge |
 | `aml->MLS*` | Persistent key/value store |
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Device/UI |
-| `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` / `HOOK_IL2CPP` | Hook macros |
+| `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Hook macros |
 | `cfg->GetInt/GetFloat/GetBool/GetString/GetColor(key, def, section="Preferences")` | Read config |
 | `cfg->Bind(...) -> ConfigEntry` + `Clamp/Set*/Reset` + `cfg->Save()` | Bound config |
 | `icfg->...` (`GetCFGInterface()`) | Lightweight INI |
