@@ -58,7 +58,7 @@ JNIEnv* g_env = NULL;
 std::unordered_map<std::string, jobject> g_InjectedInstances;
 
 // Main
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.4", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.4.1", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
 
 static Config cfgLocal("ModLoaderCore");
@@ -99,16 +99,13 @@ inline void __pathback(char *str)
 
 inline bool EndsWith(const char* base, const char* str)
 {
-    static int blen, slen;
-    blen = strlen(base);
-    slen = strlen(str);
+    int blen = strlen(base), slen = strlen(str);
     return (blen >= slen) && (!strcmp(base + blen - slen, str));
 }
 
 inline bool EndsWithSO(const char* base)
 {
-    static int blen;
-    blen = strlen(base);
+    int blen = strlen(base);
     return (blen >= 3) && (!strcmp(base + blen - 3, ".so"));
 }
 
@@ -131,7 +128,7 @@ inline bool CopyFileFaster(const char* file, const char* dest)
     unsigned char errors = 0;
     while(bytesLeft > 0)
     {
-        ssize_t bytesCopied = sendfile(outFd, inFd, NULL, statBuf.st_size);
+        ssize_t bytesCopied = sendfile(outFd, inFd, NULL, bytesLeft);
         if(bytesCopied > 0) bytesLeft -= bytesCopied;
         else if(bytesCopied == 0) break;
         else
@@ -222,6 +219,13 @@ void LoadMods(const char* path)
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP);
 
             handle = dlopen(dataBuf, RTLD_NOW); // Load it to the RAM
+            if(!handle)
+            {
+                logger->Error("Failed to load mod %s: %s", diread->d_name, dlerror());
+                remove(dataBuf);
+                continue;
+            }
+            
             modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
             if(modInfoFn != NULL)
             {
@@ -268,23 +272,26 @@ extern bool bAndroidLog_OnlyImportant, bAndroidLog_NoAfter, bAML_HasFastmanModif
 bool g_bAMLStarted = false;
 
 pthread_key_t g_JNIThreadKey;
+static pthread_once_t g_JNIKeyOnce = PTHREAD_ONCE_INIT;
+static void DetachJNIOnThreadExit(void* env)
+{
+    if(env && g_pJavaVM) g_pJavaVM->DetachCurrentThread();
+}
+static void CreateJNIThreadKey()
+{
+    pthread_key_create(&g_JNIThreadKey, DetachJNIOnThreadExit);
+}
 JNIEnv* GetCurrentJNI()
 {
-    JNIEnv* env = NULL;
-    if(g_JNIThreadKey)
-    {
-        env = (JNIEnv*)pthread_getspecific(g_JNIThreadKey);
-        if(env) return env;
-    }
-    else
-    {
-        pthread_key_create(&g_JNIThreadKey, NULL);
-    }
+    pthread_once(&g_JNIKeyOnce, CreateJNIThreadKey);
+    
+    JNIEnv* env = (JNIEnv*)pthread_getspecific(g_JNIThreadKey);
+    if(env) return env;
 
     if(g_pJavaVM)
     {
-        jint result = g_pJavaVM->AttachCurrentThread(&env, NULL);
-        if(result == 0 && env)
+        if(g_pJavaVM->GetEnv((void**)&env, JNI_VERSION_1_6) == JNI_OK && env) return env;
+        if(g_pJavaVM->AttachCurrentThread(&env, NULL) == 0 && env)
         {
             pthread_setspecific(g_JNIThreadKey, env);
             return env;
@@ -485,7 +492,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     g_env->DeleteLocalRef(storageDir);
 
     /* Package Name */
-    char i = 0;
+    int i = 0;
     jTmp = GetPackageName(g_env, appContext);
     szTmp = g_env->GetStringUTFChars(jTmp, NULL);
     while(szTmp[i] != 0 && i < sizeof(g_szAppName)-1)
