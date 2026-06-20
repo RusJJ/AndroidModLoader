@@ -15,6 +15,12 @@ For any examples visit the repository for all official mods: https://github.com/
 
 If you need a "base" for the plugin, please check directory named `template_of_mod`!
 
+# Mod development documentation
+* [English](https://github.com/RusJJ/AndroidModLoader/blob/main/docs/DOCUMENTATION_EN.MD)
+* [Русский](https://github.com/RusJJ/AndroidModLoader/blob/main/docs/DOCUMENTATION_RU.MD)
+* [Bahasa Indonesia](https://github.com/RusJJ/AndroidModLoader/blob/main/docs/DOCUMENTATION_ID.MD)
+* [Português](https://github.com/RusJJ/AndroidModLoader/blob/main/docs/DOCUMENTATION_PT.MD)
+
 # Discord
 Discord Server of this project located here: https://discord.gg/2MY7W39kBg
 
