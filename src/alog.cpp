@@ -53,7 +53,7 @@ DECL_HOOKv(__aml_log_vprint, int prio, const char *tag, const char *fmt, va_list
     time_t rawtime;
     time ( &rawtime );
 
-    oAndroidLogFile << asctime(localtime ( &rawtime )) << " [" << EnumPriority(prio) << "][AML Hook: " << tag << "] " << text << std::endl << std::endl;
+    oAndroidLogFile << asctime(localtime ( &rawtime )) << " [" << tag << "][" << EnumPriority(prio) << "] " << text << std::endl << std::endl;
     oAndroidLogFile.flush();
 }
 
@@ -77,7 +77,7 @@ void HookALog()
 
     if(!__android_log_print_addr && !__android_log_vprint_addr)
     {
-        logger->Error("AML Core just failed to patch logs function!");
+        logger->Error("AML Core failed to hook system logging function!");
         return;
     }
 
@@ -93,6 +93,6 @@ void HookALog()
     else
     {
       an_epic_fail_ever:
-        logger->Error("AML Core just failed to open log file!");
+        logger->Error("AML Core failed to create a system log file!");
     }
 }
