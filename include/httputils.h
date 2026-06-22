@@ -185,7 +185,7 @@ struct JHTTPUtils
             env->DeleteLocalRef(ex);
         }
         else snprintf(buf, sizeof(buf), "httputils.h: EXC @%s (pending but null)", where);
-        logger->Info(buf);
+        logger->Info("%s", buf);
         return true;
     }
 

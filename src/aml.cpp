@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <time.h>
 #include <jnifn.h>
+#include <mod/localref.h>
+#include <mod/scopeguard.h>
 
 #include <Gloss.h>
 
@@ -40,6 +42,15 @@ jobject GetCurrentContext();
 jobject GetCurrentActivity();
 AAssetManager* GetCurrentAssetManager();
 bool PushToJavaUIThread(void (*fn)(void*), void* data);
+
+template<typename T>
+static LocalRef<T> MakeJNILocalRef(JNIEnv* env, T ref)
+{
+    return LocalRef<T>(ref, [env](T localRef)
+    {
+        if(localRef) env->DeleteLocalRef(localRef);
+    });
+}
 
 inline bool HasFakeAppName()
 {
@@ -286,31 +297,12 @@ void AML::ShowToast(bool longerDuration, const char* fmt, ...)
     va_end(args);
 }
 
-static size_t WriteToFileCB(void* buffer, size_t size, size_t nmemb, void* userdata)
-{
-    FILE* file = (FILE*)userdata;
-    return file ? fwrite(buffer, size, nmemb, file) : 0;
-}
 bool AML::DownloadFile(const char* url, const char* saveto)
 {
     if(!g_bEnableFileDownloads) return false;
     return JHTTPUtils::DownloadFile(url, saveto, g_nDownloadTimeout, g_szUserAgent, true);
 }
 
-static size_t WriteToDataCB(void* buffer, size_t size, size_t nmemb, MemChunk_t* chunk)
-{
-    size_t bytes = size * nmemb;
-    if(chunk->out_len == 0) return bytes;
-
-    size_t used = strlen(chunk->out);
-    if(used >= chunk->out_len) return bytes;
-
-    size_t remaining = chunk->out_len - used;
-    size_t copyBytes = (bytes < remaining) ? bytes : remaining;
-    memcpy(chunk->out + used, buffer, copyBytes);
-    chunk->out[used + copyBytes] = 0;
-    return bytes;
-}
 bool AML::DownloadFileToData(const char* url, char* out, size_t outLen)
 {
     if(!g_bEnableFileDownloads) return false;
@@ -524,31 +516,43 @@ jmethodID g_VibrateLongMethod, g_VibratePatternMethod, g_VibrateCancelMethod;
 bool g_bVibratorInited = false;
 inline bool InitVibroJNI(JNIEnv* env)
 {
+    if(!env) return false;
     jobject curCtx = ::GetCurrentContext();
     if(!curCtx) return false;
 
     if(!g_bVibratorInited)
     {
-        jclass vibratorCls = env->FindClass("android/os/Vibrator");
-        if(!vibratorCls) return false;
+        auto vibratorCls = MakeJNILocalRef(env, env->FindClass("android/os/Vibrator"));
+        if(!vibratorCls.Get()) { if(env->ExceptionCheck()) env->ExceptionClear(); return false; }
 
-        jclass contextCls = env->FindClass("android/content/Context");
-        if(!contextCls) return false;
+        auto contextCls = MakeJNILocalRef(env, env->FindClass("android/content/Context"));
+        if(!contextCls.Get()) { if(env->ExceptionCheck()) env->ExceptionClear(); return false; }
 
-        jmethodID sysServiceMethod = env->GetMethodID(contextCls, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
-        jfieldID vibratorSrvField = env->GetStaticFieldID(contextCls, "VIBRATOR_SERVICE", "Ljava/lang/String;");
-        jstring vibratorFieldStr = (jstring)env->GetStaticObjectField(contextCls, vibratorSrvField);
-        jobject localVibrateObject = env->CallObjectMethod(curCtx, sysServiceMethod, vibratorFieldStr);
-        g_VibratorObject = env->NewGlobalRef(localVibrateObject);
-        g_VibrateLongMethod = env->GetMethodID(vibratorCls, "vibrate", "(J)V");
-        g_VibratePatternMethod = env->GetMethodID(vibratorCls, "vibrate", "([JI)V");
-        g_VibrateCancelMethod = env->GetMethodID(vibratorCls, "cancel", "()V");
+        jmethodID sysServiceMethod = env->GetMethodID(contextCls.Get(), "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+        jfieldID vibratorSrvField = env->GetStaticFieldID(contextCls.Get(), "VIBRATOR_SERVICE", "Ljava/lang/String;");
+        if(!sysServiceMethod || !vibratorSrvField)
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return false;
+        }
+        auto vibratorFieldStr = MakeJNILocalRef(env, (jstring)env->GetStaticObjectField(contextCls.Get(), vibratorSrvField));
+        auto localVibrateObject = MakeJNILocalRef(env, env->CallObjectMethod(curCtx, sysServiceMethod, vibratorFieldStr.Get()));
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        g_VibratorObject = localVibrateObject.Get() ? env->NewGlobalRef(localVibrateObject.Get()) : NULL;
+        g_VibrateLongMethod = env->GetMethodID(vibratorCls.Get(), "vibrate", "(J)V");
+        g_VibratePatternMethod = env->GetMethodID(vibratorCls.Get(), "vibrate", "([JI)V");
+        g_VibrateCancelMethod = env->GetMethodID(vibratorCls.Get(), "cancel", "()V");
 
-        env->DeleteLocalRef(localVibrateObject);
-        env->DeleteLocalRef(vibratorFieldStr);
-        env->DeleteLocalRef(vibratorCls);
-        env->DeleteLocalRef(contextCls);
-
+        if(!g_VibratorObject || !g_VibrateLongMethod || !g_VibratePatternMethod || !g_VibrateCancelMethod)
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            if(g_VibratorObject)
+            {
+                env->DeleteGlobalRef(g_VibratorObject);
+                g_VibratorObject = NULL;
+            }
+            return false;
+        }
         g_bVibratorInited = true;
     }
     return true;
@@ -567,22 +571,23 @@ void AML::DoVibro(int msTime)
 }
 void AML::DoVibro(jlong* pattern, int patternItems)
 {
+    if(!pattern || patternItems <= 0) return;
+
     JNIEnv* env = GetCurrentJNI();
     if(!env) return;
 
     if(InitVibroJNI(env))
     {
-        jlongArray patternArray = env->NewLongArray(patternItems);
-        env->SetLongArrayRegion(patternArray, 0, patternItems, pattern);
-        env->CallVoidMethod(g_VibratorObject, g_VibratePatternMethod, patternArray, -1);
-
-        env->DeleteLocalRef(patternArray);
+        auto patternArray = MakeJNILocalRef(env, env->NewLongArray(patternItems));
+        if(!patternArray.Get()) { if(env->ExceptionCheck()) env->ExceptionClear(); return; }
+        env->SetLongArrayRegion(patternArray.Get(), 0, patternItems, pattern);
+        env->CallVoidMethod(g_VibratorObject, g_VibratePatternMethod, patternArray.Get(), -1);
     }
 }
 void AML::CancelVibro()
 {
     JNIEnv* env = GetCurrentJNI();
-    if(env) env->CallVoidMethod(g_VibratorObject, g_VibrateCancelMethod);
+    if(env && InitVibroJNI(env)) env->CallVoidMethod(g_VibratorObject, g_VibrateCancelMethod);
 }
 
 bool g_bBatteryInited = false;
@@ -597,35 +602,79 @@ float AML::GetBatteryLevel()
 
     if(!g_bBatteryInited)
     {
-        jclass intentFilterCls = env->FindClass("android/content/IntentFilter");
-        jmethodID ctor = env->GetMethodID(intentFilterCls, "<init>", "(Ljava/lang/String;)V");
-        jstring action = env->NewStringUTF("android.intent.action.BATTERY_CHANGED");
-        jobject filter = env->NewObject(intentFilterCls, ctor, action);
-        env->DeleteLocalRef(action);
+        jobject context = ::GetCurrentContext();
+        if(!context) return -1.0f;
 
-        jclass contextCls = env->GetObjectClass(::GetCurrentContext());
-        jmethodID registerReceiver = env->GetMethodID(contextCls, "registerReceiver", "(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;)Landroid/content/Intent;");
-        jobject batteryIntent = env->CallObjectMethod(::GetCurrentContext(), registerReceiver, NULL, filter);
-        g_BatteryIntent = env->NewGlobalRef(batteryIntent);
+        auto intentFilterCls = MakeJNILocalRef(env, env->FindClass("android/content/IntentFilter"));
+        if(!intentFilterCls.Get()) { if(env->ExceptionCheck()) env->ExceptionClear(); return -1.0f; }
+        jmethodID ctor = env->GetMethodID(intentFilterCls.Get(), "<init>", "(Ljava/lang/String;)V");
+        auto action = MakeJNILocalRef(env, env->NewStringUTF("android.intent.action.BATTERY_CHANGED"));
+        if(!ctor || !action.Get())
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return -1.0f;
+        }
+        auto filter = MakeJNILocalRef(env, env->NewObject(intentFilterCls.Get(), ctor, action.Get()));
+        if(env->ExceptionCheck() || !filter.Get())
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return -1.0f;
+        }
 
-        jclass intentCls = env->GetObjectClass(g_BatteryIntent);
-        g_GetLevelMethod = env->GetMethodID(intentCls, "getIntExtra", "(Ljava/lang/String;I)I");
-        jstring levelStr = env->NewStringUTF("level");
-        g_pLevelStr = (jstring)env->NewGlobalRef(levelStr);
-        jstring scaleStr = env->NewStringUTF("scale");
-        g_fCachedScale = (float)env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, scaleStr, -1);
-        env->DeleteLocalRef(scaleStr);
-        env->DeleteLocalRef(levelStr);
-        env->DeleteLocalRef(batteryIntent);
-        env->DeleteLocalRef(filter);
-        env->DeleteLocalRef(intentCls);
-        env->DeleteLocalRef(contextCls);
-        env->DeleteLocalRef(intentFilterCls);
+        auto contextCls = MakeJNILocalRef(env, env->GetObjectClass(context));
+        if(!contextCls.Get())
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return -1.0f;
+        }
+        jmethodID registerReceiver = env->GetMethodID(contextCls.Get(), "registerReceiver", "(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;)Landroid/content/Intent;");
+        if(!registerReceiver)
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return -1.0f;
+        }
+        auto batteryIntent = MakeJNILocalRef(env, env->CallObjectMethod(context, registerReceiver, NULL, filter.Get()));
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        g_BatteryIntent = batteryIntent.Get() ? env->NewGlobalRef(batteryIntent.Get()) : NULL;
+        if(!g_BatteryIntent)
+        {
+            return -1.0f;
+        }
 
+        auto intentCls = MakeJNILocalRef(env, env->GetObjectClass(g_BatteryIntent));
+        if(!intentCls.Get())
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            env->DeleteGlobalRef(g_BatteryIntent);
+            g_BatteryIntent = NULL;
+            return -1.0f;
+        }
+        g_GetLevelMethod = env->GetMethodID(intentCls.Get(), "getIntExtra", "(Ljava/lang/String;I)I");
+        auto levelStr = MakeJNILocalRef(env, env->NewStringUTF("level"));
+        g_pLevelStr = levelStr.Get() ? (jstring)env->NewGlobalRef(levelStr.Get()) : NULL;
+        auto scaleStr = MakeJNILocalRef(env, env->NewStringUTF("scale"));
+        if(!g_GetLevelMethod || !levelStr.Get() || !g_pLevelStr || !scaleStr.Get())
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            if(g_BatteryIntent) { env->DeleteGlobalRef(g_BatteryIntent); g_BatteryIntent = NULL; }
+            if(g_pLevelStr) { env->DeleteGlobalRef(g_pLevelStr); g_pLevelStr = NULL; }
+            return -1.0f;
+        }
+        g_fCachedScale = (float)env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, scaleStr.Get(), -1);
+
+        if(!intentCls.Get() || !g_GetLevelMethod || !g_pLevelStr || g_fCachedScale <= 0.0f)
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            if(g_BatteryIntent) { env->DeleteGlobalRef(g_BatteryIntent); g_BatteryIntent = NULL; }
+            if(g_pLevelStr) { env->DeleteGlobalRef(g_pLevelStr); g_pLevelStr = NULL; }
+            return -1.0f;
+        }
         g_bBatteryInited = true;
     }
 
     jint level = env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, g_pLevelStr, -1);
+    if(env->ExceptionCheck()) { env->ExceptionClear(); return -1.0f; }
+    if(level < 0 || g_fCachedScale <= 0.0f) return -1.0f;
     return ((level * 100.0f) / g_fCachedScale);
 }
 
@@ -636,11 +685,16 @@ const char* AML::GetNativeLibsPath()
         JNIEnv* env = GetCurrentJNI();
         if(!env) return "";
 
-        jstring jTmp = GetNativeLibDir(env);
-        const char* szTmp = env->GetStringUTFChars(jTmp, NULL);
+        auto jTmp = MakeJNILocalRef(env, GetNativeLibDir(env));
+        if(!jTmp.Get()) return "";
+        const char* szTmp = env->GetStringUTFChars(jTmp.Get(), NULL);
+        if(!szTmp)
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return "";
+        }
+        DEFER(env->ReleaseStringUTFChars(jTmp.Get(), szTmp));
         snprintf(g_szNativeLibPath, sizeof(g_szNativeLibPath), "%s", szTmp);
-        env->ReleaseStringUTFChars(jTmp, szTmp);
-        env->DeleteLocalRef(jTmp);
     }
     return g_szNativeLibPath;
 }
@@ -700,21 +754,33 @@ void AML::GetDisplaySize(int* width, int* height)
     JNIEnv* env = GetCurrentJNI();
     if (!env) return;
 
-    jobject resources = CallJavaMethod<jobject>(::GetCurrentContext(), "getResources", "()Landroid/content/res/Resources;");
-    jobject displayMetrics = CallJavaMethod<jobject>(resources, "getDisplayMetrics", "()Landroid/util/DisplayMetrics;");
+    jobject context = ::GetCurrentContext();
+    if(!context) return;
+
+    auto resources = MakeJNILocalRef(env, CallJavaMethod<jobject>(context, "getResources", "()Landroid/content/res/Resources;"));
+    if(!resources.Get()) return;
+    auto displayMetrics = MakeJNILocalRef(env, CallJavaMethod<jobject>(resources.Get(), "getDisplayMetrics", "()Landroid/util/DisplayMetrics;"));
+    if(!displayMetrics.Get()) return;
     
-    jclass dmClass = env->GetObjectClass(displayMetrics);
-    if(width)  *width  = env->GetIntField(displayMetrics, env->GetFieldID(dmClass, "widthPixels", "I"));
-    if(height) *height = env->GetIntField(displayMetrics, env->GetFieldID(dmClass, "heightPixels", "I"));
-    
-    env->DeleteLocalRef(dmClass);
-    env->DeleteLocalRef(displayMetrics);
-    env->DeleteLocalRef(resources);
+    auto dmClass = MakeJNILocalRef(env, env->GetObjectClass(displayMetrics.Get()));
+    if(!dmClass.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+
+    jfieldID widthField = env->GetFieldID(dmClass.Get(), "widthPixels", "I");
+    jfieldID heightField = env->GetFieldID(dmClass.Get(), "heightPixels", "I");
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    if(width && widthField)  *width  = env->GetIntField(displayMetrics.Get(), widthField);
+    if(height && heightField) *height = env->GetIntField(displayMetrics.Get(), heightField);
 }
 
 std::unordered_map<uintptr_t, size_t> g_PointerSizesMap;
 uintptr_t AML::AllocateMemory(size_t size, bool executable)
 {
+    if(size == 0) return 0;
+
     int prot = PROT_READ | PROT_WRITE;
     if(executable) prot |= PROT_EXEC;
 
@@ -730,8 +796,11 @@ bool AML::FreeMemory(uintptr_t pointer)
     auto it = g_PointerSizesMap.find(pointer);
     if(it != g_PointerSizesMap.end())
     {
-        munmap((void*)pointer, it->second);
-        return true;
+        if(munmap((void*)pointer, it->second) == 0)
+        {
+            g_PointerSizesMap.erase(it);
+            return true;
+        }
     }
     return false;
 }
@@ -740,7 +809,8 @@ uintptr_t AML::ReadPointerChain(uintptr_t baseAddr, std::initializer_list<int> o
 {
     // Simplify walls of the code like that:
     //   int data = *(int*)( *(uintptr_t*)( *(uintptr_t*)player + 0x40 ) + 0x60 )
-    //   Into this: aml->ReadPointerChain((uintptr_t)player, 2, {0x40, 0x60})
+    //   Into this: int data = *(int*)aml->ReadPointerChain((uintptr_t)player, {0x40, 0x60})
+    //       The returned value is an address; cast and dereference it yourself for the final value.
     uintptr_t currentAddr = baseAddr;
     for(int offset : offsets)
     {
@@ -906,10 +976,13 @@ bool AML::RemoveDir(const char* path, bool recursive)
 
 bool AML::CreateDirRecursive(const char* path)
 {
+    if(!path || !path[0]) return false;
+
     char tmp[256];
     snprintf(tmp, sizeof(tmp), "%s", path);
 
     size_t len = strlen(tmp);
+    if(len == 0) return false;
     if(tmp[len - 1] == '/') tmp[len - 1] = 0;
 
     for(char *p = tmp + 1; *p; ++p)
@@ -1025,28 +1098,63 @@ bool AML::WriteBufferToFile(const char* path, const void* buf, size_t len)
 
 bool AML::MoveFile(const char* src, const char* dst)
 {
+    if(!src || !dst || !src[0] || !dst[0]) return false;
+
     // rename() works if src and dst are on the same filesystem
     if(rename(src, dst) == 0) return true;
 
     struct stat st;
     if(stat(src, &st) != 0) return false;
 
-    char* buf = (char*)malloc(st.st_size);
-    if(!buf) return false;
-
     int inFd = open(src, O_RDONLY);
-    if(inFd < 0)
+    if(inFd < 0) return false;
+
+    int outFd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, st.st_mode & 0777);
+    if(outFd < 0)
     {
-        free(buf);
+        close(inFd);
         return false;
     }
-    read(inFd, buf, st.st_size);
-    close(inFd);
 
-    bool ok = WriteBufferToFile(dst, buf, st.st_size);
-    free(buf);
-    if(ok) unlink(src);
-    return ok;
+    bool ok = true;
+    char buf[16384];
+    while(true)
+    {
+        ssize_t r = read(inFd, buf, sizeof(buf));
+        if(r > 0)
+        {
+            ssize_t written = 0;
+            while(written < r)
+            {
+                ssize_t w = write(outFd, buf + written, (size_t)(r - written));
+                if(w > 0) written += w;
+                else if(w < 0 && errno == EINTR) continue;
+                else
+                {
+                    ok = false;
+                    break;
+                }
+            }
+            if(!ok) break;
+        }
+        else if(r == 0)
+        {
+            break;
+        }
+        else if(errno != EINTR)
+        {
+            ok = false;
+            break;
+        }
+    }
+
+    if(close(inFd) != 0) ok = false;
+    if(close(outFd) != 0) ok = false;
+
+    if(ok && unlink(src) == 0) return true;
+
+    unlink(dst);
+    return false;
 }
 
 time_t AML::GetFileModTime(const char* path)
@@ -1058,36 +1166,58 @@ time_t AML::GetFileModTime(const char* path)
 
 void AML::OpenURL(const char* url)
 {
+    if(!url || !url[0]) return;
+
     JNIEnv* env = GetJNIEnvironment();
     if(!env) return;
 
     jobject ctx = ::GetCurrentActivity();
     if(!ctx) return;
 
-    jclass intentClass = env->FindClass("android/content/Intent");
-    jfieldID actionView = env->GetStaticFieldID(intentClass, "ACTION_VIEW", "Ljava/lang/String;");
-    jstring  action = (jstring)env->GetStaticObjectField(intentClass, actionView);
+    auto intentClass = MakeJNILocalRef(env, env->FindClass("android/content/Intent"));
+    if(!intentClass.Get()) { if(env->ExceptionCheck()) env->ExceptionClear(); return; }
+    jfieldID actionView = env->GetStaticFieldID(intentClass.Get(), "ACTION_VIEW", "Ljava/lang/String;");
+    if(!actionView)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+    auto action = MakeJNILocalRef(env, (jstring)env->GetStaticObjectField(intentClass.Get(), actionView));
 
-    jmethodID ctor = env->GetMethodID(intentClass, "<init>", "(Ljava/lang/String;Landroid/net/Uri;)V");
+    jmethodID ctor = env->GetMethodID(intentClass.Get(), "<init>", "(Ljava/lang/String;Landroid/net/Uri;)V");
 
-    jclass uriClass = env->FindClass("android/net/Uri");
-    jmethodID parse = env->GetStaticMethodID(uriClass, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
-    jstring jUrl = env->NewStringUTF(url);
-    jobject uri = env->CallStaticObjectMethod(uriClass, parse, jUrl);
+    auto uriClass = MakeJNILocalRef(env, env->FindClass("android/net/Uri"));
+    if(!action.Get() || !ctor || !uriClass.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+    jmethodID parse = env->GetStaticMethodID(uriClass.Get(), "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
+    auto jUrl = MakeJNILocalRef(env, env->NewStringUTF(url));
+    if(!parse || !jUrl.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+    auto uri = MakeJNILocalRef(env, env->CallStaticObjectMethod(uriClass.Get(), parse, jUrl.Get()));
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    if(!uri.Get())
+    {
+        return;
+    }
 
-    jobject intent = env->NewObject(intentClass, ctor, action, uri);
+    auto intent = MakeJNILocalRef(env, env->NewObject(intentClass.Get(), ctor, action.Get(), uri.Get()));
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    if(!intent.Get())
+    {
+        return;
+    }
 
-    jclass ctxClass = env->GetObjectClass(ctx);
-    jmethodID startAct = env->GetMethodID(ctxClass, "startActivity", "(Landroid/content/Intent;)V");
-    env->CallVoidMethod(ctx, startAct, intent);
-
-    env->DeleteLocalRef(intent);
-    env->DeleteLocalRef(uri);
-    env->DeleteLocalRef(jUrl);
-    env->DeleteLocalRef(action);
-    env->DeleteLocalRef(ctxClass);
-    env->DeleteLocalRef(uriClass);
-    env->DeleteLocalRef(intentClass);
+    auto ctxClass = MakeJNILocalRef(env, env->GetObjectClass(ctx));
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    jmethodID startAct = ctxClass.Get() ? env->GetMethodID(ctxClass.Get(), "startActivity", "(Landroid/content/Intent;)V") : NULL;
+    if(ctxClass.Get() && startAct) env->CallVoidMethod(ctx, startAct, intent.Get());
+    if(env->ExceptionCheck()) env->ExceptionClear();
 }
 
 jobject AML::CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...)

@@ -143,5 +143,31 @@ void Logger::ErrorV(const char* szMessage, va_list args)
 #endif
 }
 
+void Logger::If(bool cond, const char* szMessage, ...)
+{
+#ifndef NOLOGGING
+    if(cond || !m_bEnabled) return;
+    
+    char buffer[TMPBUF_SIZE];
+    va_list args;
+    va_start(args, szMessage);
+    vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(LogP_Fatal, buffer);
+    __android_log_write(ANDROID_LOG_FATAL, m_szTag, buffer);
+    va_end(args);
+#endif
+}
+
+void Logger::IfV(bool cond, const char* szMessage, va_list args)
+{
+#ifndef NOLOGGING
+    if(cond || !m_bEnabled) return;
+    
+    char buffer[TMPBUF_SIZE];
+    vsnprintf(buffer, sizeof(buffer), szMessage, args);
+    if(m_fnLogCallback) m_fnLogCallback(LogP_Fatal, buffer);
+    __android_log_write(ANDROID_LOG_FATAL, m_szTag, buffer);
+#endif
+}
 static Logger loggerLocal;
 Logger* logger = &loggerLocal;

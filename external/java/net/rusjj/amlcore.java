@@ -1,6 +1,6 @@
 package net.rusjj;
 public class amlcore
 {
-    public native void launchAMLCore();
-    public native void earlyLaunchAMLCore(String lib1, String lib2);
+    public static native void launchAMLCore();
+    public static native void earlyLaunchAMLCore(String lib1, String lib2);
 }

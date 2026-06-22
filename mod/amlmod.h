@@ -166,10 +166,15 @@ public:
         strxcpy(this->szVersion, szVersion, sizeof(ModInfo::szVersion)); this->szVersion[sizeof(ModInfo::szVersion) - 1] = '\0';
         strxcpy(this->szAuthor, szAuthor, sizeof(ModInfo::szAuthor)); this->szAuthor[sizeof(ModInfo::szAuthor) - 1] = '\0';
 
+        version.major = 0;
+        version.minor = 0;
+        version.revision = 0;
+        version.build = 0;
+
         /* GUID should be lowcase */
         for(int i = 0; this->szGUID[i] != '\0'; ++i)
         {
-            this->szGUID[i] = tolower((int)(this->szGUID[i]));
+            this->szGUID[i] = (char)tolower((unsigned char)this->szGUID[i]);
         }
 
         /* Parse version string */
@@ -203,7 +208,7 @@ private:
     ModVersion version;
 
     friend class ModsList;
-    friend class Mods;
+    friend struct Mods;
 };
 
 typedef ModInfo* (*GetModInfoFn)();

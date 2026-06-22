@@ -50,18 +50,19 @@ LIST_START(Mods)
     void* pHandle;
 LIST_END()
 
-bool ModsList::AddMod(ModInfo* modinfo, void* modhandle, const char* path)
+bool ModsList::AddMod(ModInfo* modInfo, void* modhandle, const char* path)
 {
-    if(Mods::Get(modinfo->szGUID) != NULL) return false;
-    Mods::AddNew(modinfo, modhandle, path);
+    if(modInfo == NULL || modInfo->szGUID[0] == 0) return false;
+    if(Mods::Get(modInfo->szGUID) != NULL) return false;
+    Mods::AddNew(modInfo, modhandle, path);
     return true;
 }
 
-bool ModsList::RemoveMod(ModInfo* modinfo)
+bool ModsList::RemoveMod(ModInfo* modInfo)
 {
     LIST_FOR(listMods)
     {
-        if(item->pModInfo == modinfo)
+        if(item->pModInfo == modInfo)
         {
             dlclose(item->pHandle);
             if(item->Remove(&listMods))
@@ -108,7 +109,7 @@ bool ModsList::HasMod(const char* szGUID)
 bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
 {
     if(szVersion[0] == '\0') return HasMod(szGUID);
-    unsigned short major, minor, revision, build;
+    unsigned short major = 0, minor = 0, revision = 0, build = 0;
     if(sscanf(szVersion, "%hu.%hu.%hu.%hu", &major, &minor, &revision, &build) < 4)
     {
         if(sscanf(szVersion, "%hu.%hu.%hu", &major, &minor, &revision) < 3)
@@ -117,9 +118,7 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
             {
                 major = (unsigned short)atoi(szVersion);
             }
-            revision = 0;
         }
-        build = 0;
     }
 
     ModInfo* pInfo = NULL;
@@ -147,7 +146,7 @@ bool ModsList::HasModOfVersion(const char* szGUID, const char* szVersion)
 bool ModsList::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
 {
     if(szVersion[0] == '\0') return HasMod(szGUID);
-    unsigned short major, minor, revision, build;
+    unsigned short major = 0, minor = 0, revision = 0, build = 0;
     if(sscanf(szVersion, "%hu.%hu.%hu.%hu", &major, &minor, &revision, &build) < 4)
     {
         if(sscanf(szVersion, "%hu.%hu.%hu", &major, &minor, &revision) < 3)
@@ -156,9 +155,7 @@ bool ModsList::HasModOfBiggerVersion(const char* szGUID, const char* szVersion)
             {
                 major = (unsigned short)atoi(szVersion);
             }
-            revision = 0;
         }
-        build = 0;
     }
 
     ModInfo* pInfo = NULL;

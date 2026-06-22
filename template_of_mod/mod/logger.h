@@ -43,11 +43,28 @@ public:
     void InfoV(const char* szMessage, va_list args);
     void Error(const char* szMessage, ...);
     void ErrorV(const char* szMessage, va_list args);
+    void If(bool cond, const char* szMessage, ...);
+    void IfV(bool cond, const char* szMessage, va_list args);
   #ifdef NOLOGGING
     inline bool HasOutput() { return false; }
   #else
     inline bool HasOutput() { return m_bEnabled; }
   #endif
+    inline const char* EnumPrio(int prio)
+    {
+        switch(prio)
+        {
+            case LogP_Default: return "Default";
+            case LogP_Verbose: return "Verbose";
+            case LogP_Debug:   return "Debug";
+            case LogP_Info:    return "Info";
+            case LogP_Warn:    return "Warn";
+            case LogP_Error:   return "Error";
+            case LogP_Fatal:   return "Fatal";
+            case LogP_Silent:  return "Silent";
+            default:           return "Unknown";
+        }
+    }
 
     inline void SetMessageCB(LoggerMessageCB fnCB) { m_fnLogCallback = fnCB; }
     inline void SetTagCB(LoggerSetTagCB fnCB)      { m_fnNewTagCallback = fnCB; }

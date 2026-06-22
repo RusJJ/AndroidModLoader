@@ -14,10 +14,16 @@ extern std::unordered_map<std::string, jobject> g_InjectedInstances;
 
 inline jobject GetGlobalContext(JNIEnv *env)
 {
+    if(!env) return NULL;
     jclass activityThread = env->FindClass("android/app/ActivityThread");
+    if(!activityThread) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
     jmethodID currentActivityThread = env->GetStaticMethodID(activityThread, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    if(!currentActivityThread) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityThread); return NULL; }
     jobject at = env->CallStaticObjectMethod(activityThread, currentActivityThread);
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    if(!at) { env->DeleteLocalRef(activityThread); return NULL; }
     jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
+    if(!getApplication) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(at); env->DeleteLocalRef(activityThread); return NULL; }
     jobject context = env->CallObjectMethod(at, getApplication);
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(at);
@@ -27,8 +33,11 @@ inline jobject GetGlobalContext(JNIEnv *env)
 
 inline jstring GetPackageName(JNIEnv *env, jobject jActivity)
 {
+    if(!env || !jActivity) return NULL;
     jclass activityClass = env->GetObjectClass(jActivity);
+    if(!activityClass) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
     jmethodID method = env->GetMethodID(activityClass, "getPackageName", "()Ljava/lang/String;");
+    if(!method) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityClass); return NULL; }
     jstring ret = (jstring)env->CallObjectMethod(jActivity, method);
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(activityClass);
@@ -37,8 +46,11 @@ inline jstring GetPackageName(JNIEnv *env, jobject jActivity)
 
 inline jobject GetFilesDir(JNIEnv *env, jobject jActivity)
 {
+    if(!env || !jActivity) return NULL;
     jclass activityClass = env->GetObjectClass(jActivity);
+    if(!activityClass) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
     jmethodID method = env->GetMethodID(activityClass, "getFilesDir", "()Ljava/io/File;");
+    if(!method) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityClass); return NULL; }
     jobject ret = env->CallObjectMethod(jActivity, method);
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(activityClass);
@@ -47,8 +59,11 @@ inline jobject GetFilesDir(JNIEnv *env, jobject jActivity)
 
 inline jstring GetAbsolutePath(JNIEnv *env, jobject jFile)
 {
+    if(!env || !jFile) return NULL;
     jclass fileClass = env->GetObjectClass(jFile);
+    if(!fileClass) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
     jmethodID method = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
+    if(!method) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(fileClass); return NULL; }
     jstring ret = (jstring)env->CallObjectMethod(jFile, method);
     if (env->ExceptionCheck()) env->ExceptionClear();
     env->DeleteLocalRef(fileClass);

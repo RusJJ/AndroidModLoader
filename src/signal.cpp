@@ -216,14 +216,14 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     uintptr_t faultAddr = (uintptr_t)si->si_addr;
 
     char path[320], pathText[512];
-    sprintf(path, "%s/aml_crashlog.txt", aml->GetAndroidDataRootPath());
-    sprintf(pathText, "Application has been crashed!\n\nCrashlog should be saved in %s", path);
+    snprintf(path, sizeof(path), "%s/aml_crashlog.txt", aml->GetAndroidDataRootPath());
+    snprintf(pathText, sizeof(pathText), "Application has been crashed!\n\nCrashlog should be saved in %s", path);
     logger->Error("Exception Signal %d - %s (%s)", sig, SignalEnum(sig), CodeEnum(sig, si->si_code));
-    logger->Error(pathText);
+    logger->Error("%s", pathText);
     g_pLogFile.open(path, std::ios::out | std::ios::trunc);
 
 
-    char* stackLog;
+    char* stackLog = NULL;
     if(!g_pLogFile.is_open()) goto skip_logging;
 
     g_pLogFile << "!!! THIS IS A CRASH LOG !!!\nIf you are experiencing a crash, give us this file.\n>>> DO NOT SEND US A SCREENSHOT OF THIS FILE <<<" << std::endl << std::endl;

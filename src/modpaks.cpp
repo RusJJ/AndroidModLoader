@@ -27,13 +27,40 @@ inline bool str_equal(const char* str1, const char* str2) {
     for ( ; *str1 == *str2 && *str1 != 0; ++str1, ++str2 ) {}
         return *str2 == *str1; 
 }
+
+static inline bool IsPathSeparator(char c)
+{
+    return c == '/' || c == '\\';
+}
+
+static bool IsSafeRelativePath(const char* path)
+{
+    if(!path || !path[0] || IsPathSeparator(path[0])) return false;
+
+    const char* segment = path;
+    for(const char* p = path; ; ++p)
+    {
+        if(*p == ':' || *p == '\\') return false;
+        if(*p == '/' || *p == 0)
+        {
+            size_t len = (size_t)(p - segment);
+            if(len == 0) return false;
+            if(len == 1 && segment[0] == '.') return false;
+            if(len == 2 && segment[0] == '.' && segment[1] == '.') return false;
+            if(*p == 0) break;
+            segment = p + 1;
+        }
+    }
+    return true;
+}
+
 extern bool g_bShowUpdatedToast, g_bShowUpdateFailedToast;
 static inline void ProcessLine(ModDesc* d, char* data)
 {
-    char left[64], middle[64], right[128];
-    int scanned = sscanf(data, "%[^:]:%[^:]:%[^\n]", left, middle, right);
+    char left[256], middle[64], right[1024];
+    int scanned = sscanf(data, "%255[^:]:%63[^:]:%1023[^\r\n]", left, middle, right);
     if(scanned < 3) return;
-    else if(!strncmp(left, "myself", 6) || !strcmp(left, d->m_pInfo->GUID()))
+    else if(!strcmp(left, "myself") || !strcmp(left, d->m_pInfo->GUID()))
     {
         if(!modlist->HasModOfVersion(d->m_pInfo->GUID(), middle))
         {
@@ -54,10 +81,20 @@ static inline void ProcessLine(ModDesc* d, char* data)
         // 2: checksum (MD5?)
         // 3: URL
         
+        if(!IsSafeRelativePath(left))
+        {
+            logger->Error("Skipping updater file entry with unsafe path: %s", left);
+            return;
+        }
+
         char md5[MINIMUM_MD5_BUF_SIZE] {0};
-        char filepath[256], filepathTmp[256], filepathOld[256];
-        snprintf(filepath, sizeof(filepath), "%s/%s", aml->GetAndroidDataPath(), left);
-        snprintf(filepathOld, sizeof(filepathOld), "%s/%s.old", aml->GetAndroidDataPath(), left);
+        char filepath[512];
+        int pathLen = snprintf(filepath, sizeof(filepath), "%s/%s", aml->GetAndroidDataPath(), left);
+        if(pathLen < 0 || pathLen >= (int)sizeof(filepath))
+        {
+            logger->Error("Skipping updater file entry with too long path: %s", left);
+            return;
+        }
         aml->FileMD5(filepath, md5, sizeof(md5));
         
         //if(!md5[0]) return;
@@ -82,7 +119,7 @@ void ProcessData(ModDesc* d)
             newlinePtr[0] = 0;
             ++newlinePtr;
         }
-        if(data[0] != 0 && data[0] != '/' && data[1] != '/') ProcessLine(d, data);
+        if(data[0] != 0 && !(data[0] == '/' && data[1] == '/')) ProcessLine(d, data);
         if(newlinePtr == NULL) break;
     }
     while(true);

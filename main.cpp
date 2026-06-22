@@ -10,6 +10,7 @@
 #include <fcntl.h> // "open" flags
 #include <android/looper.h> // ALooper
 #include <dlfcn.h>
+#include <limits.h>
 
 #include <aml.h>
 #include <defines.h>
@@ -31,6 +32,14 @@
 
 #include <interfaces.h>
 #include <modslist.h>
+
+#ifndef AML_PATH_MAX
+    #ifdef PATH_MAX
+        #define AML_PATH_MAX PATH_MAX
+    #else
+        #define AML_PATH_MAX 4096
+    #endif
+#endif
 
 pid_t g_MainThreadID = 0;
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
@@ -181,6 +190,35 @@ inline bool HasFakeAppName()
     return (g_szFakeAppName[0] != 0 && strlen(g_szFakeAppName) > 5);
 }
 
+static bool CopyJStringUTF(JNIEnv* env, jstring str, char* out, size_t outLen, bool lowercase = false)
+{
+    if(!env || !str || !out || outLen == 0) return false;
+
+    const char* tmp = env->GetStringUTFChars(str, NULL);
+    if(!tmp)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+
+    size_t i = 0;
+    if(lowercase)
+    {
+        for(; tmp[i] != 0 && i < outLen - 1; ++i)
+        {
+            out[i] = (char)tolower((unsigned char)tmp[i]);
+        }
+        out[i] = 0;
+    }
+    else
+    {
+        snprintf(out, outLen, "%s", tmp);
+    }
+
+    env->ReleaseStringUTFChars(str, tmp);
+    return true;
+}
+
 typedef const char* (*SpecificGameFn)();
 void LoadMods(const char* path)
 {
@@ -188,7 +226,7 @@ void LoadMods(const char* path)
     SpecificGameFn maybeINeedAGame = NULL;
     GetModInfoFn modInfoFn = NULL;
 
-    char buf[256], dataBuf[256];
+    char buf[AML_PATH_MAX], dataBuf[AML_PATH_MAX];
     DIR* dir = opendir(path);
     if (dir != NULL)
     {
@@ -205,8 +243,13 @@ void LoadMods(const char* path)
                 //logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
                 continue;
             }
-            snprintf(buf, sizeof(buf), "%s/%s", path, diread->d_name);
-            snprintf(dataBuf, sizeof(dataBuf), "%s/%s", g_szDataDir, diread->d_name);
+            int srcLen = snprintf(buf, sizeof(buf), "%s/%s", path, diread->d_name);
+            int tmpLen = snprintf(dataBuf, sizeof(dataBuf), "%s/%s", g_szDataDir, diread->d_name);
+            if(srcLen < 0 || srcLen >= (int)sizeof(buf) || tmpLen < 0 || tmpLen >= (int)sizeof(dataBuf))
+            {
+                logger->Error("Skipping mod %s: path is too long", diread->d_name);
+                continue;
+            }
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
@@ -226,27 +269,36 @@ void LoadMods(const char* path)
                 continue;
             }
             
+            bool keepLoaded = false;
             modInfoFn = (GetModInfoFn)dlsym(handle, "__GetModInfo");
             if(modInfoFn != NULL)
             {
                 pModInfo = modInfoFn();
-                maybeINeedAGame = (SpecificGameFn)dlsym(handle, "__INeedASpecificGame");
-                if(maybeINeedAGame != NULL && strcmp(maybeINeedAGame(), gameName) != 0)
+                if(pModInfo == NULL)
                 {
-                    logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), maybeINeedAGame());
-                    goto nextMod;
+                    logger->Error("Mod %s returned NULL from __GetModInfo!", diread->d_name);
                 }
-                if(!modlist->AddMod(pModInfo, handle, buf))
+                else
                 {
-                    logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
-                    goto nextMod;
+                    maybeINeedAGame = (SpecificGameFn)dlsym(handle, "__INeedASpecificGame");
+                    const char* requiredGame = maybeINeedAGame ? maybeINeedAGame() : NULL;
+                    if(requiredGame != NULL && requiredGame[0] != 0 && strcmp(requiredGame, gameName) != 0)
+                    {
+                        logger->Error("Mod (GUID %s) built for the game %s!", pModInfo->GUID(), requiredGame);
+                    }
+                    else if(!modlist->AddMod(pModInfo, handle, buf))
+                    {
+                        logger->Error("Mod (GUID %s) is already loaded!", pModInfo->GUID());
+                    }
+                    else
+                    {
+                        logger->Info("Mod (GUID %s) has been preprocessed.", pModInfo->GUID());
+                        keepLoaded = true;
+                    }
                 }
-                
-                logger->Info("Mod (GUID %s) has been preprocessed.", pModInfo->GUID());
             }
-            else
+            if(!keepLoaded)
             {
-              nextMod:
                 dlclose(handle);
             }
             //unlink(dataBuf);
@@ -310,13 +362,19 @@ jobject GetCurrentContext()
     if(!env) return NULL;
 
     jclass activityThread = env->FindClass("android/app/ActivityThread");
+    if(!activityThread) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
     jmethodID currentActivityThread = env->GetStaticMethodID(activityThread, "currentActivityThread", "()Landroid/app/ActivityThread;");
+    if(!currentActivityThread) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityThread); return NULL; }
     jobject activityThreadObj = env->CallStaticObjectMethod(activityThread, currentActivityThread);
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    if(!activityThreadObj) { env->DeleteLocalRef(activityThread); return NULL; }
     jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
+    if(!getApplication) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityThreadObj); env->DeleteLocalRef(activityThread); return NULL; }
 
     jobject localContext = env->CallObjectMethod(activityThreadObj, getApplication);
+    if(env->ExceptionCheck()) env->ExceptionClear();
     if(localContext) g_GlobalContext = env->NewGlobalRef(localContext);
-    env->DeleteLocalRef(localContext);
+    if(localContext) env->DeleteLocalRef(localContext);
     env->DeleteLocalRef(activityThreadObj);
     env->DeleteLocalRef(activityThread);
     return g_GlobalContext;
@@ -439,7 +497,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     }
 
     logger->SetTag("AndroidModLoader");
-    const char* szTmp; jstring jTmp;
+    jstring jTmp;
 
     /* JNI Environment */
     if (g_pJavaVM->GetEnv(reinterpret_cast<void**>(&g_env), JNI_VERSION_1_6) != JNI_OK)
@@ -450,6 +508,11 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
 
     /* Application Context */
     jobject localContext = ::GetGlobalContext(g_env);
+    if(localContext == NULL)
+    {
+        logger->Error("Failed to resolve Android application context.");
+        return;
+    }
     appContext = g_env->NewGlobalRef(localContext);
     g_env->DeleteLocalRef(localContext);
     if(appContext == NULL)
@@ -485,23 +548,25 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     /* Internal Storage */
     jobject storageDir = GetStorageDir(g_env);
     jTmp = GetAbsolutePath(g_env, storageDir);
-    szTmp = g_env->GetStringUTFChars(jTmp, NULL);
-    snprintf(g_szInternalStoragePath, sizeof(g_szInternalStoragePath), "%s", szTmp);
-    g_env->ReleaseStringUTFChars(jTmp, szTmp);
-    g_env->DeleteLocalRef(jTmp);
-    g_env->DeleteLocalRef(storageDir);
+    if(!CopyJStringUTF(g_env, jTmp, g_szInternalStoragePath, sizeof(g_szInternalStoragePath)))
+    {
+        logger->Error("Failed to determine internal storage path.");
+        if(jTmp) g_env->DeleteLocalRef(jTmp);
+        if(storageDir) g_env->DeleteLocalRef(storageDir);
+        return;
+    }
+    if(jTmp) g_env->DeleteLocalRef(jTmp);
+    if(storageDir) g_env->DeleteLocalRef(storageDir);
 
     /* Package Name */
-    int i = 0;
     jTmp = GetPackageName(g_env, appContext);
-    szTmp = g_env->GetStringUTFChars(jTmp, NULL);
-    while(szTmp[i] != 0 && i < sizeof(g_szAppName)-1)
+    if(!CopyJStringUTF(g_env, jTmp, g_szAppName, sizeof(g_szAppName), true))
     {
-        g_szAppName[i] = tolower(szTmp[i]);
-        ++i;
-    } g_szAppName[i] = 0;
-    g_env->ReleaseStringUTFChars(jTmp, szTmp);
-    g_env->DeleteLocalRef(jTmp);
+        logger->Error("Failed to determine package name.");
+        if(jTmp) g_env->DeleteLocalRef(jTmp);
+        return;
+    }
+    if(jTmp) g_env->DeleteLocalRef(jTmp);
     logger->Info("Determined app info: %s", g_szAppName);
 
   #ifdef FASTMAN92_CODE
@@ -546,11 +611,15 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     /* root/data/data Folder */
     jobject filesDir = GetFilesDir(g_env, appContext);
     jstring filesPath = GetAbsolutePath(g_env, filesDir);
-    szTmp = g_env->GetStringUTFChars(filesPath, NULL);
-    snprintf(g_szDataDirPath, sizeof(g_szDataDirPath), "%s", szTmp);
-    g_env->ReleaseStringUTFChars(filesPath, szTmp);
-    g_env->DeleteLocalRef(filesPath);
-    g_env->DeleteLocalRef(filesDir);
+    if(!CopyJStringUTF(g_env, filesPath, g_szDataDirPath, sizeof(g_szDataDirPath)))
+    {
+        logger->Error("Failed to determine app data path.");
+        if(filesPath) g_env->DeleteLocalRef(filesPath);
+        if(filesDir) g_env->DeleteLocalRef(filesDir);
+        return;
+    }
+    if(filesPath) g_env->DeleteLocalRef(filesPath);
+    if(filesDir) g_env->DeleteLocalRef(filesDir);
 
     /* AML Config */
     logger->Info("Reading core config...");
@@ -667,7 +736,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
             {
                 for(int i = 0; i < g_nEnableNews; ++i)
                 {
-                    aml->ShowToast(true, g_szNewsString);
+                    aml->ShowToast(true, "%s", g_szNewsString);
                 }
 
                 newsBuf[16] = '|'; // Anti- news spamming :p
@@ -731,13 +800,13 @@ extern "C" JNIEXPORT void JNICALL Java_net_rusjj_amlcore_earlyLaunchAMLCore(JNIE
 {
     // Early stage starting
     // LAUNCHES lib1 AND lib2 BY ITSELF!!!
-    const char* szLib1 = env->GetStringUTFChars(lib1, NULL);
-    const char* szLib2 = env->GetStringUTFChars(lib2, NULL);
+    const char* szLib1 = lib1 ? env->GetStringUTFChars(lib1, NULL) : NULL;
+    const char* szLib2 = lib2 ? env->GetStringUTFChars(lib2, NULL) : NULL;
 
     StartAMLRightNow(szLib1, szLib2);
 
-    env->ReleaseStringUTFChars(lib1, szLib1);
-    env->ReleaseStringUTFChars(lib2, szLib2);
+    if(lib1 && szLib1) env->ReleaseStringUTFChars(lib1, szLib1);
+    if(lib2 && szLib2) env->ReleaseStringUTFChars(lib2, szLib2);
 }
 
 static ALooper* g_pJavaUILooper = NULL;

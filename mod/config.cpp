@@ -390,7 +390,7 @@ void ConfigEntry::SetInt(int newValue)
 
 void ConfigEntry::SetBool(bool newValue)
 {
-    if(m_bLoadedData && m_nIntegerValue == newValue?1:0) return;
+    if(m_bLoadedData && m_nIntegerValue == (newValue ? 1 : 0)) return;
     
     m_fFloatValue = (newValue ? 1.0f : 0.0f);
     m_nIntegerValue = (newValue ? 1 : 0);

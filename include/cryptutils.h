@@ -76,8 +76,9 @@ struct JMD5
             Update(buffer, bytesRead);
         }
 
+        bool ok = !ferror(file);
         fclose(file);
-        return true;
+        return ok;
     }
 
     inline void Finalize()

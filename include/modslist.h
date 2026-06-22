@@ -4,7 +4,7 @@
 #include <fstream>
 #include <mod/amlmod.h>
 
-class Mods;
+struct Mods;
 extern Mods* listMods;
 
 typedef void (*OnInterfaceAddedFn)(const char*, const void*);
@@ -42,8 +42,8 @@ class ModsList
 {
 // Functions
 public:
-    bool AddMod(ModInfo* modinfo, void* modhandle, const char* path);
-    bool RemoveMod(ModInfo* modinfo);
+    bool AddMod(ModInfo* modInfo, void* modhandle, const char* path);
+    bool RemoveMod(ModInfo* modInfo);
     bool RemoveMod(const char* szGUID);
     bool HasMod(const char* szGUID);
     bool HasModOfVersion(const char* szGUID, const char* szVersion);

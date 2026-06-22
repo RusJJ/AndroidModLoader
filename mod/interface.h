@@ -19,20 +19,30 @@ typedef void* (*RegInterfaceFn)(const char*, void*);
 inline void* GetInterface(const char* szInterfaceName)
 {
 #if defined(_WIN32) || defined(_WIN64)
-    GetInterfaceFn _GetInterface = (GetInterfaceFn)GetProcAddress(GetModuleHandleA(DEFAULT_LIB_NAME ".dll"), "GetInterface");
+    HMODULE module = GetModuleHandleA(DEFAULT_LIB_NAME ".dll");
+    if(!module) return NULL;
+    GetInterfaceFn _GetInterface = (GetInterfaceFn)GetProcAddress(module, "GetInterface");
 #else
-    GetInterfaceFn _GetInterface = (GetInterfaceFn)dlsym((void*)dlopen("lib" DEFAULT_LIB_NAME ".so", RTLD_NOW), "GetInterface");
+    void* module = dlopen("lib" DEFAULT_LIB_NAME ".so", RTLD_NOW);
+    if(!module) return NULL;
+    GetInterfaceFn _GetInterface = (GetInterfaceFn)dlsym(module, "GetInterface");
 #endif
+    if(!_GetInterface) return NULL;
     return _GetInterface(szInterfaceName);
 }
 
 inline void RegisterInterface(const char* szInterfaceName, void* pInterface)
 {
 #if defined(_WIN32) || defined(_WIN64)
-    RegInterfaceFn _RegInterface = (RegInterfaceFn)GetProcAddress(GetModuleHandleA(DEFAULT_LIB_NAME ".dll"), "CreateInterface");
+    HMODULE module = GetModuleHandleA(DEFAULT_LIB_NAME ".dll");
+    if(!module) return;
+    RegInterfaceFn _RegInterface = (RegInterfaceFn)GetProcAddress(module, "CreateInterface");
 #else
-    RegInterfaceFn _RegInterface = (RegInterfaceFn)dlsym((void*)dlopen("lib" DEFAULT_LIB_NAME ".so", RTLD_NOW), "CreateInterface");
+    void* module = dlopen("lib" DEFAULT_LIB_NAME ".so", RTLD_NOW);
+    if(!module) return;
+    RegInterfaceFn _RegInterface = (RegInterfaceFn)dlsym(module, "CreateInterface");
 #endif
+    if(!_RegInterface) return;
     _RegInterface(szInterfaceName, pInterface);
 }
 

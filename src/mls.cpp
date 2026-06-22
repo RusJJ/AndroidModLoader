@@ -13,7 +13,7 @@
 
 extern bool g_bMLSOnlyManualSaves;
 
-class MLSKeychain;
+struct MLSKeychain;
 
 struct MLSStorage
 {
@@ -38,7 +38,7 @@ void MLS::LoadFile()
     FILE* f = fopen(path, "rb");
     if(!f)
     {
-        logger->Error("An error (%d) opening MLS file!", errno, strerror(errno));
+        logger->Error("An error (%d - %s) opening MLS file!", errno, strerror(errno));
         return;
     }
 
@@ -49,6 +49,8 @@ void MLS::LoadFile()
         size_t readCount = fread(&item->storage, sizeof(MLSStorage), 1, f);
         if(readCount == 1)
         {
+            item->storage.szKey[sizeof(item->storage.szKey) - 1] = 0;
+            item->storage.szValue[sizeof(item->storage.szValue) - 1] = 0;
             item->Push(&listSets);
             continue;
         }
@@ -56,7 +58,7 @@ void MLS::LoadFile()
         delete item;
         if(ferror(f))
         {
-            logger->Error("An error (%d) reading MLS file!", errno, strerror(errno));
+            logger->Error("An error (%d - %s) reading MLS file!", errno, strerror(errno));
         }
         else
         {

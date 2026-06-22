@@ -5,7 +5,7 @@
 #include "modslist.h"
 #include "mod/listitem.h"
 
-class Interfaces;
+struct Interfaces;
 Interfaces* listInterfaces = NULL;
 LIST_START(Interfaces)
 

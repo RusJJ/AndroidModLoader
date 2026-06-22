@@ -38,13 +38,13 @@ inline bool IsImportantLogLevel(int prio)
     return false;
 }
 
-char text[4096]; // Log texts are not bigger than 4kb
 extern DECL_HOOKv(__aml_log_print, int prio, const char *tag, const char *fmt, ...);
 DECL_HOOKv(__aml_log_vprint, int prio, const char *tag, const char *fmt, va_list ap)
 {
     if(!fmt) return;
     if(!tag) tag = "AML: Untagged sender";
 
+    thread_local char text[4096];
     vsnprintf(text, sizeof(text), fmt, ap);
     __aml_log_print(prio, tag, text);
 
@@ -60,6 +60,7 @@ DECL_HOOKv(__aml_log_vprint, int prio, const char *tag, const char *fmt, va_list
 DECL_HOOKv(__aml_log_print, int prio, const char *tag, const char *fmt, ...)
 {
     if(!fmt) return;
+    if(!tag) tag = "AML: Untagged sender";
 
     va_list ap;
     va_start(ap, fmt);
@@ -82,7 +83,7 @@ void HookALog()
     }
 
     char path[320];
-    sprintf(path, "%s/android_log_print.txt", aml->GetAndroidDataRootPath());
+    snprintf(path, sizeof(path), "%s/android_log_print.txt", aml->GetAndroidDataRootPath());
     oAndroidLogFile.open(path, std::ios::out | std::ios::trunc);
 
     if(oAndroidLogFile.is_open())
@@ -92,7 +93,6 @@ void HookALog()
     }
     else
     {
-      an_epic_fail_ever:
         logger->Error("AML Core failed to create a system log file!");
     }
 }
