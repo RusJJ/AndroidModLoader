@@ -142,6 +142,8 @@ public:
     void        DataMD5(void* data, size_t len, char* out, size_t out_len);
     int         GetLatestDownloadErrorCode();
     int         GetCPUCores();
+    /* AMLA 1.4.1 */
+    void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL);
 };
 
 extern char g_szAMLFeatures[2048];

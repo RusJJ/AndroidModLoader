@@ -88,6 +88,7 @@ class IAML
 public:
     typedef void(*ListDirCallback)(const char* name, bool isDir, void* data);
     typedef void(*ListModsCallback)(const char* guid, const char* version, void* data);
+    typedef void(*ListInterfacesCallback)(const char* name, void* pointer, void* data);
 
 public:
     /* AML 1.0.0.0 */
@@ -247,6 +248,9 @@ public:
     virtual void        DataMD5(void* data, size_t len, char* out, size_t out_len);
     virtual int         GetLatestDownloadErrorCode();
     virtual int         GetCPUCores();
+
+    /* AML 1.4.1 */
+    virtual void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL);
 
 
 

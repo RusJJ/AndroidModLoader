@@ -60,6 +60,20 @@ void* InterfaceSys::Get(const char* szInterfaceName)
     return Interfaces::Get(szInterfaceName);
 }
 
+int InterfaceSys::Count()
+{
+    return listInterfaces->Count();
+}
+
+void InterfaceSys::ListInterfaces(_ListInterfacesCallback cb, void* data)
+{
+    if(!cb) return;
+    LIST_FOR_REVERSE_FAST(listInterfaces)
+    {
+        cb(item->szName, item->pInterface, data);
+    }
+}
+
 static InterfaceSys interfacesLocal;
 InterfaceSys* interfaces = &interfacesLocal;
 

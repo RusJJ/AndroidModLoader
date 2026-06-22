@@ -1370,6 +1370,12 @@ int AML::GetCPUCores()
     return ( (n < 1) ? 1 : (int)n ); 
 }
 
+#include "interfaces.h"
+void AML::ListInterfaces(ListInterfacesCallback cb, void* data)
+{
+    interfaces->ListInterfaces(cb, data);
+}
+
 
 
 static AML amlLocal;
