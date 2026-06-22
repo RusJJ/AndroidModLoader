@@ -250,6 +250,10 @@ ON_NEW_INTERFACE()   // OnInterfaceAdded(name, ptr)
 ```cpp
 const char* GetCurrentGame();                 // package of the (possibly faked) current game
 const char* GetRealCurrentGame();             // real package
+const char* GetAppVersionName();              // target app/game versionName
+int64_t     GetAppVersionCode();              // target app/game long version code
+const char* GetApkPath();                     // source APK path
+const char* GetApkMD5();                      // MD5 of source APK, computed lazily
 bool        IsGameFaked();
 bool        HasMod(const char* guid);
 bool        HasModOfVersion(const char* guid, const char* version);
@@ -723,6 +727,7 @@ ON_MOD_UNLOAD()
 | `aml->GetJNIEnvironment / CallStaticJavaMethod / GetCurrentActivity` | JNI bridge |
 | `aml->MLS*` | Persistent key/value store |
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Device/UI |
+| `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Target app identity/version |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Hook macros |
 | `cfg->GetInt/GetFloat/GetBool/GetString/GetColor(key, def, section="Preferences")` | Read config |
 | `cfg->Bind(...) -> ConfigEntry` + `Clamp/Set*/Reset` + `cfg->Save()` | Bound config |

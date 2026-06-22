@@ -142,8 +142,12 @@ public:
     void        DataMD5(void* data, size_t len, char* out, size_t out_len);
     int         GetLatestDownloadErrorCode();
     int         GetCPUCores();
-    /* AMLA 1.4.1 */
+    /* AML 1.4.1 */
     void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL);
+    const char* GetAppVersionName();
+    int64_t     GetAppVersionCode();
+    const char* GetApkPath();
+    const char* GetApkMD5();
 };
 
 extern char g_szAMLFeatures[2048];

@@ -250,6 +250,10 @@ ON_NEW_INTERFACE()   // OnInterfaceAdded(name, ptr)
 ```cpp
 const char* GetCurrentGame();                 // paket game saat ini (mungkin dipalsukan)
 const char* GetRealCurrentGame();             // paket asli
+const char* GetAppVersionName();              // versionName aplikasi/game target
+int64_t     GetAppVersionCode();              // long version code aplikasi/game target
+const char* GetApkPath();                     // path APK sumber
+const char* GetApkMD5();                      // MD5 APK sumber, dihitung saat dibutuhkan
 bool        IsGameFaked();
 bool        HasMod(const char* guid);
 bool        HasModOfVersion(const char* guid, const char* version);
@@ -723,6 +727,7 @@ ON_MOD_UNLOAD()
 | `aml->GetJNIEnvironment / CallStaticJavaMethod / GetCurrentActivity` | Jembatan JNI |
 | `aml->MLS*` | Penyimpanan key/value persisten |
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Perangkat/UI |
+| `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Identitas/versi aplikasi target |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Makro hook |
 | `cfg->GetInt/GetFloat/GetBool/GetString/GetColor(key, def, section="Preferences")` | Baca konfigurasi |
 | `cfg->Bind(...) -> ConfigEntry` + `Clamp/Set*/Reset` + `cfg->Save()` | Konfigurasi terikat |

@@ -5,6 +5,8 @@
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <unordered_map>
+#include <mod/localref.h>
+#include <mod/scopeguard.h>
 
 extern JavaVM *g_pJavaVM;
 
@@ -12,84 +14,98 @@ JNIEnv* GetCurrentJNI();
 jobject GetCurrentContext();
 extern std::unordered_map<std::string, jobject> g_InjectedInstances;
 
+template<typename T>
+inline LocalRef<T> MakeJniLocalRef(JNIEnv* env, T ref)
+{
+    return LocalRef<T>(ref, [env](T localRef)
+    {
+        if(localRef) env->DeleteLocalRef(localRef);
+    });
+}
+
+inline void ClearJNIException(JNIEnv* env)
+{
+    if(env && env->ExceptionCheck()) env->ExceptionClear();
+}
+
 inline jobject GetGlobalContext(JNIEnv *env)
 {
     if(!env) return NULL;
-    jclass activityThread = env->FindClass("android/app/ActivityThread");
-    if(!activityThread) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
-    jmethodID currentActivityThread = env->GetStaticMethodID(activityThread, "currentActivityThread", "()Landroid/app/ActivityThread;");
-    if(!currentActivityThread) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityThread); return NULL; }
-    jobject at = env->CallStaticObjectMethod(activityThread, currentActivityThread);
-    if(env->ExceptionCheck()) env->ExceptionClear();
-    if(!at) { env->DeleteLocalRef(activityThread); return NULL; }
-    jmethodID getApplication = env->GetMethodID(activityThread, "getApplication", "()Landroid/app/Application;");
-    if(!getApplication) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(at); env->DeleteLocalRef(activityThread); return NULL; }
-    jobject context = env->CallObjectMethod(at, getApplication);
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    env->DeleteLocalRef(at);
-    env->DeleteLocalRef(activityThread);
+    auto activityThread = MakeJniLocalRef(env, env->FindClass("android/app/ActivityThread"));
+    if(!activityThread.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID currentActivityThread = env->GetStaticMethodID(activityThread.Get(), "currentActivityThread", "()Landroid/app/ActivityThread;");
+    if(!currentActivityThread) { ClearJNIException(env); return NULL; }
+    auto at = MakeJniLocalRef(env, env->CallStaticObjectMethod(activityThread.Get(), currentActivityThread));
+    ClearJNIException(env);
+    if(!at.Get()) return NULL;
+    jmethodID getApplication = env->GetMethodID(activityThread.Get(), "getApplication", "()Landroid/app/Application;");
+    if(!getApplication) { ClearJNIException(env); return NULL; }
+    jobject context = env->CallObjectMethod(at.Get(), getApplication);
+    ClearJNIException(env);
     return context;
 }
 
 inline jstring GetPackageName(JNIEnv *env, jobject jActivity)
 {
     if(!env || !jActivity) return NULL;
-    jclass activityClass = env->GetObjectClass(jActivity);
-    if(!activityClass) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
-    jmethodID method = env->GetMethodID(activityClass, "getPackageName", "()Ljava/lang/String;");
-    if(!method) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityClass); return NULL; }
+    auto activityClass = MakeJniLocalRef(env, env->GetObjectClass(jActivity));
+    if(!activityClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID method = env->GetMethodID(activityClass.Get(), "getPackageName", "()Ljava/lang/String;");
+    if(!method) { ClearJNIException(env); return NULL; }
     jstring ret = (jstring)env->CallObjectMethod(jActivity, method);
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    env->DeleteLocalRef(activityClass);
+    ClearJNIException(env);
     return ret;
 }
 
 inline jobject GetFilesDir(JNIEnv *env, jobject jActivity)
 {
     if(!env || !jActivity) return NULL;
-    jclass activityClass = env->GetObjectClass(jActivity);
-    if(!activityClass) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
-    jmethodID method = env->GetMethodID(activityClass, "getFilesDir", "()Ljava/io/File;");
-    if(!method) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(activityClass); return NULL; }
+    auto activityClass = MakeJniLocalRef(env, env->GetObjectClass(jActivity));
+    if(!activityClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID method = env->GetMethodID(activityClass.Get(), "getFilesDir", "()Ljava/io/File;");
+    if(!method) { ClearJNIException(env); return NULL; }
     jobject ret = env->CallObjectMethod(jActivity, method);
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    env->DeleteLocalRef(activityClass);
+    ClearJNIException(env);
     return ret;
 }
 
 inline jstring GetAbsolutePath(JNIEnv *env, jobject jFile)
 {
     if(!env || !jFile) return NULL;
-    jclass fileClass = env->GetObjectClass(jFile);
-    if(!fileClass) { if(env->ExceptionCheck()) env->ExceptionClear(); return NULL; }
-    jmethodID method = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
-    if(!method) { if(env->ExceptionCheck()) env->ExceptionClear(); env->DeleteLocalRef(fileClass); return NULL; }
+    auto fileClass = MakeJniLocalRef(env, env->GetObjectClass(jFile));
+    if(!fileClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID method = env->GetMethodID(fileClass.Get(), "getAbsolutePath", "()Ljava/lang/String;");
+    if(!method) { ClearJNIException(env); return NULL; }
     jstring ret = (jstring)env->CallObjectMethod(jFile, method);
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    env->DeleteLocalRef(fileClass);
+    ClearJNIException(env);
     return ret;
 }
 
 inline jstring GetAndroidPermission(JNIEnv* env, const char* szPermissionName)
 {
-    jclass ClassManifestPermission = env->FindClass("android/Manifest$permission");
-    jfieldID lid_PERM = env->GetStaticFieldID(ClassManifestPermission, szPermissionName, "Ljava/lang/String;");
-    jstring ret = (jstring)env->GetStaticObjectField(ClassManifestPermission, lid_PERM);
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    auto ClassManifestPermission = MakeJniLocalRef(env, env->FindClass("android/Manifest$permission"));
+    if(!ClassManifestPermission.Get()) { ClearJNIException(env); return NULL; }
+    jfieldID lid_PERM = env->GetStaticFieldID(ClassManifestPermission.Get(), szPermissionName, "Ljava/lang/String;");
+    if(!lid_PERM) { ClearJNIException(env); return NULL; }
+    jstring ret = (jstring)env->GetStaticObjectField(ClassManifestPermission.Get(), lid_PERM);
+    ClearJNIException(env);
     return ret;
 }
 
 inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szPermissionName)
 {
-    jclass ClassPackageManager = env->FindClass("android/content/pm/PackageManager");
+    auto ClassPackageManager = MakeJniLocalRef(env, env->FindClass("android/content/pm/PackageManager"));
     //bool result = false;
-    jstring ls_PERM = GetAndroidPermission(env, szPermissionName);
-    jfieldID lid_PERMISSION_GRANTED = env->GetStaticFieldID(ClassPackageManager, "PERMISSION_GRANTED", "I");
+    auto ls_PERM = MakeJniLocalRef(env, GetAndroidPermission(env, szPermissionName));
+    if(!ClassPackageManager.Get() || !ls_PERM.Get()) { ClearJNIException(env); return false; }
+    jfieldID lid_PERMISSION_GRANTED = env->GetStaticFieldID(ClassPackageManager.Get(), "PERMISSION_GRANTED", "I");
     jint PERMISSION_GRANTED = jint(-1);
 
-    PERMISSION_GRANTED = env->GetStaticIntField(ClassPackageManager, lid_PERMISSION_GRANTED);
-    jint int_result = env->CallIntMethod(jActivity, env->GetMethodID(env->FindClass("android/content/Context"), "checkSelfPermission", "(Ljava/lang/String;)I"), ls_PERM);
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    if(lid_PERMISSION_GRANTED) PERMISSION_GRANTED = env->GetStaticIntField(ClassPackageManager.Get(), lid_PERMISSION_GRANTED);
+    auto contextClass = MakeJniLocalRef(env, env->FindClass("android/content/Context"));
+    jmethodID checkSelfPermission = contextClass.Get() ? env->GetMethodID(contextClass.Get(), "checkSelfPermission", "(Ljava/lang/String;)I") : NULL;
+    jint int_result = checkSelfPermission ? env->CallIntMethod(jActivity, checkSelfPermission, ls_PERM.Get()) : jint(-1);
+    ClearJNIException(env);
     return (int_result == PERMISSION_GRANTED);
 }
 
@@ -103,11 +119,12 @@ inline bool HasPermissionGranted(JNIEnv* env, jobject jActivity, const char* szP
 
 inline jobject GetExternalFilesDir(JNIEnv* env, jobject jActivity) // getExternalFilesDir creates directory in Android/data, lol
 {
-    jclass activityClass = env->GetObjectClass(jActivity);
-    jmethodID method = env->GetMethodID(activityClass, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
+    auto activityClass = MakeJniLocalRef(env, env->GetObjectClass(jActivity));
+    if(!activityClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID method = env->GetMethodID(activityClass.Get(), "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
+    if(!method) { ClearJNIException(env); return NULL; }
     jobject ret = env->CallObjectMethod(jActivity, method, NULL);
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    env->DeleteLocalRef(activityClass);
+    ClearJNIException(env);
     return ret;
 }
 
@@ -119,136 +136,136 @@ inline bool GetExternalFilesDir_FLA(JNIEnv* env, jobject context, char* strPath,
     bool bReadFromF92launcher = false;
     jmethodID methodIDgetExternalFilesDir;
 
-    jclass classF92launcherSettings = env->FindClass("com/fastman92/main_activity_launcher/Settings");
+    auto classF92launcherSettings = MakeJniLocalRef(env, env->FindClass("com/fastman92/main_activity_launcher/Settings"));
 
-    if (classF92launcherSettings)
+    if (classF92launcherSettings.Get())
     {
-        methodIDgetExternalFilesDir = env->GetStaticMethodID(classF92launcherSettings, "getExternalFilesDir", "(Landroid/content/Context;)Ljava/io/File;");
+        methodIDgetExternalFilesDir = env->GetStaticMethodID(classF92launcherSettings.Get(), "getExternalFilesDir", "(Landroid/content/Context;)Ljava/io/File;");
         
         if (methodIDgetExternalFilesDir)
         {
-            objectFile = env->CallStaticObjectMethod(classF92launcherSettings, methodIDgetExternalFilesDir, context);
+            objectFile = env->CallStaticObjectMethod(classF92launcherSettings.Get(), methodIDgetExternalFilesDir, context);
             bReadFromF92launcher = true;
         }
     }
 
     if (!bReadFromF92launcher)
     {
-        if (env->ExceptionCheck()) env->ExceptionClear();
+        ClearJNIException(env);
 
-        jclass android_content_Context = env->GetObjectClass(context);
+        auto android_content_Context = MakeJniLocalRef(env, env->GetObjectClass(context));
+        if(!android_content_Context.Get()) { ClearJNIException(env); return false; }
 
-        methodIDgetExternalFilesDir = env->GetMethodID(android_content_Context, "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
+        methodIDgetExternalFilesDir = env->GetMethodID(android_content_Context.Get(), "getExternalFilesDir", "(Ljava/lang/String;)Ljava/io/File;");
+        if(!methodIDgetExternalFilesDir) { ClearJNIException(env); return false; }
 
         objectFile = (jstring)env->CallObjectMethod(context, methodIDgetExternalFilesDir, nullptr);
-        env->DeleteLocalRef(android_content_Context);
     }
 
-    if(!objectFile)
+    auto objectFileRef = MakeJniLocalRef(env, objectFile);
+    if(!objectFileRef.Get())
     {
-        if(classF92launcherSettings) env->DeleteLocalRef(classF92launcherSettings);
+        ClearJNIException(env);
         return false;
     }
         
-    jclass classFile = env->GetObjectClass(objectFile);
+    auto classFile = MakeJniLocalRef(env, env->GetObjectClass(objectFileRef.Get()));
+    if(!classFile.Get()) { ClearJNIException(env); return bReadFromF92launcher; }
 
-    jmethodID methodIDgetAbsolutePath = env->GetMethodID(classFile, "getAbsolutePath", "()Ljava/lang/String;");
-    jstring stringPath = (jstring)env->CallObjectMethod(objectFile, methodIDgetAbsolutePath);
+    jmethodID methodIDgetAbsolutePath = env->GetMethodID(classFile.Get(), "getAbsolutePath", "()Ljava/lang/String;");
+    auto stringPath = MakeJniLocalRef(env, methodIDgetAbsolutePath ? (jstring)env->CallObjectMethod(objectFileRef.Get(), methodIDgetAbsolutePath) : NULL);
 
-    if (stringPath)
+    if (stringPath.Get())
     {
-        const char* strPathValueStr = env->GetStringUTFChars(stringPath, NULL);
+        const char* strPathValueStr = env->GetStringUTFChars(stringPath.Get(), NULL);
+        if(!strPathValueStr) { ClearJNIException(env); return bReadFromF92launcher; }
+        DEFER(env->ReleaseStringUTFChars(stringPath.Get(), strPathValueStr));
 
         strxcpy(strPath, strPathValueStr, bufferSize);
-        env->ReleaseStringUTFChars(stringPath, strPathValueStr);
-        env->DeleteLocalRef(stringPath);
     }
-    env->DeleteLocalRef(classFile);
-    env->DeleteLocalRef(objectFile);
-    if(classF92launcherSettings) env->DeleteLocalRef(classF92launcherSettings);
+    ClearJNIException(env);
     return bReadFromF92launcher;
 }
 #endif
 
 inline jobject GetStorageDir(JNIEnv* env) // /storage/emulated/0 instead of /sdcard (example)
 {
-    jclass classEnvironment = env->FindClass("android/os/Environment");
-    jobject ret = env->CallStaticObjectMethod(classEnvironment, env->GetStaticMethodID(classEnvironment, "getExternalStorageDirectory", "()Ljava/io/File;"));
-    if (env->ExceptionCheck()) env->ExceptionClear();
-    env->DeleteLocalRef(classEnvironment);
+    auto classEnvironment = MakeJniLocalRef(env, env->FindClass("android/os/Environment"));
+    if(!classEnvironment.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID getExternalStorageDirectory = env->GetStaticMethodID(classEnvironment.Get(), "getExternalStorageDirectory", "()Ljava/io/File;");
+    jobject ret = getExternalStorageDirectory ? env->CallStaticObjectMethod(classEnvironment.Get(), getExternalStorageDirectory) : NULL;
+    ClearJNIException(env);
     return ret;
 }
 
 inline void ShowToastMessage(JNIEnv* env, jobject jActivity, const char* txt, int msDuration)
 {
-    jclass ToastClass = env->FindClass("android/widget/Toast");
-    jmethodID makeTextMethodID = env->GetStaticMethodID(ToastClass, "makeText", "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;");
-    jmethodID showMethodID = env->GetMethodID(ToastClass, "show", "()V");
+    auto ToastClass = MakeJniLocalRef(env, env->FindClass("android/widget/Toast"));
+    if(!ToastClass.Get()) { ClearJNIException(env); return; }
+    jmethodID makeTextMethodID = env->GetStaticMethodID(ToastClass.Get(), "makeText", "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;");
+    jmethodID showMethodID = env->GetMethodID(ToastClass.Get(), "show", "()V");
 
-    jstring message = env->NewStringUTF(txt);
+    auto message = MakeJniLocalRef(env, env->NewStringUTF(txt));
     jint duration = msDuration; // can be Toast.LENGTH_SHORT or Toast.LENGTH_LONG
 
-    jobject toast = env->CallStaticObjectMethod(ToastClass, makeTextMethodID, jActivity, message, duration);
-    env->CallVoidMethod(toast, showMethodID);
-    
-    env->DeleteLocalRef(message);
-    env->DeleteLocalRef(toast);
-    env->DeleteLocalRef(ToastClass);
+    auto toast = MakeJniLocalRef(env, (makeTextMethodID && message.Get()) ? env->CallStaticObjectMethod(ToastClass.Get(), makeTextMethodID, jActivity, message.Get(), duration) : NULL);
+    if(toast.Get() && showMethodID) env->CallVoidMethod(toast.Get(), showMethodID);
 
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    ClearJNIException(env);
 }
 
 inline void ShowToastMessage2(JNIEnv* env, jobject jActivity, const char* txt, jint duration)
 {
-    jclass ToastClass = env->FindClass("android/widget/Toast");
-    jmethodID makeTextMethodID = env->GetStaticMethodID(ToastClass, "makeText", "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;");
-    jmethodID showMethodID = env->GetMethodID(ToastClass, "show", "()V");
-    jmethodID setDurationMethodID = env->GetMethodID(ToastClass, "setDuration", "(I)V");
+    auto ToastClass = MakeJniLocalRef(env, env->FindClass("android/widget/Toast"));
+    if(!ToastClass.Get()) { ClearJNIException(env); return; }
+    jmethodID makeTextMethodID = env->GetStaticMethodID(ToastClass.Get(), "makeText", "(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;");
+    jmethodID showMethodID = env->GetMethodID(ToastClass.Get(), "show", "()V");
+    jmethodID setDurationMethodID = env->GetMethodID(ToastClass.Get(), "setDuration", "(I)V");
 
-    jstring message = env->NewStringUTF(txt);
-    jobject toast = env->CallStaticObjectMethod(ToastClass, makeTextMethodID, jActivity, message, duration);
-    env->CallVoidMethod(toast, setDurationMethodID, duration);
-    env->CallVoidMethod(toast, showMethodID);
+    auto message = MakeJniLocalRef(env, env->NewStringUTF(txt));
+    auto toast = MakeJniLocalRef(env, (makeTextMethodID && message.Get()) ? env->CallStaticObjectMethod(ToastClass.Get(), makeTextMethodID, jActivity, message.Get(), duration) : NULL);
+    if(toast.Get() && setDurationMethodID) env->CallVoidMethod(toast.Get(), setDurationMethodID, duration);
+    if(toast.Get() && showMethodID) env->CallVoidMethod(toast.Get(), showMethodID);
 
-    env->DeleteLocalRef(message);
-    env->DeleteLocalRef(toast);
-    env->DeleteLocalRef(ToastClass);
-
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    ClearJNIException(env);
 }
 
 inline jstring GetNativeLibDir(JNIEnv* env)
 {
-    jclass contextClass = env->GetObjectClass(::GetCurrentContext());
+    jobject context = ::GetCurrentContext();
+    if(!env || !context) return NULL;
 
-    jmethodID getAppInfoId = env->GetMethodID(contextClass, "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
-    jobject appInfo = env->CallObjectMethod(::GetCurrentContext(), getAppInfoId);
+    auto contextClass = MakeJniLocalRef(env, env->GetObjectClass(context));
+    if(!contextClass.Get()) { ClearJNIException(env); return NULL; }
 
-    jclass appInfoClass = env->GetObjectClass(appInfo);
-    jfieldID nativeLibDirField = env->GetFieldID(appInfoClass, "nativeLibraryDir", "Ljava/lang/String;");
-    jstring nativeLibDir = (jstring)env->GetObjectField(appInfo, nativeLibDirField);
+    jmethodID getAppInfoId = env->GetMethodID(contextClass.Get(), "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
+    auto appInfo = MakeJniLocalRef(env, getAppInfoId ? env->CallObjectMethod(context, getAppInfoId) : NULL);
+    if(!appInfo.Get()) { ClearJNIException(env); return NULL; }
 
-    env->DeleteLocalRef(appInfo);
-    env->DeleteLocalRef(appInfoClass);
-    env->DeleteLocalRef(contextClass);
+    auto appInfoClass = MakeJniLocalRef(env, env->GetObjectClass(appInfo.Get()));
+    if(!appInfoClass.Get()) { ClearJNIException(env); return NULL; }
+    jfieldID nativeLibDirField = env->GetFieldID(appInfoClass.Get(), "nativeLibraryDir", "Ljava/lang/String;");
+    jstring nativeLibDir = nativeLibDirField ? (jstring)env->GetObjectField(appInfo.Get(), nativeLibDirField) : NULL;
 
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    ClearJNIException(env);
 
     return nativeLibDir;
 }
 
 inline AAssetManager* GetAssetManager(JNIEnv* env)
 {
-    jclass contextClass = env->GetObjectClass(::GetCurrentContext());
-    jmethodID getAssetsMethod = env->GetMethodID(contextClass, "getAssets", "()Landroid/content/res/AssetManager;");
-    
-    jobject javaAssetManager = env->CallObjectMethod(::GetCurrentContext(), getAssetsMethod);
-    
-    if (env->ExceptionCheck()) env->ExceptionClear();
+    jobject context = ::GetCurrentContext();
+    if(!env || !context) return NULL;
 
-    AAssetManager* assetManager = AAssetManager_fromJava(env, javaAssetManager);
-    env->DeleteLocalRef(javaAssetManager);
-    env->DeleteLocalRef(contextClass);
+    auto contextClass = MakeJniLocalRef(env, env->GetObjectClass(context));
+    if(!contextClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID getAssetsMethod = env->GetMethodID(contextClass.Get(), "getAssets", "()Landroid/content/res/AssetManager;");
+    
+    auto javaAssetManager = MakeJniLocalRef(env, getAssetsMethod ? env->CallObjectMethod(context, getAssetsMethod) : NULL);
+    
+    ClearJNIException(env);
+
+    AAssetManager* assetManager = javaAssetManager.Get() ? AAssetManager_fromJava(env, javaAssetManager.Get()) : NULL;
     return assetManager;
 }
 
@@ -259,48 +276,46 @@ inline jobject LoadSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSize
     jobject context = ::GetCurrentContext();
     if (!context) return NULL;
 
-    jclass contextClass = env->GetObjectClass(context);
+    auto contextClass = MakeJniLocalRef(env, env->GetObjectClass(context));
+    if(!contextClass.Get()) { ClearJNIException(env); return NULL; }
 
-    jmethodID getClassLoaderMethod = env->GetMethodID(contextClass, "getClassLoader", "()Ljava/lang/ClassLoader;");
-    jobject appClassLoader = env->CallObjectMethod(context, getClassLoaderMethod);
-    if (!appClassLoader) return NULL;
+    jmethodID getClassLoaderMethod = env->GetMethodID(contextClass.Get(), "getClassLoader", "()Ljava/lang/ClassLoader;");
+    auto appClassLoader = MakeJniLocalRef(env, getClassLoaderMethod ? env->CallObjectMethod(context, getClassLoaderMethod) : NULL);
+    if (!appClassLoader.Get()) { ClearJNIException(env); return NULL; }
 
-    jmethodID getCodeCacheDirMethod = env->GetMethodID(contextClass, "getCodeCacheDir", "()Ljava/io/File;");
-    jobject fileObj = env->CallObjectMethod(context, getCodeCacheDirMethod);
-    if (!fileObj) return NULL;
+    jmethodID getCodeCacheDirMethod = env->GetMethodID(contextClass.Get(), "getCodeCacheDir", "()Ljava/io/File;");
+    auto fileObj = MakeJniLocalRef(env, getCodeCacheDirMethod ? env->CallObjectMethod(context, getCodeCacheDirMethod) : NULL);
+    if (!fileObj.Get()) { ClearJNIException(env); return NULL; }
 
-    jclass fileClass = env->GetObjectClass(fileObj);
-    jmethodID getPathMethod = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
-    jstring pathStr = (jstring)env->CallObjectMethod(fileObj, getPathMethod);
+    auto fileClass = MakeJniLocalRef(env, env->GetObjectClass(fileObj.Get()));
+    if(!fileClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID getPathMethod = env->GetMethodID(fileClass.Get(), "getAbsolutePath", "()Ljava/lang/String;");
+    auto pathStr = MakeJniLocalRef(env, getPathMethod ? (jstring)env->CallObjectMethod(fileObj.Get(), getPathMethod) : NULL);
+    if(!pathStr.Get()) { ClearJNIException(env); return NULL; }
     
-    const char* nativePath = env->GetStringUTFChars(pathStr, NULL);
+    const char* nativePath = env->GetStringUTFChars(pathStr.Get(), NULL);
+    if(!nativePath) { ClearJNIException(env); return NULL; }
+    DEFER(env->ReleaseStringUTFChars(pathStr.Get(), nativePath));
     std::string cacheDir = nativePath;
     std::string dexFilePath = cacheDir + "/amlInject_" + std::to_string(++dexCount) + ".dex";
-    env->ReleaseStringUTFChars(pathStr, nativePath);
 
-    FILE* fp = fopen(dexFilePath.c_str(), "wb");
-    if (!fp) return NULL;
-    fwrite(dexBytes, 1, dexSize, fp);
-    fclose(fp);
+    LocalRef<FILE*> fp(fopen(dexFilePath.c_str(), "wb"), [](FILE* file){ if(file) fclose(file); });
+    if (!fp.Get()) return NULL;
+    fwrite(dexBytes, 1, dexSize, fp.Get());
+    fp.Release();
 
-    jclass dexLoaderClass = env->FindClass("dalvik/system/DexClassLoader");
-    jmethodID dexLoaderCtor = env->GetMethodID(dexLoaderClass, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V");
+    auto dexLoaderClass = MakeJniLocalRef(env, env->FindClass("dalvik/system/DexClassLoader"));
+    if(!dexLoaderClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID dexLoaderCtor = env->GetMethodID(dexLoaderClass.Get(), "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V");
     
-    jstring dexPathJStr = env->NewStringUTF(dexFilePath.c_str());
-    jstring optPathJStr = env->NewStringUTF(cacheDir.c_str());
+    auto dexPathJStr = MakeJniLocalRef(env, env->NewStringUTF(dexFilePath.c_str()));
+    auto optPathJStr = MakeJniLocalRef(env, env->NewStringUTF(cacheDir.c_str()));
     
-    jobject dexLoader = env->NewObject(dexLoaderClass, dexLoaderCtor, dexPathJStr, optPathJStr, NULL, appClassLoader);
+    auto dexLoader = MakeJniLocalRef(env, (dexLoaderCtor && dexPathJStr.Get() && optPathJStr.Get()) ? env->NewObject(dexLoaderClass.Get(), dexLoaderCtor, dexPathJStr.Get(), optPathJStr.Get(), NULL, appClassLoader.Get()) : NULL);
 
-    env->DeleteLocalRef(contextClass);
-    env->DeleteLocalRef(appClassLoader);
-    env->DeleteLocalRef(fileObj);
-    env->DeleteLocalRef(fileClass);
-    env->DeleteLocalRef(pathStr);
-    env->DeleteLocalRef(dexLoaderClass);
-    env->DeleteLocalRef(dexPathJStr);
-    env->DeleteLocalRef(optPathJStr);
+    ClearJNIException(env);
 
-    return dexLoader;
+    return dexLoader.Detach();
 }
 
 inline jobject InjectSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSize, const char* classToInit)
@@ -312,68 +327,64 @@ inline jobject InjectSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSi
     jobject context = ::GetCurrentContext();
     if (!context) return NULL;
 
-    jclass contextClass = env->GetObjectClass(context);
+    auto contextClass = MakeJniLocalRef(env, env->GetObjectClass(context));
+    if(!contextClass.Get()) { ClearJNIException(env); return NULL; }
 
-    jmethodID getClassLoaderMethod = env->GetMethodID(contextClass, "getClassLoader", "()Ljava/lang/ClassLoader;");
-    jobject appClassLoader = env->CallObjectMethod(context, getClassLoaderMethod);
-    if (!appClassLoader) return NULL;
+    jmethodID getClassLoaderMethod = env->GetMethodID(contextClass.Get(), "getClassLoader", "()Ljava/lang/ClassLoader;");
+    auto appClassLoader = MakeJniLocalRef(env, getClassLoaderMethod ? env->CallObjectMethod(context, getClassLoaderMethod) : NULL);
+    if (!appClassLoader.Get()) { ClearJNIException(env); return NULL; }
 
-    jmethodID getCodeCacheDirMethod = env->GetMethodID(contextClass, "getCodeCacheDir", "()Ljava/io/File;");
-    jobject fileObj = env->CallObjectMethod(context, getCodeCacheDirMethod);
-    if (!fileObj) return NULL;
+    jmethodID getCodeCacheDirMethod = env->GetMethodID(contextClass.Get(), "getCodeCacheDir", "()Ljava/io/File;");
+    auto fileObj = MakeJniLocalRef(env, getCodeCacheDirMethod ? env->CallObjectMethod(context, getCodeCacheDirMethod) : NULL);
+    if (!fileObj.Get()) { ClearJNIException(env); return NULL; }
 
-    jclass fileClass = env->GetObjectClass(fileObj);
-    jmethodID getPathMethod = env->GetMethodID(fileClass, "getAbsolutePath", "()Ljava/lang/String;");
-    jstring pathStr = (jstring)env->CallObjectMethod(fileObj, getPathMethod);
+    auto fileClass = MakeJniLocalRef(env, env->GetObjectClass(fileObj.Get()));
+    if(!fileClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID getPathMethod = env->GetMethodID(fileClass.Get(), "getAbsolutePath", "()Ljava/lang/String;");
+    auto pathStr = MakeJniLocalRef(env, getPathMethod ? (jstring)env->CallObjectMethod(fileObj.Get(), getPathMethod) : NULL);
+    if(!pathStr.Get()) { ClearJNIException(env); return NULL; }
     
-    const char* nativePath = env->GetStringUTFChars(pathStr, NULL);
+    const char* nativePath = env->GetStringUTFChars(pathStr.Get(), NULL);
+    if(!nativePath) { ClearJNIException(env); return NULL; }
+    DEFER(env->ReleaseStringUTFChars(pathStr.Get(), nativePath));
     std::string cacheDir = nativePath;
     std::string dexFilePath = cacheDir + "/amlInject_" + std::to_string(++dexCount) + ".dex";
-    env->ReleaseStringUTFChars(pathStr, nativePath);
 
-    FILE* fp = fopen(dexFilePath.c_str(), "wb");
-    if (!fp) return NULL;
-    fwrite(dexBytes, 1, dexSize, fp);
-    fclose(fp);
+    LocalRef<FILE*> fp(fopen(dexFilePath.c_str(), "wb"), [](FILE* file){ if(file) fclose(file); });
+    if (!fp.Get()) return NULL;
+    fwrite(dexBytes, 1, dexSize, fp.Get());
+    fp.Release();
 
-    jclass dexLoaderClass = env->FindClass("dalvik/system/DexClassLoader");
-    jmethodID dexLoaderCtor = env->GetMethodID(dexLoaderClass, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V");
+    auto dexLoaderClass = MakeJniLocalRef(env, env->FindClass("dalvik/system/DexClassLoader"));
+    if(!dexLoaderClass.Get()) { ClearJNIException(env); return NULL; }
+    jmethodID dexLoaderCtor = env->GetMethodID(dexLoaderClass.Get(), "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V");
     
-    jstring dexPathJStr = env->NewStringUTF(dexFilePath.c_str());
-    jstring optPathJStr = env->NewStringUTF(cacheDir.c_str());
+    auto dexPathJStr = MakeJniLocalRef(env, env->NewStringUTF(dexFilePath.c_str()));
+    auto optPathJStr = MakeJniLocalRef(env, env->NewStringUTF(cacheDir.c_str()));
     
-    jobject dexLoader = env->NewObject(dexLoaderClass, dexLoaderCtor, dexPathJStr, optPathJStr, NULL, appClassLoader);
+    auto dexLoader = MakeJniLocalRef(env, (dexLoaderCtor && dexPathJStr.Get() && optPathJStr.Get()) ? env->NewObject(dexLoaderClass.Get(), dexLoaderCtor, dexPathJStr.Get(), optPathJStr.Get(), NULL, appClassLoader.Get()) : NULL);
     jobject instance = NULL;
 
-    if (/*classToInit != NULL*/ dexLoader)
+    if (/*classToInit != NULL*/ dexLoader.Get())
     {
-        jmethodID loadClassMethod = env->GetMethodID(dexLoaderClass, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-        jstring classNameJStr = env->NewStringUTF(classToInit);
+        jmethodID loadClassMethod = env->GetMethodID(dexLoaderClass.Get(), "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+        auto classNameJStr = MakeJniLocalRef(env, env->NewStringUTF(classToInit));
         
-        jclass loadedClass = (jclass)env->CallObjectMethod(dexLoader, loadClassMethod, classNameJStr);
+        auto loadedClass = MakeJniLocalRef(env, (loadClassMethod && classNameJStr.Get()) ? (jclass)env->CallObjectMethod(dexLoader.Get(), loadClassMethod, classNameJStr.Get()) : NULL);
         if (env->ExceptionCheck()) env->ExceptionClear();
-        else if (loadedClass)
+        else if (loadedClass.Get())
         {
-            jmethodID classCtor = env->GetMethodID(loadedClass, "<init>", "()V");
+            jmethodID classCtor = env->GetMethodID(loadedClass.Get(), "<init>", "()V");
             if (classCtor)
             {
-                instance = env->NewGlobalRef( env->NewObject(loadedClass, classCtor) );
+                auto localInstance = MakeJniLocalRef(env, env->NewObject(loadedClass.Get(), classCtor));
+                instance = localInstance.Get() ? env->NewGlobalRef(localInstance.Get()) : NULL;
                 g_InjectedInstances[classToInit] = instance;
             }
-            env->DeleteLocalRef(loadedClass);
         }
-        env->DeleteLocalRef(classNameJStr);
     }
 
-    env->DeleteLocalRef(contextClass);
-    env->DeleteLocalRef(appClassLoader);
-    env->DeleteLocalRef(fileObj);
-    env->DeleteLocalRef(fileClass);
-    env->DeleteLocalRef(pathStr);
-    env->DeleteLocalRef(dexLoaderClass);
-    env->DeleteLocalRef(dexPathJStr);
-    env->DeleteLocalRef(optPathJStr);
-    env->DeleteLocalRef(dexLoader);
+    ClearJNIException(env);
     
     return instance;
 }

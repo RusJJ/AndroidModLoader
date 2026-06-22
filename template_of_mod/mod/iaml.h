@@ -76,8 +76,6 @@ struct GlossRegisters
 typedef void* PHookHandle;
 typedef void (*HookWithRegistersFn)(GlossRegisters* regs, PHookHandle hook);
 
-
-
 #if defined(__cplusplus)
     extern "C"
 #endif
@@ -88,6 +86,7 @@ class IAML
 public:
     typedef void(*ListDirCallback)(const char* name, bool isDir, void* data);
     typedef void(*ListModsCallback)(const char* guid, const char* version, void* data);
+    typedef void(*ListInterfacesCallback)(const char* name, void* pointer, void* data);
 
 public:
     /* AML 1.0.0.0 */
@@ -248,6 +247,12 @@ public:
     virtual int         GetLatestDownloadErrorCode();
     virtual int         GetCPUCores();
 
+    /* AML 1.4.1 */
+    virtual void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL);
+    virtual const char* GetAppVersionName();
+    virtual int64_t     GetAppVersionCode();
+    virtual const char* GetApkPath();
+    virtual const char* GetApkMD5();
 
 
     // Inlines (shortcuts for you!)

@@ -52,6 +52,109 @@ static LocalRef<T> MakeJNILocalRef(JNIEnv* env, T ref)
     });
 }
 
+static char g_szAppVersionName[96] = "";
+static char g_szApkPath[512] = "";
+static char g_szApkMD5[MINIMUM_MD5_BUF_SIZE] = "";
+static int64_t g_nAppVersionCode = -1;
+static bool g_bAppPackageInfoInited = false;
+
+static bool CopyJStringUTF(JNIEnv* env, jstring str, char* out, size_t outLen)
+{
+    if(!env || !str || !out || outLen == 0) return false;
+
+    const char* tmp = env->GetStringUTFChars(str, NULL);
+    if(!tmp)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+    snprintf(out, outLen, "%s", tmp);
+    env->ReleaseStringUTFChars(str, tmp);
+    return true;
+}
+
+static bool InitAppPackageInfo()
+{
+    if(g_bAppPackageInfoInited) return true;
+
+    JNIEnv* env = GetCurrentJNI();
+    jobject context = ::GetCurrentContext();
+    if(!context) context = appContext;
+    if(!env || !context) return false;
+
+    auto contextCls = MakeJNILocalRef(env, env->GetObjectClass(context));
+    if(!contextCls.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+
+    jmethodID getPackageName = env->GetMethodID(contextCls.Get(), "getPackageName", "()Ljava/lang/String;");
+    jmethodID getPackageManager = env->GetMethodID(contextCls.Get(), "getPackageManager", "()Landroid/content/pm/PackageManager;");
+    jmethodID getApplicationInfo = env->GetMethodID(contextCls.Get(), "getApplicationInfo", "()Landroid/content/pm/ApplicationInfo;");
+    if(!getPackageName || !getPackageManager || !getApplicationInfo)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+
+    auto packageName = MakeJNILocalRef(env, (jstring)env->CallObjectMethod(context, getPackageName));
+    auto packageManager = MakeJNILocalRef(env, env->CallObjectMethod(context, getPackageManager));
+    auto appInfo = MakeJNILocalRef(env, env->CallObjectMethod(context, getApplicationInfo));
+    if(env->ExceptionCheck()) env->ExceptionClear();
+
+    if(appInfo.Get())
+    {
+        auto appInfoCls = MakeJNILocalRef(env, env->GetObjectClass(appInfo.Get()));
+        jfieldID sourceDirField = appInfoCls.Get() ? env->GetFieldID(appInfoCls.Get(), "sourceDir", "Ljava/lang/String;") : NULL;
+        if(sourceDirField)
+        {
+            auto sourceDir = MakeJNILocalRef(env, (jstring)env->GetObjectField(appInfo.Get(), sourceDirField));
+            CopyJStringUTF(env, sourceDir.Get(), g_szApkPath, sizeof(g_szApkPath));
+        }
+        else if(env->ExceptionCheck()) env->ExceptionClear();
+    }
+
+    if(packageManager.Get() && packageName.Get())
+    {
+        auto pmCls = MakeJNILocalRef(env, env->GetObjectClass(packageManager.Get()));
+        jmethodID getPackageInfo = pmCls.Get() ? env->GetMethodID(pmCls.Get(), "getPackageInfo", "(Ljava/lang/String;I)Landroid/content/pm/PackageInfo;") : NULL;
+        if(getPackageInfo)
+        {
+            auto packageInfo = MakeJNILocalRef(env, env->CallObjectMethod(packageManager.Get(), getPackageInfo, packageName.Get(), 0));
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            if(packageInfo.Get())
+            {
+                auto piCls = MakeJNILocalRef(env, env->GetObjectClass(packageInfo.Get()));
+                jfieldID versionNameField = piCls.Get() ? env->GetFieldID(piCls.Get(), "versionName", "Ljava/lang/String;") : NULL;
+                if(versionNameField)
+                {
+                    auto versionName = MakeJNILocalRef(env, (jstring)env->GetObjectField(packageInfo.Get(), versionNameField));
+                    CopyJStringUTF(env, versionName.Get(), g_szAppVersionName, sizeof(g_szAppVersionName));
+                }
+                else if(env->ExceptionCheck()) env->ExceptionClear();
+
+                jmethodID getLongVersionCode = piCls.Get() ? env->GetMethodID(piCls.Get(), "getLongVersionCode", "()J") : NULL;
+                if(getLongVersionCode)
+                {
+                    g_nAppVersionCode = (int64_t)env->CallLongMethod(packageInfo.Get(), getLongVersionCode);
+                }
+                else
+                {
+                    if(env->ExceptionCheck()) env->ExceptionClear();
+                    jfieldID versionCodeField = piCls.Get() ? env->GetFieldID(piCls.Get(), "versionCode", "I") : NULL;
+                    if(versionCodeField) g_nAppVersionCode = env->GetIntField(packageInfo.Get(), versionCodeField);
+                    else if(env->ExceptionCheck()) env->ExceptionClear();
+                }
+            }
+        }
+        else if(env->ExceptionCheck()) env->ExceptionClear();
+    }
+
+    g_bAppPackageInfoInited = (g_szAppVersionName[0] != 0 || g_szApkPath[0] != 0 || g_nAppVersionCode >= 0);
+    return g_bAppPackageInfoInited;
+}
+
 inline bool HasFakeAppName()
 {
     return (g_szFakeAppName[0] != 0 && strlen(g_szFakeAppName) > 5);
@@ -1368,6 +1471,34 @@ int AML::GetCPUCores()
     long n = sysconf(_SC_NPROCESSORS_CONF);
     if(n < 1) n = sysconf(_SC_NPROCESSORS_ONLN);
     return ( (n < 1) ? 1 : (int)n ); 
+}
+
+const char* AML::GetAppVersionName()
+{
+    InitAppPackageInfo();
+    return g_szAppVersionName;
+}
+
+int64_t AML::GetAppVersionCode()
+{
+    InitAppPackageInfo();
+    return g_nAppVersionCode;
+}
+
+const char* AML::GetApkPath()
+{
+    InitAppPackageInfo();
+    return g_szApkPath;
+}
+
+const char* AML::GetApkMD5()
+{
+    InitAppPackageInfo();
+    if(g_szApkMD5[0] == 0 && g_szApkPath[0] != 0)
+    {
+        FileMD5(g_szApkPath, g_szApkMD5, sizeof(g_szApkMD5));
+    }
+    return g_szApkMD5;
 }
 
 #include "interfaces.h"

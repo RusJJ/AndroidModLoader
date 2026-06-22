@@ -250,6 +250,10 @@ ON_NEW_INTERFACE()   // OnInterfaceAdded(name, ptr)
 ```cpp
 const char* GetCurrentGame();                 // пакет текущей (возможно поддельной) игры
 const char* GetRealCurrentGame();             // настоящий пакет
+const char* GetAppVersionName();              // versionName целевого приложения/игры
+int64_t     GetAppVersionCode();              // long version code целевого приложения/игры
+const char* GetApkPath();                     // путь к исходному APK
+const char* GetApkMD5();                      // MD5 исходного APK, вычисляется лениво
 bool        IsGameFaked();
 bool        HasMod(const char* guid);
 bool        HasModOfVersion(const char* guid, const char* version);
@@ -723,6 +727,7 @@ ON_MOD_UNLOAD()
 | `aml->GetJNIEnvironment / CallStaticJavaMethod / GetCurrentActivity` | Мост JNI |
 | `aml->MLS*` | Постоянное хранилище ключ/значение |
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Устройство/интерфейс |
+| `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Идентификация/версия целевого приложения |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Макросы хуков |
 | `cfg->GetInt/GetFloat/GetBool/GetString/GetColor(key, def, section="Preferences")` | Чтение конфига |
 | `cfg->Bind(...) -> ConfigEntry` + `Clamp/Set*/Reset` + `cfg->Save()` | Привязанный конфиг |

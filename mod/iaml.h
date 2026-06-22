@@ -76,8 +76,6 @@ struct GlossRegisters
 typedef void* PHookHandle;
 typedef void (*HookWithRegistersFn)(GlossRegisters* regs, PHookHandle hook);
 
-
-
 #if defined(__cplusplus)
     extern "C"
 #endif
@@ -251,6 +249,10 @@ public:
 
     /* AML 1.4.1 */
     virtual void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL);
+    virtual const char* GetAppVersionName();
+    virtual int64_t     GetAppVersionCode();
+    virtual const char* GetApkPath();
+    virtual const char* GetApkMD5();
 
 
 
