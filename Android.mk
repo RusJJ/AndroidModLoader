@@ -17,20 +17,11 @@ LOCAL_SRC_FILES := AML_PrecompiledLibs/$(TARGET_ARCH_ABI)/libGlossHook.a
 include $(PREBUILT_STATIC_LIBRARY)
 
 
-# xUnwind
-
-include $(CLEAR_VARS)
-LOCAL_MODULE := xUnwind
-LOCAL_SHARED_LIBRARIES := armpatch
-LOCAL_SRC_FILES := AML_PrecompiledLibs/$(TARGET_ARCH_ABI)/libxUnwind.a
-include $(PREBUILT_STATIC_LIBRARY)
-
-
 # AML libraries
 
 include $(CLEAR_VARS)
 LOCAL_CPP_EXTENSION     := .cpp .cc
-LOCAL_SHARED_LIBRARIES  := armpatch gloss xUnwind
+LOCAL_SHARED_LIBRARIES  := armpatch gloss
 LOCAL_MODULE            := AML
 LOCAL_SRC_FILES         := main.cpp src/interface.cpp src/aml.cpp src/modpaks.cpp src/signal.cpp \
                            src/modslist.cpp src/icfg.cpp src/vtable_hooker.cpp src/alog.cpp src/mls.cpp \

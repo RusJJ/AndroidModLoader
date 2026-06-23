@@ -3,6 +3,8 @@
     #define sprintf stbsp_sprintf
     #define snprintf stbsp_snprintf
 #endif
+#include <string>
+#include <unordered_map>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h> // mkdir
@@ -43,7 +45,9 @@
 
 pid_t g_MainThreadID = 0;
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
-bool g_bCrashAML, g_bNoMods, g_bSimplerCrashLog = false, g_bNoSPInLog, g_bNoModsInLog, g_bMLSOnlyManualSaves, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo, g_bUnixBacktrace = false;
+bool g_bCrashAML = false, g_bNoMods = false, g_bSimplerCrashLog = false, g_bNoSPInLog = false,
+     g_bNoModsInLog = false, g_bMLSOnlyManualSaves = false, g_bDumpAllThreads = true,
+     g_bMoreRegsInfo = true, g_bDumpThreadRegisters = true;
 int g_nEnableNews, g_nDownloadTimeout;
 int g_nAndroidSDKVersion = 0, g_nFailedToLoad = 0, g_nLatestDownloadErrorCode = 0;
 ConfigEntry* g_pLastNewsId;
@@ -648,7 +652,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     g_bNoModsInLog = cfg->GetBool("NoModsInCrashLog", false, "DevTools");
     g_bMLSOnlyManualSaves = cfg->GetBool("MLSOnlyManualSaves", false, "DevTools");
     g_bDumpAllThreads = cfg->GetBool("CrashLogFromAllThreads", true, "DevTools");
-    g_bEHUnwind = cfg->GetBool("EHUnwindCrashLog", false, "DevTools");
+    g_bDumpThreadRegisters = cfg->GetBool("CrashLogFromAllThreads", true, "DevTools");
     g_bMoreRegsInfo = cfg->GetBool("MoreRegistersInfo", true, "DevTools");
 
     cfg->Save();

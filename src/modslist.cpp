@@ -1,5 +1,6 @@
 #include <modslist.h>
 #include <modpaks.h>
+#include <unistd.h>
 #include <mod/logger.h>
 #include <mod/listitem.h>
 
@@ -324,9 +325,13 @@ int ModsList::GetModsNum()
     return listMods ? listMods->Count() : 0;
 }
 
-void ModsList::PrintModsList(std::ofstream& logfile)
+static char signalbuf[1024];
+#define fd_printf(format, ...) \
+    do{ int _macro_len = snprintf(signalbuf, sizeof(signalbuf), format, ##__VA_ARGS__); \
+        if(_macro_len > 0) write(g_nLogFileFd, signalbuf, _macro_len); } while(0)
+void ModsList::PrintModsList(int g_nLogFileFd)
 {
-    logfile << "\n----------------------------------------------------\nList of loaded mods (count=" << std::dec << GetModsNum() << "):\n";
+    fd_printf("\n----------------------------------------------------\nList of loaded mods (count=%d):\n", GetModsNum());
 
     ModInfo* info = NULL;
     ModDesc* desc = NULL;
@@ -335,8 +340,8 @@ void ModsList::PrintModsList(std::ofstream& logfile)
         info = item->pModInfo;
         desc = item->pModDesc;
         
-        logfile << info->Name() << " (" << info->Author() << ", version " << info->VersionString() << ")\n";
-        logfile << " - GUID: " << info->GUID() << " | Base: 0x" << std::hex << std::uppercase << (uintptr_t)desc->m_pHandle << " | Path: " << desc->m_szLibPath << "\n";
+        fd_printf("%s (%s, version %s)\n", info->Name(), info->Author(), info->VersionString());
+        fd_printf(" - GUID: %s | Base: " PTRFMT " | Path: %s\n", info->GUID(), (uintptr_t)desc->m_pHandle, desc->m_szLibPath);
     }
 }
 

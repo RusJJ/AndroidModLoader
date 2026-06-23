@@ -1,6 +1,7 @@
 #ifndef __JNIFN_H
 #define __JNIFN_H
 
+#include <string>
 #include <jni.h>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
