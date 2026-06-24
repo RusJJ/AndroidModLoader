@@ -79,6 +79,9 @@
 #ifndef MAP_ANONYMOUS
     #define MAP_ANONYMOUS 0x20
 #endif
+#ifndef SEEK_SET
+    #define SEEK_SET 0
+#endif
 
 #if defined(__aarch64__) || defined(__arm__)
 
@@ -146,6 +149,9 @@ static const uintptr_t JCRASHER_DT_ARM_EXIDXSZ = 0x70000002u;
 static const unsigned JCRASHER_STT_NOTYPE = 0;
 static const unsigned JCRASHER_STT_FUNC = 2;
 static const uint16_t JCRASHER_SHN_UNDEF = 0;
+static const uint32_t JCRASHER_SHT_SYMTAB = 2;
+static const uint32_t JCRASHER_SHT_STRTAB = 3;
+static const uint32_t JCRASHER_SHT_DYNSYM = 11;
 
 #if defined(__aarch64__)
 struct SElfHeader
@@ -232,6 +238,36 @@ struct SElfSymbol
     unsigned char st_info;
     unsigned char st_other;
     uint16_t st_shndx;
+};
+#endif
+
+#if defined(__aarch64__)
+struct SElfSection
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
+    uint64_t sh_offset;
+    uint64_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
+};
+#else
+struct SElfSection
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint32_t sh_flags;
+    uint32_t sh_addr;
+    uint32_t sh_offset;
+    uint32_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint32_t sh_addralign;
+    uint32_t sh_entsize;
 };
 #endif
 
@@ -346,6 +382,20 @@ static long SysClose(int fd)
 { return syscall(SYS_close, fd); }
 static long SysRead(int fd, void* buf, size_t n)
 { return syscall(SYS_read, fd, buf, n); }
+static long SysLseek(int fd, long off, int whence)
+{ return syscall(SYS_lseek, fd, off, whence); }
+static bool ReadFileAt(int fd, uintptr_t off, void* buf, size_t n)
+{
+    if (fd < 0 || !buf) return false;
+    if (SysLseek(fd, (long)off, SEEK_SET) < 0) return false;
+    size_t done = 0;
+    while (done < n) {
+        long r = SysRead(fd, (char*)buf + done, n - done);
+        if (r <= 0) return false;
+        done += (size_t)r;
+    }
+    return true;
+}
 static long SysWrite(int fd, const void* buf, size_t n)
 { return syscall(SYS_write, fd, buf, n); }
 static long SysWait4(pid_t pid, int* st, int options)
@@ -1924,10 +1974,331 @@ static SObjectInfo* GetObjectForPc(pid_t pid, uintptr_t pc)
     return &g_Objects[g_nObjectCount++];
 }
 
+
+static uint16_t ReadLE16(const unsigned char* p)
+{ return (uint16_t)p[0] | ((uint16_t)p[1] << 8); }
+
+static uint32_t ReadLE32(const unsigned char* p)
+{ return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+
+static bool ContainsBang(const char* s)
+{
+    if (!s) return false;
+    while (*s) {
+        if (*s == '!') return true;
+        ++s;
+    }
+    return false;
+}
+
+static void StripDeletedAndBang(const char* in, char* out, size_t cap)
+{
+    if (!out || !cap) return;
+    out[0] = 0;
+    if (!in) return;
+    size_t n = 0;
+    for (size_t i = 0; in[i] && n + 1 < cap; ++i) {
+        if (in[i] == ' ' && in[i + 1] == '(' && in[i + 2] == 'd' && in[i + 3] == 'e' &&
+            in[i + 4] == 'l' && in[i + 5] == 'e' && in[i + 6] == 't' && in[i + 7] == 'e' &&
+            in[i + 8] == 'd' && in[i + 9] == ')') break;
+        if (in[i] == '!') break;
+        out[n++] = in[i];
+    }
+    out[n] = 0;
+}
+
+static void ExtractZipEntryName(const char* in, char* out, size_t cap)
+{
+    if (!out || !cap) return;
+    out[0] = 0;
+    if (!in) return;
+    const char* bang = 0;
+    for (const char* p = in; *p; ++p) {
+        if (*p == '!') { bang = p; break; }
+    }
+    if (!bang) return;
+    const char* e = bang + 1;
+    if (*e == '/') ++e;
+    CopyString(out, cap, e);
+}
+
+static bool ZipNameMatches(const char* zip_name, const char* wanted, const char* soname)
+{
+    if (!zip_name || !zip_name[0]) return false;
+    if (wanted && wanted[0] && StrEqual(zip_name, wanted)) return true;
+    if (soname && soname[0]) {
+        if (EndsWith(zip_name, soname)) {
+            if (zip_name[0] == 'l' && zip_name[1] == 'i' && zip_name[2] == 'b' && zip_name[3] == '/') return true;
+            size_t zl = StrLen(zip_name);
+            size_t sl = StrLen(soname);
+            if (zl > sl && zip_name[zl - sl - 1] == '/') return true;
+        }
+    }
+    return false;
+}
+
+static bool FindZipStoredEntry(int fd, const char* wanted, const char* soname,
+                               uintptr_t* data_off, uintptr_t* data_size)
+{
+    if (fd < 0 || !data_off || !data_size) return false;
+    *data_off = 0;
+    *data_size = 0;
+
+    long end = SysLseek(fd, 0, SEEK_END);
+    if (end <= 22) return false;
+    long scan = end;
+    if (scan > 66000) scan = 66000;
+    long start = end - scan;
+    unsigned char buf[4096];
+    long pos = end - 22;
+    long eocd = -1;
+    while (pos >= start) {
+        unsigned char sig[4];
+        if (!ReadFileAt(fd, (uintptr_t)pos, sig, 4)) break;
+        if (ReadLE32(sig) == 0x06054B50u) { eocd = pos; break; }
+        --pos;
+    }
+    if (eocd < 0) return false;
+
+    unsigned char e[22];
+    if (!ReadFileAt(fd, (uintptr_t)eocd, e, sizeof(e))) return false;
+    uint32_t cd_size = ReadLE32(e + 12);
+    uint32_t cd_off  = ReadLE32(e + 16);
+    uint16_t entries = ReadLE16(e + 10);
+    if (!cd_size || !entries) return false;
+    if (cd_off == 0xFFFFFFFFu || cd_size == 0xFFFFFFFFu) return false; // no ZIP64 in crash path
+    if ((uintptr_t)cd_off >= (uintptr_t)end || (uintptr_t)cd_off + cd_size > (uintptr_t)end) return false;
+
+    uintptr_t p = cd_off;
+    uintptr_t cd_end = (uintptr_t)cd_off + cd_size;
+    for (uint32_t i = 0; i < entries && p + 46 <= cd_end; ++i) {
+        unsigned char h[46];
+        if (!ReadFileAt(fd, p, h, sizeof(h))) return false;
+        if (ReadLE32(h) != 0x02014B50u) return false;
+        uint16_t method = ReadLE16(h + 10);
+        uint32_t comp_size = ReadLE32(h + 20);
+        uint32_t uncomp_size = ReadLE32(h + 24);
+        uint16_t name_len = ReadLE16(h + 28);
+        uint16_t extra_len = ReadLE16(h + 30);
+        uint16_t comment_len = ReadLE16(h + 32);
+        uint32_t local_off = ReadLE32(h + 42);
+        if (name_len == 0 || name_len >= sizeof(buf)) return false;
+        if (p + 46u + name_len + extra_len + comment_len > cd_end) return false;
+        if (!ReadFileAt(fd, p + 46, buf, name_len)) return false;
+        buf[name_len] = 0;
+
+        if (ZipNameMatches((const char*)buf, wanted, soname)) {
+            if (method != 0) return false; // native libs loaded directly from APK must be stored, not deflated
+            if (comp_size != uncomp_size || local_off == 0xFFFFFFFFu) return false;
+            unsigned char lh[30];
+            if (!ReadFileAt(fd, local_off, lh, sizeof(lh))) return false;
+            if (ReadLE32(lh) != 0x04034B50u) return false;
+            uint16_t ln = ReadLE16(lh + 26);
+            uint16_t le = ReadLE16(lh + 28);
+            uintptr_t off = (uintptr_t)local_off + 30u + ln + le;
+            if (off + uncomp_size > (uintptr_t)end) return false;
+            *data_off = off;
+            *data_size = uncomp_size;
+            return true;
+        }
+        p += 46u + name_len + extra_len + comment_len;
+    }
+    return false;
+}
+
+static bool ReadImageAt(int fd, uintptr_t base, uintptr_t size, uintptr_t off, void* buf, size_t n)
+{
+    if (size && ((off > size) || ((uintptr_t)n > size - off))) return false;
+    return ReadFileAt(fd, base + off, buf, n);
+}
+
+static void BuildOpenableElfPath(const char* in, char* out, size_t cap)
+{
+    if (!out || !cap) return;
+    out[0] = 0;
+    if (!in) return;
+    size_t n = 0;
+    for (size_t i = 0; in[i] && n + 1 < cap; ++i) {
+        if (in[i] == ' ' && in[i + 1] == '(' && in[i + 2] == 'd' && in[i + 3] == 'e' &&
+            in[i + 4] == 'l' && in[i + 5] == 'e' && in[i + 6] == 't' && in[i + 7] == 'e' &&
+            in[i + 8] == 'd' && in[i + 9] == ')') break;
+        if (in[i] == '!') break; // ZIP entry path: file fallback needs ZIP parser, not a raw open.
+        out[n++] = in[i];
+    }
+    out[n] = 0;
+}
+
+static bool ReadFileString(int fd, uintptr_t base, uintptr_t size, uintptr_t off, char* out, size_t cap)
+{
+    if (!out || !cap) return false;
+    out[0] = 0;
+    for (size_t i = 0; i + 1 < cap; ++i) {
+        char c = 0;
+        if (!ReadImageAt(fd, base, size, off + i, &c, 1)) return i != 0;
+        out[i] = c;
+        out[i + 1] = 0;
+        if (!c) return i != 0;
+    }
+    out[cap - 1] = 0;
+    return out[0] != 0;
+}
+
+static bool ResolveFileSymbolFromSection(int fd, uintptr_t file_base, uintptr_t file_size,
+                                         const SElfSection* symsec, const SElfSection* strsec,
+                                         uintptr_t load_bias, uintptr_t obj_start, uintptr_t obj_end,
+                                         uintptr_t pc, char* name, size_t name_cap, uintptr_t* sym_off)
+{
+    if (!symsec || !strsec || !symsec->sh_offset || !symsec->sh_size || !strsec->sh_offset || !strsec->sh_size) return false;
+    uintptr_t ent = (uintptr_t)symsec->sh_entsize;
+    if (!ent) ent = sizeof(SElfSymbol);
+    if (ent < sizeof(SElfSymbol) || ent > 256) return false;
+    uintptr_t count = (uintptr_t)(symsec->sh_size / ent);
+    if (count > 524288) count = 524288;
+
+    uintptr_t best = 0;
+    uint32_t best_name = 0;
+    uintptr_t best_off = ~(uintptr_t)0;
+
+    for (uintptr_t i = 0; i < count; ++i) {
+        SElfSymbol s;
+        if (!ReadImageAt(fd, file_base, file_size, (uintptr_t)symsec->sh_offset + i * ent, &s, sizeof(s))) break;
+        if (!s.st_name || !s.st_value || s.st_shndx == JCRASHER_SHN_UNDEF) continue;
+        unsigned type = GetElfSymbolType(s.st_info);
+        if (type != JCRASHER_STT_FUNC && type != JCRASHER_STT_NOTYPE) continue;
+
+        uintptr_t addr = (uintptr_t)s.st_value;
+        if (!(addr >= obj_start && addr < obj_end)) addr = load_bias + addr;
+        if (pc < addr) continue;
+        uintptr_t off = pc - addr;
+        if (s.st_size && off >= (uintptr_t)s.st_size) continue;
+        if (!s.st_size && off > 0x200000) continue;
+        if (off < best_off) {
+            best = addr;
+            best_name = s.st_name;
+            best_off = off;
+            if (off == 0) break;
+        }
+    }
+
+    if (!best || !best_name) return false;
+    if (!ReadFileString(fd, file_base, file_size, (uintptr_t)strsec->sh_offset + best_name, name, name_cap)) return false;
+    *sym_off = pc - best;
+    return name[0] != 0;
+}
+
+static bool OpenSymbolImage(const SObjectInfo* o, int* out_fd, uintptr_t* out_base, uintptr_t* out_size)
+{
+    if (!o || !o->path[0] || !out_fd || !out_base || !out_size) return false;
+    *out_fd = -1;
+    *out_base = 0;
+    *out_size = 0;
+
+    char apk_path[512];
+    char entry[256];
+    StripDeletedAndBang(o->path, apk_path, sizeof(apk_path));
+    ExtractZipEntryName(o->path, entry, sizeof(entry));
+
+    if (ContainsBang(o->path)) {
+        if (!apk_path[0]) return false;
+        int fd = (int)SysOpenAt(apk_path, O_RDONLY | O_CLOEXEC);
+        if (fd < 0) return false;
+        uintptr_t data_off = 0;
+        uintptr_t data_size = 0;
+        if (!FindZipStoredEntry(fd, entry, o->soname, &data_off, &data_size)) {
+            SysClose(fd);
+            return false;
+        }
+        *out_fd = fd;
+        *out_base = data_off;
+        *out_size = data_size;
+        return true;
+    }
+
+    if (EndsWith(apk_path, ".apk") && o->soname[0]) {
+        int fd = (int)SysOpenAt(apk_path, O_RDONLY | O_CLOEXEC);
+        if (fd >= 0) {
+            uintptr_t data_off = 0;
+            uintptr_t data_size = 0;
+            if (FindZipStoredEntry(fd, 0, o->soname, &data_off, &data_size)) {
+                *out_fd = fd;
+                *out_base = data_off;
+                *out_size = data_size;
+                return true;
+            }
+            SysClose(fd);
+        }
+    }
+
+    if (!apk_path[0] || apk_path[0] == '[') return false;
+    int fd = (int)SysOpenAt(apk_path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return false;
+    long end = SysLseek(fd, 0, SEEK_END);
+    *out_fd = fd;
+    *out_base = 0;
+    *out_size = end > 0 ? (uintptr_t)end : 0;
+    return true;
+}
+
+static bool ResolveFileSymbol(const SObjectInfo* o, uintptr_t pc, char* name, size_t name_cap, uintptr_t* sym_off)
+{
+    if (!o || !o->path[0] || !name || !name_cap || !sym_off) return false;
+
+    int fd = -1;
+    uintptr_t file_base = 0;
+    uintptr_t file_size = 0;
+    if (!OpenSymbolImage(o, &fd, &file_base, &file_size)) return false;
+
+    SElfHeader eh;
+    if (!ReadImageAt(fd, file_base, file_size, 0, &eh, sizeof(eh)) || !IsValidElfHeader(&eh)) {
+        SysClose(fd);
+        return false;
+    }
+    if (!eh.e_shoff || !eh.e_shentsize || !eh.e_shnum || eh.e_shentsize < sizeof(SElfSection)) {
+        SysClose(fd);
+        return false;
+    }
+    uint32_t shnum = eh.e_shnum;
+    if (shnum > 8192) shnum = 8192;
+
+    SElfSection best_sym;
+    SElfSection best_str;
+    SElfSection dyn_sym;
+    SElfSection dyn_str;
+    bool have_best = false;
+    bool have_dyn = false;
+    for (uint32_t i = 0; i < shnum; ++i) {
+        SElfSection sh;
+        if (!ReadImageAt(fd, file_base, file_size, (uintptr_t)eh.e_shoff + (uintptr_t)i * eh.e_shentsize, &sh, sizeof(sh))) break;
+        if ((sh.sh_type == JCRASHER_SHT_SYMTAB || sh.sh_type == JCRASHER_SHT_DYNSYM) && sh.sh_link < shnum) {
+            SElfSection str;
+            if (!ReadImageAt(fd, file_base, file_size, (uintptr_t)eh.e_shoff + (uintptr_t)sh.sh_link * eh.e_shentsize, &str, sizeof(str))) continue;
+            if (str.sh_type != JCRASHER_SHT_STRTAB || !str.sh_offset || !str.sh_size) continue;
+            if (sh.sh_type == JCRASHER_SHT_SYMTAB) {
+                best_sym = sh;
+                best_str = str;
+                have_best = true;
+                break;
+            }
+            if (!have_dyn) {
+                dyn_sym = sh;
+                dyn_str = str;
+                have_dyn = true;
+            }
+        }
+    }
+
+    bool ok = false;
+    if (have_best) ok = ResolveFileSymbolFromSection(fd, file_base, file_size, &best_sym, &best_str, o->load_bias, o->start, o->end, pc, name, name_cap, sym_off);
+    if (!ok && have_dyn) ok = ResolveFileSymbolFromSection(fd, file_base, file_size, &dyn_sym, &dyn_str, o->load_bias, o->start, o->end, pc, name, name_cap, sym_off);
+    SysClose(fd);
+    return ok;
+}
+
 static bool ResolveSymbol(pid_t pid, const SObjectInfo* o, uintptr_t pc, char* name, size_t name_cap,
                                                       uintptr_t* sym_off)
 {
-    if (!o || !o->symtab || !o->strtab || !o->nsyms) return false;
+    if (!o) return false;
+    if (!o->symtab || !o->strtab || !o->nsyms) return ResolveFileSymbol(o, pc, name, name_cap, sym_off);
     uintptr_t best = 0;
     uint32_t best_name = 0;
     uintptr_t best_off = ~(uintptr_t)0;
@@ -1952,9 +2323,9 @@ static bool ResolveSymbol(pid_t pid, const SObjectInfo* o, uintptr_t pc, char* n
         }
     }
 
-    if (!best || !best_name) return false;
-    if (best_off > 0x100000 && best_off != 0) return false;
-    if (!ReadStringTarget(pid, o->strtab + best_name, name, name_cap)) return false;
+    if (!best || !best_name) return ResolveFileSymbol(o, pc, name, name_cap, sym_off);
+    if (best_off > 0x100000 && best_off != 0) return ResolveFileSymbol(o, pc, name, name_cap, sym_off);
+    if (!ReadStringTarget(pid, o->strtab + best_name, name, name_cap)) return ResolveFileSymbol(o, pc, name, name_cap, sym_off);
     *sym_off = pc - best;
     return name[0] != 0;
 }
