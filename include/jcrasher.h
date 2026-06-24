@@ -112,6 +112,8 @@ enum eDumpResult
 namespace Private
 {
 
+static const unsigned JCRASHER_DUMP_SKIP_CRASHED = (1u << 31);
+
 // Private minimal ELF definitions. Do not include <elf.h> and do not define ELF_*
 // macros: Android NDK 20 can include both elf.h and linux/elf.h, and redefining
 // ELF_ST_TYPE can create ELF_ST_TYPE <> ELF64_ST_TYPE macro recursion.
@@ -130,6 +132,7 @@ static const uint16_t JCRASHER_EM_ARM = 40;
 static const uint16_t JCRASHER_EM_AARCH64 = 183;
 static const uint32_t JCRASHER_PT_LOAD = 1;
 static const uint32_t JCRASHER_PT_DYNAMIC = 2;
+static const uint32_t JCRASHER_PT_GNU_EH_FRAME = 0x6474E550u;
 static const uintptr_t JCRASHER_DT_NULL = 0;
 static const uintptr_t JCRASHER_DT_HASH = 4;
 static const uintptr_t JCRASHER_DT_STRTAB = 5;
@@ -1793,6 +1796,7 @@ static bool DiscoverObject(pid_t pid, uintptr_t pc, SObjectInfo* out)
         uintptr_t max_vaddr = 0;
         uintptr_t dyn_vaddr = 0;
         uintptr_t dyn_size = 0;
+        uintptr_t eh_frame_hdr_vaddr = 0;
         uintptr_t load_align = 4096;
         bool has_load = false;
         for (int k = 0; k < eh.e_phnum; ++k) {
@@ -1807,6 +1811,8 @@ static bool DiscoverObject(pid_t pid, uintptr_t pc, SObjectInfo* out)
             } else if (ph[k].p_type == JCRASHER_PT_DYNAMIC) {
                 dyn_vaddr = (uintptr_t)ph[k].p_vaddr;
                 dyn_size = (uintptr_t)ph[k].p_memsz;
+            } else if (ph[k].p_type == JCRASHER_PT_GNU_EH_FRAME) {
+                eh_frame_hdr_vaddr = (uintptr_t)ph[k].p_vaddr;
             }
         }
         if (!has_load) continue;
@@ -1824,6 +1830,7 @@ static bool DiscoverObject(pid_t pid, uintptr_t pc, SObjectInfo* out)
         o.start = obj_start;
         o.end = obj_end;
         o.syment = sizeof(SElfSymbol);
+        if (eh_frame_hdr_vaddr) o.eh_frame_hdr = load_bias + eh_frame_hdr_vaddr;
         CopyString(o.path, sizeof(o.path), path);
 
         uintptr_t soname_off = 0;
@@ -2228,12 +2235,21 @@ static void DumpAllThreadsImpl(int fd, pid_t target, unsigned flags, size_t max_
         }
     }
 
-    if ((flags & DUMP_CRASHED_FIRST) && g_nCrashTid > 0) {
-        DumpThread(fd, target, g_nCrashTid, false, flags, max_frames);
+    bool skip_crashed = (flags & JCRASHER_DUMP_SKIP_CRASHED) != 0;
+    bool crash_attached = false;
+    for (size_t i = 0; i < count; ++i) {
+        if (tids[i] == g_nCrashTid) {
+            crash_attached = attached[i];
+            break;
+        }
+    }
+
+    if (!skip_crashed && (flags & DUMP_CRASHED_FIRST) && g_nCrashTid > 0) {
+        DumpThread(fd, target, g_nCrashTid, crash_attached, flags, max_frames);
     }
 
     for (size_t i = 0; i < count; ++i) {
-        if ((flags & DUMP_CRASHED_FIRST) && tids[i] == g_nCrashTid) continue;
+        if ((skip_crashed || (flags & DUMP_CRASHED_FIRST)) && tids[i] == g_nCrashTid) continue;
         DumpThread(fd, target, tids[i], attached[i], flags, max_frames);
     }
 
@@ -2577,11 +2593,20 @@ inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_fram
     if (fd < 0) return DUMP_BAD_FD;
 
     if (fallback_to_current && (flags & DUMP_ALL_THREADS) && HasAllThreadsDumperFd(fd)) {
-        int r = Private::DumpWithPreinitDumper(crashed_context, flags, max_frames, fd, 0);
+        // Quality fallback, not just hard-failure fallback:
+        // dump the crashed thread directly in the signal handler first.
+        // This uses local stack reads, so it can be better than the helper's
+        // remote read path on Samsung/HyperOS. The helper is then asked to
+        // dump every other thread and skip the crashed TID.
+        DumpFd(fd, crashed_context, flags & ~(DUMP_ALL_THREADS | DUMP_CRASHED_FIRST),
+            max_frames, false);
+
+        int r = Private::DumpWithPreinitDumper(crashed_context,
+            flags | Private::JCRASHER_DUMP_SKIP_CRASHED, max_frames, fd, 0);
         if (r == DUMP_OK) return r;
 
-        Private::WriteString(fd, "<JCrasher: preinit helper failed; fallback to current thread>\n");
-        return DumpFd(fd, crashed_context, flags & ~DUMP_ALL_THREADS, max_frames, true);
+        Private::WriteString(fd, "<JCrasher: preinit helper failed; current thread was already dumped>\n");
+        return r;
     }
 
     Private::CaptureCrash(crashed_context, Private::SysGetTid());
@@ -2589,6 +2614,8 @@ inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_fram
     pid_t target = Private::SysGetPid();
     unsigned forced = flags | DUMP_THREAD_HEADER | DUMP_SYMBOLS;
     if (forced & DUMP_ALL_THREADS) forced |= DUMP_CRASHED_FIRST;
+
+    bool current_dumped_direct = false;
 
     // Current-thread mode must not depend on clone/ptrace/process_vm_readv.
     // Some OEM ROMs block or harden that path, which produced empty logs.
@@ -2601,12 +2628,21 @@ inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_fram
         return 0;
     }
 
+    if (fallback_to_current && (forced & DUMP_CRASHED_FIRST)) {
+        unsigned current_flags = forced & ~(DUMP_ALL_THREADS | DUMP_CRASHED_FIRST | Private::JCRASHER_DUMP_SKIP_CRASHED);
+        Private::g_nTargetPid = target;
+        if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
+        Private::DumpCurrentThreadImpl(fd, target, current_flags, max_frames ? max_frames : 64);
+        current_dumped_direct = true;
+        forced |= Private::JCRASHER_DUMP_SKIP_CRASHED;
+    }
+
     int sync_pipe[2] = {-1, -1};
     if (Private::RawPipe2(sync_pipe) != 0) {
         Private::WriteString(fd, fallback_to_current ?
             "<JCrasher: pipe failed; fallback to current thread>\n" :
             "<JCrasher: pipe failed>\n");
-        if (fallback_to_current) {
+        if (fallback_to_current && !current_dumped_direct) {
             forced &= ~DUMP_ALL_THREADS;
             Private::g_nTargetPid = target;
             if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
@@ -2622,7 +2658,7 @@ inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_fram
         Private::WriteString(fd, fallback_to_current ?
             "<JCrasher: clone failed; fallback to current thread>\n" :
             "<JCrasher: clone failed>\n");
-        if (fallback_to_current) {
+        if (fallback_to_current && !current_dumped_direct) {
             forced &= ~DUMP_ALL_THREADS;
             Private::g_nTargetPid = target;
             if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
@@ -2656,7 +2692,7 @@ inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_fram
         Private::WriteString(fd, fallback_to_current ?
             "<JCrasher: dumper child failed; fallback to current thread>\n" :
             "<JCrasher: dumper child failed>\n");
-        if (fallback_to_current) {
+        if (fallback_to_current && !current_dumped_direct) {
             forced &= ~DUMP_ALL_THREADS;
             Private::g_nTargetPid = target;
             if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
@@ -2674,13 +2710,20 @@ inline int DumpPath(const char* path, void* crashed_context, unsigned flags,
     if (!path || !path[0]) return DUMP_PATH_FAILED;
 
     if ((flags & DUMP_ALL_THREADS) && HasAllThreadsDumperPath(path)) {
-        int r = Private::DumpWithPreinitDumper(crashed_context, flags, max_frames, -1, path);
-        if (r == DUMP_OK) return r;
-
         int fd = (int)Private::SysOpenAt(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
         if (fd >= 0) {
-            Private::WriteString(fd, "<JCrasher: preinit helper failed; fallback to current thread>\n");
-            DumpFd(fd, crashed_context, flags & ~DUMP_ALL_THREADS, max_frames, true);
+            DumpFd(fd, crashed_context, flags & ~(DUMP_ALL_THREADS | DUMP_CRASHED_FIRST),
+                max_frames, false);
+            Private::SysClose(fd);
+        }
+
+        int r = Private::DumpWithPreinitDumper(crashed_context,
+            flags | Private::JCRASHER_DUMP_SKIP_CRASHED, max_frames, -1, path);
+        if (r == DUMP_OK) return r;
+
+        fd = (int)Private::SysOpenAt(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            Private::WriteString(fd, "<JCrasher: preinit helper failed; current thread was already dumped>\n");
             Private::SysClose(fd);
         }
         return r;
