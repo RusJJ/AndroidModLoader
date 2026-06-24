@@ -353,10 +353,9 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     // dlInfo.dli_sname in register might point to the variable with corrupted name
     #define SHOWREG(__t, __v)   fd_printf(#__t ":\t" PTRNUMFMT "\t" PTRFMT, (uintptr_t)(__v), (uintptr_t)(__v)); \
-                                if((void*)(__v) && dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) { \
+                                if((void*)(__v) && dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) \
                                     fd_printf(" (%s + " PTRFMT ")", GetFilenamePart(dlRegInfo.dli_fname), ((uintptr_t)(__v) - (uintptr_t)dlRegInfo.dli_fbase) ); \
-                                    fd_print("\n"); \
-                                }
+                                fd_print("\n"); \
 
     #ifdef AML32
         if(g_bMoreRegsInfo)
