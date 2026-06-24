@@ -27,7 +27,7 @@ static char signalbuf[1024];
 #define fd_printf(format, ...) \
     do{ int _macro_len = snprintf(signalbuf, sizeof(signalbuf), format, ##__VA_ARGS__); \
         if(_macro_len > 0) write(g_nLogFileFd, signalbuf, _macro_len); } while(0)
-#define fd_print(text) write(g_nLogFileFd, text, sizeof(text))
+#define fd_print(text) write(g_nLogFileFd, text, sizeof(text)-1)
 
 ModDesc* pLastModProcessed = NULL;
 
