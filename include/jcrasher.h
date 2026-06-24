@@ -41,6 +41,8 @@
 #include <unistd.h>
 #include <ucontext.h>
 #include <errno.h>
+#include <setjmp.h>
+#include <time.h>
 
 
 #ifndef AT_FDCWD
@@ -351,6 +353,12 @@ static int g_nCapSig;            // chosen realtime signal, 0 = handler not inst
 static SRemoteRegs* g_pCapRegs;  // register override for DumpThread while a thread is parked
 static pid_t g_nCapRegsTid;
 
+// Fault recovery: a secondary SIGSEGV/SIGBUS while reading a parked thread jumps
+// back here so that thread is skipped and the dump still finishes and closes.
+static sigjmp_buf g_FaultJmp;
+static volatile int g_bFaultGuardActive;
+static pid_t g_nFaultGuardTid;
+
 static const uint32_t JCRASHER_PREINIT_MAGIC = 0x4A435250u; // JCRP
 
 struct SPreinitRequest
@@ -413,6 +421,19 @@ static long SysPrctl(long opt, long a2, long a3 = 0, long a4 = 0, long a5 = 0)
 { return syscall(SYS_prctl, opt, a2, a3, a4, a5); }
 static long SysFutex(volatile int* addr, int op, int val)
 { return syscall(SYS_futex, addr, op, val, 0, 0, 0); }
+static void SysNanosleep(long nsec)
+{
+    struct timespec ts;
+    ts.tv_sec = nsec / 1000000000L;
+    ts.tv_nsec = nsec % 1000000000L;
+#ifdef SYS_nanosleep
+    syscall(SYS_nanosleep, &ts, 0);
+#else
+    syscall(SYS_clock_nanosleep, 0 /*CLOCK_REALTIME*/, 0, &ts, 0);
+#endif
+}
+static long SysSigprocmask(int how, const void* set, void* old)
+{ return syscall(SYS_rt_sigprocmask, how, set, old, 8); } // kernel sigset is 8 bytes
 static void* SysMmapShared(size_t len)
 {
 #if defined(SYS_mmap)
@@ -789,6 +810,21 @@ static bool InitInProcessThreadCapture()
 
     g_nCapSig = sig;
     return true;
+}
+
+// Installed transiently around the sibling loop. While the guard is active a
+// fault unwinds back to the saved jump point; otherwise the original handler is
+// restored and the fault re-raised so normal crash semantics are preserved.
+static void FaultGuardHandler(int sig, siginfo_t*, void*)
+{
+    if (g_bFaultGuardActive && (pid_t)syscall(SYS_gettid) == g_nFaultGuardTid) {
+        g_bFaultGuardActive = 0;
+        siglongjmp(g_FaultJmp, 1);
+    }
+    struct sigaction dfl;
+    for (size_t i = 0; i < sizeof(dfl); ++i) ((char*)&dfl)[i] = 0;
+    dfl.sa_handler = SIG_DFL;
+    sigaction(sig, &dfl, 0);
 }
 
 static void SeedRegs(const SRemoteRegs* r, uintptr_t* pc, uintptr_t* sp, uintptr_t* fp,
@@ -2995,12 +3031,28 @@ static size_t SnapshotAllThreadsInProcess(int fd, unsigned flags, size_t max_fra
     if (count == 0) return 0;
 
     bool skip_crashed = (flags & JCRASHER_DUMP_SKIP_CRASHED) != 0;
-    size_t dumped = 0;
+    volatile size_t dumped = 0;
 
     if (!skip_crashed && (flags & DUMP_CRASHED_FIRST) && g_bHaveCrash) {
         DumpThread(fd, pid, g_nCrashTid, false, flags, max_frames);
         ++dumped;
     }
+
+    // Catch a secondary fault while reading a parked thread so we skip just that
+    // thread instead of dying mid-dump. Handlers are installed transiently and
+    // SIGSEGV/SIGBUS unblocked on this thread (the crash signal left them masked).
+    struct sigaction guard, old_segv, old_bus;
+    for (size_t i = 0; i < sizeof(guard); ++i) ((char*)&guard)[i] = 0;
+    guard.sa_sigaction = FaultGuardHandler;
+    guard.sa_flags = SA_SIGINFO | SA_NODEFER | SA_ONSTACK;
+    sigemptyset(&guard.sa_mask);
+    g_nFaultGuardTid = self;
+    sigaction(SIGSEGV, &guard, &old_segv);
+    sigaction(SIGBUS, &guard, &old_bus);
+
+    uint64_t unblock = (1ull << (SIGSEGV - 1)) | (1ull << (SIGBUS - 1));
+    uint64_t old_mask = 0;
+    SysSigprocmask(SIG_UNBLOCK, &unblock, &old_mask);
 
     for (size_t i = 0; i < count; ++i) {
         pid_t tid = tids[i];
@@ -3013,15 +3065,17 @@ static size_t SnapshotAllThreadsInProcess(int fd, unsigned flags, size_t max_fra
             continue;
         }
 
-        // Bounded wait for the thread to park. A thread stuck in an
-        // uninterruptible syscall never parks within budget and is skipped so
-        // the dump always finishes.
+        // Wait for the thread to park, yielding so it can run its handler even on
+        // single-core devices. A thread that never parks (stuck in an
+        // uninterruptible syscall, or with the signal blocked) is skipped after
+        // the deadline so the dump always finishes.
         bool parked = false;
-        for (int spin = 0; spin < 200000; ++spin) {
+        for (int tries = 0; tries < 1500; ++tries) {
             if (__atomic_load_n(&g_Cap.state, __ATOMIC_ACQUIRE) == 2) { parked = true; break; }
+            SysNanosleep(200000); // 0.2 ms, ~300 ms total deadline
         }
         if (!parked) {
-            // Release in case it parked right after the timeout; a later, slower
+            // Release in case it parked right after the deadline; a later, slower
             // signal delivery sees state != 1 and returns without parking.
             __atomic_store_n(&g_Cap.state, 0, __ATOMIC_RELEASE);
             SysFutex(&g_Cap.state, FUTEX_WAKE, 1);
@@ -3030,14 +3084,24 @@ static size_t SnapshotAllThreadsInProcess(int fd, unsigned flags, size_t max_fra
 
         g_pCapRegs = (SRemoteRegs*)&g_Cap.regs;
         g_nCapRegsTid = tid;
-        DumpThread(fd, pid, tid, false, flags, max_frames);
+        g_bFaultGuardActive = 1;
+        if (sigsetjmp(g_FaultJmp, 1) == 0) {
+            DumpThread(fd, pid, tid, false, flags, max_frames);
+            ++dumped;
+        } else {
+            WriteString(fd, "<JCrasher: fault while reading thread; skipped>\n");
+        }
+        g_bFaultGuardActive = 0;
         g_pCapRegs = 0;
         g_nCapRegsTid = 0;
-        ++dumped;
 
         __atomic_store_n(&g_Cap.state, 0, __ATOMIC_RELEASE);
         SysFutex(&g_Cap.state, FUTEX_WAKE, 1);
     }
+
+    SysSigprocmask(SIG_SETMASK, &old_mask, 0);
+    sigaction(SIGSEGV, &old_segv, 0);
+    sigaction(SIGBUS, &old_bus, 0);
 
     return dumped;
 }
