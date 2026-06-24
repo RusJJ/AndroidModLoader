@@ -2153,34 +2153,72 @@ static bool ResolveFileSymbolFromSection(int fd, uintptr_t file_base, uintptr_t 
     if (!ent) ent = sizeof(SElfSymbol);
     if (ent < sizeof(SElfSymbol) || ent > 256) return false;
     uintptr_t count = (uintptr_t)(symsec->sh_size / ent);
-    if (count > 524288) count = 524288;
+    if (count > 1048576) count = 1048576;
 
-    uintptr_t best = 0;
-    uint32_t best_name = 0;
-    uintptr_t best_off = ~(uintptr_t)0;
+    uintptr_t best_exact = 0;
+    uint32_t best_exact_name = 0;
+    uintptr_t best_exact_off = ~(uintptr_t)0;
+
+    uintptr_t best_near = 0;
+    uint32_t best_near_name = 0;
+    uintptr_t best_near_off = ~(uintptr_t)0;
 
     for (uintptr_t i = 0; i < count; ++i) {
         SElfSymbol s;
         if (!ReadImageAt(fd, file_base, file_size, (uintptr_t)symsec->sh_offset + i * ent, &s, sizeof(s))) break;
         if (!s.st_name || !s.st_value || s.st_shndx == JCRASHER_SHN_UNDEF) continue;
         unsigned type = GetElfSymbolType(s.st_info);
+        // Prefer normal functions, but some game/vendor ELFs keep useful labels as
+        // NOTYPE. Other symbol types are ignored to avoid data/section/file symbols.
         if (type != JCRASHER_STT_FUNC && type != JCRASHER_STT_NOTYPE) continue;
 
-        uintptr_t addr = (uintptr_t)s.st_value;
-        if (!(addr >= obj_start && addr < obj_end)) addr = load_bias + addr;
-        if (pc < addr) continue;
-        uintptr_t off = pc - addr;
-        if (s.st_size && off >= (uintptr_t)s.st_size) continue;
-        if (!s.st_size && off > 0x200000) continue;
-        if (off < best_off) {
-            best = addr;
-            best_name = s.st_name;
-            best_off = off;
+        uintptr_t addr_raw = (uintptr_t)s.st_value;
+#if defined(__arm__)
+        addr_raw &= ~(uintptr_t)1;
+#endif
+        uintptr_t cand[3];
+        cand[0] = addr_raw;
+        cand[1] = load_bias + addr_raw;
+        cand[2] = obj_start + addr_raw;
+
+        uintptr_t addr = 0;
+        uintptr_t off = ~(uintptr_t)0;
+        for (int ci = 0; ci < 3; ++ci) {
+            uintptr_t a = cand[ci];
+            if (!a) continue;
+            if (pc < a) continue;
+            uintptr_t d = pc - a;
+            if (d < off) { addr = a; off = d; }
+        }
+        if (!addr || off > 0x1000000) continue;
+
+        bool exact = false;
+        if (s.st_size) {
+            exact = off < (uintptr_t)s.st_size;
+        } else {
+            exact = off <= 0x200000;
+        }
+
+        if (exact && off < best_exact_off) {
+            best_exact = addr;
+            best_exact_name = s.st_name;
+            best_exact_off = off;
             if (off == 0) break;
+        }
+
+        // Some vendor/game ELFs have bad or zero FUNC sizes. Keep a nearest-preceding
+        // fallback, like addr2line/nm-style symbolization, instead of dropping the name.
+        if (off < best_near_off) {
+            best_near = addr;
+            best_near_name = s.st_name;
+            best_near_off = off;
         }
     }
 
+    uintptr_t best = best_exact ? best_exact : best_near;
+    uint32_t best_name = best_exact ? best_exact_name : best_near_name;
     if (!best || !best_name) return false;
+
     if (!ReadFileString(fd, file_base, file_size, (uintptr_t)strsec->sh_offset + best_name, name, name_cap)) return false;
     *sym_off = pc - best;
     return name[0] != 0;
@@ -2239,7 +2277,7 @@ static bool OpenSymbolImage(const SObjectInfo* o, int* out_fd, uintptr_t* out_ba
     return true;
 }
 
-static bool ResolveFileSymbol(const SObjectInfo* o, uintptr_t pc, char* name, size_t name_cap, uintptr_t* sym_off)
+static bool ResolveFileSymbolOne(const SObjectInfo* o, uintptr_t pc, char* name, size_t name_cap, uintptr_t* sym_off)
 {
     if (!o || !o->path[0] || !name || !name_cap || !sym_off) return false;
 
@@ -2258,6 +2296,11 @@ static bool ResolveFileSymbol(const SObjectInfo* o, uintptr_t pc, char* name, si
         return false;
     }
     uint32_t shnum = eh.e_shnum;
+    if (shnum == 0) {
+        SElfSection sh0;
+        if (ReadImageAt(fd, file_base, file_size, (uintptr_t)eh.e_shoff, &sh0, sizeof(sh0)))
+            shnum = (uint32_t)sh0.sh_size;
+    }
     if (shnum > 8192) shnum = 8192;
 
     SElfSection best_sym;
@@ -2294,6 +2337,82 @@ static bool ResolveFileSymbol(const SObjectInfo* o, uintptr_t pc, char* name, si
     return ok;
 }
 
+
+static const char* GetPathBaseName(const char* p)
+{
+    if (!p) return "";
+    const char* b = p;
+    for (const char* q = p; *q; ++q) {
+        if (*q == '/') b = q + 1;
+        if (*q == '!') b = q + 1;
+    }
+    return b;
+}
+
+static bool DeriveApkVirtualPathFromExtracted(const SObjectInfo* o, char* out, size_t cap)
+{
+    if (!o || !o->path[0] || !out || !cap) return false;
+    out[0] = 0;
+    if (ContainsBang(o->path) || EndsWith(o->path, ".apk")) return false;
+
+    const char* lib = 0;
+    const char* abi = 0;
+#if defined(__aarch64__)
+    const char* needle1 = "/lib/arm64/";
+    const char* entry_abi = "arm64-v8a";
+#else
+    const char* needle1 = "/lib/arm/";
+    const char* entry_abi = "armeabi-v7a";
+#endif
+    for (const char* p = o->path; *p; ++p) {
+        bool m = true;
+        for (size_t i = 0; needle1[i]; ++i) {
+            if (p[i] != needle1[i]) { m = false; break; }
+        }
+        if (m) { lib = p; abi = entry_abi; break; }
+    }
+    if (!lib) {
+        const char* needle2 = "/lib/";
+        for (const char* p = o->path; *p; ++p) {
+            bool m = true;
+            for (size_t i = 0; needle2[i]; ++i) {
+                if (p[i] != needle2[i]) { m = false; break; }
+            }
+            if (m) { lib = p; abi = entry_abi; break; }
+        }
+    }
+    if (!lib || !abi) return false;
+
+    const char* base = GetPathBaseName(o->path);
+    if (!base || !base[0]) return false;
+
+    size_t n = 0;
+    for (const char* p = o->path; p < lib && n + 1 < cap; ++p) out[n++] = *p;
+    out[n] = 0;
+    AppendString(out, cap, &n, "/base.apk!/lib/");
+    AppendString(out, cap, &n, abi);
+    AppendChar(out, cap, &n, '/');
+    AppendString(out, cap, &n, base);
+    return out[0] != 0;
+}
+
+static bool ResolveFileSymbol(const SObjectInfo* o, uintptr_t pc, char* name, size_t name_cap, uintptr_t* sym_off)
+{
+    if (!o) return false;
+
+    if (ResolveFileSymbolOne(o, pc, name, name_cap, sym_off)) return true;
+
+    SObjectInfo alt = *o;
+    char apk_virtual[512];
+    if (DeriveApkVirtualPathFromExtracted(o, apk_virtual, sizeof(apk_virtual))) {
+        CopyString(alt.path, sizeof(alt.path), apk_virtual);
+        if (!alt.soname[0]) CopyString(alt.soname, sizeof(alt.soname), GetPathBaseName(o->path));
+        if (ResolveFileSymbolOne(&alt, pc, name, name_cap, sym_off)) return true;
+    }
+
+    return false;
+}
+
 static bool ResolveSymbol(pid_t pid, const SObjectInfo* o, uintptr_t pc, char* name, size_t name_cap,
                                                       uintptr_t* sym_off)
 {
@@ -2310,10 +2429,24 @@ static bool ResolveSymbol(pid_t pid, const SObjectInfo* o, uintptr_t pc, char* n
         unsigned type = GetElfSymbolType(s.st_info);
         if (type != JCRASHER_STT_FUNC && type != JCRASHER_STT_NOTYPE) continue;
 
-        uintptr_t addr = (uintptr_t)s.st_value;
-        if (!(addr >= o->start && addr < o->end)) addr = o->load_bias + addr;
-        if (pc < addr) continue;
-        uintptr_t off = pc - addr;
+        uintptr_t addr_raw = (uintptr_t)s.st_value;
+#if defined(__arm__)
+        addr_raw &= ~(uintptr_t)1;
+#endif
+        uintptr_t cand[3];
+        cand[0] = addr_raw;
+        cand[1] = o->load_bias + addr_raw;
+        cand[2] = o->start + addr_raw;
+        uintptr_t addr = 0;
+        uintptr_t off = ~(uintptr_t)0;
+        for (int ci = 0; ci < 3; ++ci) {
+            uintptr_t a = cand[ci];
+            if (!a) continue;
+            if (pc < a) continue;
+            uintptr_t d = pc - a;
+            if (d < off) { addr = a; off = d; }
+        }
+        if (!addr) continue;
         if (s.st_size && off >= (uintptr_t)s.st_size) continue;
         if (off < best_off) {
             best = addr;
@@ -2328,6 +2461,150 @@ static bool ResolveSymbol(pid_t pid, const SObjectInfo* o, uintptr_t pc, char* n
     if (!ReadStringTarget(pid, o->strtab + best_name, name, name_cap)) return ResolveFileSymbol(o, pc, name, name_cap, sym_off);
     *sym_off = pc - best;
     return name[0] != 0;
+}
+
+
+static const char* SymbolStatusName(int s)
+{
+    switch (s) {
+        case 0: return "ok";
+        case 1: return "no_object_path";
+        case 2: return "open_failed";
+        case 3: return "not_elf";
+        case 4: return "no_sections";
+        case 5: return "no_symtab";
+        case 6: return "no_match";
+        case 7: return "string_read_failed";
+        case 8: return "zip_entry_failed";
+        default: return "unknown";
+    }
+}
+
+static int InspectSymbolImage(const SObjectInfo* o, bool use_apk_alt,
+                              uintptr_t pc, char* out_path, size_t out_path_cap,
+                              uint32_t* out_shnum, uint32_t* out_symtabs,
+                              uint32_t* out_dynsyms, uint32_t* out_syms,
+                              uintptr_t* out_near_off)
+{
+    if (out_path && out_path_cap) out_path[0] = 0;
+    if (out_shnum) *out_shnum = 0;
+    if (out_symtabs) *out_symtabs = 0;
+    if (out_dynsyms) *out_dynsyms = 0;
+    if (out_syms) *out_syms = 0;
+    if (out_near_off) *out_near_off = ~(uintptr_t)0;
+    if (!o || !o->path[0]) return 1;
+
+    SObjectInfo tmp = *o;
+    if (use_apk_alt) {
+        char apk_virtual[512];
+        if (!DeriveApkVirtualPathFromExtracted(o, apk_virtual, sizeof(apk_virtual))) return 1;
+        CopyString(tmp.path, sizeof(tmp.path), apk_virtual);
+        if (!tmp.soname[0]) CopyString(tmp.soname, sizeof(tmp.soname), GetPathBaseName(o->path));
+    }
+    if (out_path && out_path_cap) CopyString(out_path, out_path_cap, tmp.path);
+
+    int fd = -1;
+    uintptr_t file_base = 0;
+    uintptr_t file_size = 0;
+    if (!OpenSymbolImage(&tmp, &fd, &file_base, &file_size)) return ContainsBang(tmp.path) ? 8 : 2;
+
+    SElfHeader eh;
+    if (!ReadImageAt(fd, file_base, file_size, 0, &eh, sizeof(eh)) || !IsValidElfHeader(&eh)) {
+        SysClose(fd);
+        return 3;
+    }
+    if (!eh.e_shoff || !eh.e_shentsize || eh.e_shentsize < sizeof(SElfSection)) {
+        SysClose(fd);
+        return 4;
+    }
+
+    uint32_t shnum = eh.e_shnum;
+    if (shnum == 0) {
+        SElfSection sh0;
+        if (ReadImageAt(fd, file_base, file_size, (uintptr_t)eh.e_shoff, &sh0, sizeof(sh0)))
+            shnum = (uint32_t)sh0.sh_size;
+    }
+    if (shnum > 8192) shnum = 8192;
+    if (out_shnum) *out_shnum = shnum;
+    if (!shnum) { SysClose(fd); return 4; }
+
+    uint32_t symtabs = 0, dynsyms = 0, total_syms = 0;
+    uintptr_t nearest = ~(uintptr_t)0;
+    for (uint32_t i = 0; i < shnum; ++i) {
+        SElfSection sh;
+        if (!ReadImageAt(fd, file_base, file_size, (uintptr_t)eh.e_shoff + (uintptr_t)i * eh.e_shentsize, &sh, sizeof(sh))) break;
+        if (sh.sh_type != JCRASHER_SHT_SYMTAB && sh.sh_type != JCRASHER_SHT_DYNSYM) continue;
+        if (sh.sh_type == JCRASHER_SHT_SYMTAB) ++symtabs;
+        if (sh.sh_type == JCRASHER_SHT_DYNSYM) ++dynsyms;
+        uintptr_t ent = (uintptr_t)sh.sh_entsize;
+        if (!ent) ent = sizeof(SElfSymbol);
+        if (ent < sizeof(SElfSymbol) || ent > 256) continue;
+        uintptr_t count = (uintptr_t)(sh.sh_size / ent);
+        if (count > 1048576) count = 1048576;
+        total_syms += (uint32_t)(count > 0xFFFFFFFFu - total_syms ? 0xFFFFFFFFu - total_syms : count);
+        for (uintptr_t j = 0; j < count; ++j) {
+            SElfSymbol ss;
+            if (!ReadImageAt(fd, file_base, file_size, (uintptr_t)sh.sh_offset + j * ent, &ss, sizeof(ss))) break;
+            if (!ss.st_name || !ss.st_value || ss.st_shndx == JCRASHER_SHN_UNDEF) continue;
+            unsigned type = GetElfSymbolType(ss.st_info);
+            if (type != JCRASHER_STT_FUNC && type != JCRASHER_STT_NOTYPE) continue;
+            uintptr_t raw = (uintptr_t)ss.st_value;
+#if defined(__arm__)
+            raw &= ~(uintptr_t)1;
+#endif
+            uintptr_t c0 = raw;
+            uintptr_t c1 = tmp.load_bias + raw;
+            uintptr_t c2 = tmp.start + raw;
+            uintptr_t cand[3] = { c0, c1, c2 };
+            for (int ci = 0; ci < 3; ++ci) {
+                uintptr_t a = cand[ci];
+                if (!a || pc < a) continue;
+                uintptr_t d = pc - a;
+                if (d < nearest) nearest = d;
+            }
+        }
+    }
+    SysClose(fd);
+    if (out_symtabs) *out_symtabs = symtabs;
+    if (out_dynsyms) *out_dynsyms = dynsyms;
+    if (out_syms) *out_syms = total_syms;
+    if (out_near_off) *out_near_off = nearest;
+    if (!symtabs && !dynsyms) return 5;
+    if (nearest == ~(uintptr_t)0) return 6;
+    return 6;
+}
+
+static void WriteSymbolDiagnostics(int fd, const SObjectInfo* o, uintptr_t pc)
+{
+    if (!o) return;
+    for (int pass = 0; pass < 2; ++pass) {
+        char pbuf[512];
+        uint32_t shnum = 0, symtabs = 0, dynsyms = 0, syms = 0;
+        uintptr_t nearoff = ~(uintptr_t)0;
+        int st = InspectSymbolImage(o, pass != 0, pc, pbuf, sizeof(pbuf), &shnum, &symtabs, &dynsyms, &syms, &nearoff);
+        if (pass != 0 && st == 1) continue;
+        char line[1024];
+        size_t n = 0;
+        AppendString(line, sizeof(line), &n, "<JCrasher: symdiag source=");
+        AppendString(line, sizeof(line), &n, pass ? "apk-alt" : "direct");
+        AppendString(line, sizeof(line), &n, " status=");
+        AppendString(line, sizeof(line), &n, SymbolStatusName(st));
+        AppendString(line, sizeof(line), &n, " shnum=");
+        AppendDec(line, sizeof(line), &n, shnum);
+        AppendString(line, sizeof(line), &n, " symtab=");
+        AppendDec(line, sizeof(line), &n, symtabs);
+        AppendString(line, sizeof(line), &n, " dynsym=");
+        AppendDec(line, sizeof(line), &n, dynsyms);
+        AppendString(line, sizeof(line), &n, " syms=");
+        AppendDec(line, sizeof(line), &n, syms);
+        AppendString(line, sizeof(line), &n, " near=");
+        if (nearoff == ~(uintptr_t)0) AppendString(line, sizeof(line), &n, "none");
+        else AppendHexVar(line, sizeof(line), &n, (uint64_t)nearoff, true);
+        AppendString(line, sizeof(line), &n, " path=");
+        AppendString(line, sizeof(line), &n, pbuf[0] ? pbuf : o->path);
+        AppendString(line, sizeof(line), &n, ">\n");
+        WriteAll(fd, line, n);
+    }
 }
 
 static void WriteFrameLine(int fd, size_t idx, uintptr_t pc, unsigned flags)
@@ -2376,10 +2653,12 @@ static void WriteFrameLine(int fd, size_t idx, uintptr_t pc, unsigned flags)
     AppendChar(line, sizeof(line), &n, ' ');
     AppendString(line, sizeof(line), &n, path);
 
+    bool resolved_symbol = false;
     if ((flags & DUMP_SYMBOLS) && o) {
         char sym[256];
         uintptr_t so = 0;
         if (ResolveSymbol(g_nTargetPid, o, pc, sym, sizeof(sym), &so)) {
+            resolved_symbol = true;
             AppendString(line, sizeof(line), &n, " (");
             AppendString(line, sizeof(line), &n, sym);
             AppendChar(line, sizeof(line), &n, '+');
@@ -2390,6 +2669,10 @@ static void WriteFrameLine(int fd, size_t idx, uintptr_t pc, unsigned flags)
 
     AppendChar(line, sizeof(line), &n, '\n');
     WriteAll(fd, line, n);
+
+    if ((flags & DUMP_DIAGNOSTICS) && o && !resolved_symbol) {
+        WriteSymbolDiagnostics(fd, o, pc);
+    }
 }
 
 static void WriteThreadName(int fd, pid_t pid, pid_t tid)
