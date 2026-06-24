@@ -40,6 +40,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <ucontext.h>
+#include <errno.h>
 
 
 #ifndef AT_FDCWD
@@ -59,15 +60,6 @@
 #endif
 #ifndef PTRACE_GETREGSET
     #define PTRACE_GETREGSET 0x4204
-#endif
-#ifndef PTRACE_PEEKDATA
-    #define PTRACE_PEEKDATA 2
-#endif
-#ifndef PTRACE_ATTACH
-    #define PTRACE_ATTACH 16
-#endif
-#ifndef PTRACE_DETACH
-    #define PTRACE_DETACH 17
 #endif
 #ifndef PR_SET_PTRACER
     #define PR_SET_PTRACER 0x59616D61
@@ -99,7 +91,8 @@ enum eDumpFlags
     DUMP_REGISTERS     = (1u << 1),
     DUMP_SYMBOLS       = (1u << 2),
     DUMP_CRASHED_FIRST = (1u << 3),
-    DUMP_ALL_THREADS   = (1u << 4)
+    DUMP_ALL_THREADS   = (1u << 4),
+    DUMP_DIAGNOSTICS   = (1u << 5)
 };
 
 enum eDumpResult
@@ -144,6 +137,9 @@ static const uintptr_t JCRASHER_DT_SYMTAB = 6;
 static const uintptr_t JCRASHER_DT_SONAME = 14;
 static const uintptr_t JCRASHER_DT_SYMENT = 11;
 static const uintptr_t JCRASHER_DT_GNU_HASH = 0x6FFFFEF5u;
+static const uintptr_t JCRASHER_DT_GNU_EH_FRAME = 0x6FFFFEFCu;
+static const uintptr_t JCRASHER_DT_ARM_EXIDX = 0x70000001u;
+static const uintptr_t JCRASHER_DT_ARM_EXIDXSZ = 0x70000002u;
 static const unsigned JCRASHER_STT_NOTYPE = 0;
 static const unsigned JCRASHER_STT_FUNC = 2;
 static const uint16_t JCRASHER_SHN_UNDEF = 0;
@@ -272,6 +268,9 @@ struct SObjectInfo
     uintptr_t strtab;
     uintptr_t hash;
     uintptr_t gnu_hash;
+    uintptr_t eh_frame_hdr;
+    uintptr_t arm_exidx;
+    uintptr_t arm_exidx_size;
     uint32_t nsyms;
     uint32_t syment;
     char path[512];
@@ -302,7 +301,9 @@ static size_t g_nMapCount;
 static SObjectInfo g_Objects[256];
 static size_t g_nObjectCount;
 static pid_t g_nTargetPid;
-static pid_t g_nMemoryTid;
+static pid_t g_nPeekTid;
+static int g_nLastUnwindMethod;
+static int g_nLastMetadataReason;
 
 static const uint32_t JCRASHER_PREINIT_MAGIC = 0x4A435250u; // JCRP
 
@@ -552,22 +553,24 @@ static bool ReadTargetPtrace(pid_t tid, uintptr_t addr, void* dst, size_t len)
 
     unsigned char* out = (unsigned char*)dst;
     size_t done = 0;
-    const size_t ws = sizeof(long);
-    uintptr_t cur = addr & ~(uintptr_t)(ws - 1);
-    size_t skip = (size_t)(addr - cur);
+    const size_t word_size = sizeof(long);
 
     while (done < len) {
-        long word = SysPtrace(PTRACE_PEEKDATA, tid, (void*)cur, 0);
-        if (word == -1) return false;
+        uintptr_t cur = addr + done;
+        uintptr_t aligned = cur & ~(uintptr_t)(word_size - 1);
+        size_t shift = (size_t)(cur - aligned);
 
-        unsigned char* b = (unsigned char*)&word;
-        for (size_t i = skip; i < ws && done < len; ++i) {
-            out[done++] = b[i];
-        }
-        cur += ws;
-        skip = 0;
+        errno = 0;
+        long word = SysPtrace(PTRACE_PEEKDATA, tid, (void*)aligned, 0);
+        if (word == -1 && errno != 0) return false;
+
+        unsigned char* bytes = (unsigned char*)&word;
+        size_t take = word_size - shift;
+        if (take > len - done) take = len - done;
+
+        for (size_t i = 0; i < take; ++i) out[done + i] = bytes[shift + i];
+        done += take;
     }
-
     return true;
 }
 
@@ -606,10 +609,10 @@ static bool ReadTarget(pid_t pid, uintptr_t addr, void* dst, size_t len)
     long r = syscall(SYS_process_vm_readv, pid, &local, 1, &remote, 1, 0);
     if (r == (long)len) return true;
 
-    // Samsung/HyperOS may block process_vm_readv even after preinit.
-    // If the dumper has ptrace-stopped at least one target thread, use
-    // PTRACE_PEEKDATA as a slower but more compatible remote-memory reader.
-    if (g_nMemoryTid > 0) return ReadTargetPtrace(g_nMemoryTid, addr, dst, len);
+    // If the dumper attached at least one thread from the target process,
+    // use ptrace word reads as a second remote-memory backend. This helps
+    // on OEM ROMs where process_vm_readv() is denied or crippled.
+    if (g_nPeekTid > 0) return ReadTargetPtrace(g_nPeekTid, addr, dst, len);
     return false;
 }
 
@@ -845,8 +848,876 @@ static size_t UnwindOneFp(pid_t pid, uintptr_t pc, uintptr_t sp, uintptr_t fp, u
     return n;
 }
 
+static bool IsExecutablePc(uintptr_t pc)
+{
+    pc = StripPc(pc);
+    int mi = FindMap(pc);
+    if (mi < 0) return false;
+    return g_Maps[mi].perms[2] == 'x';
+}
+
+static bool AppendUniqueFrame(uintptr_t* frames, size_t* n, size_t cap, uintptr_t pc)
+{
+    pc = StripPc(pc);
+    if (!pc || !IsExecutablePc(pc)) return false;
+    for (size_t i = 0; i < *n; ++i) {
+        if (frames[i] == pc) return false;
+        uintptr_t a = frames[i] > pc ? frames[i] - pc : pc - frames[i];
+        if (a < 4) return false;
+    }
+    if (*n >= cap) return false;
+    frames[(*n)++] = pc;
+    return true;
+}
+
+static size_t StackScanFallback(pid_t pid, uintptr_t sp, uintptr_t* frames, size_t n, size_t cap)
+{
+    if (n >= cap || !sp) return n;
+
+    int stack_i = FindMap(sp);
+    if (stack_i < 0) return n;
+    const SMapRegion* stack = &g_Maps[stack_i];
+    if (stack->perms[0] != 'r') return n;
+
+    uintptr_t start = sp;
+    uintptr_t end = stack->end;
+
+    // Keep this bounded. It is a fallback, not a full conservative GC scan.
+    const uintptr_t kMaxScan = 256u * 1024u;
+    if (end > start + kMaxScan) end = start + kMaxScan;
+
+    start = (start + sizeof(uintptr_t) - 1) & ~(uintptr_t)(sizeof(uintptr_t) - 1);
+
+    for (uintptr_t p = start; p + sizeof(uintptr_t) <= end && n < cap; p += sizeof(uintptr_t)) {
+        uintptr_t v = 0;
+        if (!ReadTarget(pid, p, &v, sizeof(v))) break;
+
+        uintptr_t call = RewindLr(v);
+        if (!IsExecutablePc(call)) continue;
+
+        // Avoid dumping dense junk from literal tables or unrelated pointers:
+        // require sane module mapping and keep first unique callsite only.
+        AppendUniqueFrame(frames, &n, cap, call);
+    }
+
+    return n;
+}
+
+
+static SObjectInfo* GetObjectForPc(pid_t pid, uintptr_t pc);
+
+static bool ReadByteTarget(pid_t pid, uintptr_t addr, unsigned char* out)
+{ return ReadTarget(pid, addr, out, 1); }
+
+static bool ReadU16Target(pid_t pid, uintptr_t addr, uint16_t* out)
+{ return ReadTarget(pid, addr, out, sizeof(*out)); }
+
+static bool ReadU64Target(pid_t pid, uintptr_t addr, uint64_t* out)
+{ return ReadTarget(pid, addr, out, sizeof(*out)); }
+
+static bool ReadSleb(pid_t pid, uintptr_t* p, uintptr_t end, int64_t* out)
+{
+    uint64_t result = 0;
+    unsigned shift = 0;
+    unsigned char byte = 0;
+    uintptr_t cur = *p;
+
+    for (;;) {
+        if (cur >= end || shift >= 64) return false;
+        if (!ReadByteTarget(pid, cur++, &byte)) return false;
+        result |= ((uint64_t)(byte & 0x7F)) << shift;
+        shift += 7;
+        if ((byte & 0x80) == 0) break;
+    }
+    if ((byte & 0x40) && shift < 64) result |= (~0ULL) << shift;
+    *p = cur;
+    *out = (int64_t)result;
+    return true;
+}
+
+static bool ReadUleb(pid_t pid, uintptr_t* p, uintptr_t end, uint64_t* out)
+{
+    uint64_t result = 0;
+    unsigned shift = 0;
+    uintptr_t cur = *p;
+
+    for (;;) {
+        unsigned char byte = 0;
+        if (cur >= end || shift >= 64) return false;
+        if (!ReadByteTarget(pid, cur++, &byte)) return false;
+        result |= ((uint64_t)(byte & 0x7F)) << shift;
+        if ((byte & 0x80) == 0) break;
+        shift += 7;
+    }
+    *p = cur;
+    *out = result;
+    return true;
+}
+
+static int64_t SignExtend(uint64_t v, unsigned bits)
+{
+    uint64_t m = 1ULL << (bits - 1);
+    return (int64_t)((v ^ m) - m);
+}
+
+static uint32_t Prel31ToAddr(uintptr_t place, uint32_t v)
+{
+    int32_t off = (int32_t)((v & 0x40000000u) ? (v | 0x80000000u) : (v & 0x7FFFFFFFu));
+    return (uint32_t)(place + off);
+}
+
+static bool ReadEncodedPointer(pid_t pid, uintptr_t* p, unsigned char enc, uintptr_t data_base,
+                               bool apply_relative, uintptr_t* out)
+{
+    static const unsigned char DW_EH_PE_omit    = 0xFF;
+    static const unsigned char DW_EH_PE_absptr  = 0x00;
+    static const unsigned char DW_EH_PE_uleb128 = 0x01;
+    static const unsigned char DW_EH_PE_udata2  = 0x02;
+    static const unsigned char DW_EH_PE_udata4  = 0x03;
+    static const unsigned char DW_EH_PE_udata8  = 0x04;
+    static const unsigned char DW_EH_PE_sleb128 = 0x09;
+    static const unsigned char DW_EH_PE_sdata2  = 0x0A;
+    static const unsigned char DW_EH_PE_sdata4  = 0x0B;
+    static const unsigned char DW_EH_PE_sdata8  = 0x0C;
+    static const unsigned char DW_EH_PE_pcrel   = 0x10;
+    static const unsigned char DW_EH_PE_datarel = 0x30;
+    static const unsigned char DW_EH_PE_indirect = 0x80;
+
+    if (enc == DW_EH_PE_omit) return false;
+
+    uintptr_t cur = *p;
+    uintptr_t start = cur;
+    uint64_t u = 0;
+    int64_t s = 0;
+    bool is_signed = false;
+
+    switch (enc & 0x0F) {
+        case DW_EH_PE_absptr:
+            if (!ReadTarget(pid, cur, &u, sizeof(uintptr_t))) return false;
+            u &= sizeof(uintptr_t) == 4 ? 0xFFFFFFFFULL : ~0ULL;
+            cur += sizeof(uintptr_t);
+            break;
+        case DW_EH_PE_uleb128:
+            if (!ReadUleb(pid, &cur, cur + 16, &u)) return false;
+            break;
+        case DW_EH_PE_udata2: {
+            uint16_t v = 0; if (!ReadU16Target(pid, cur, &v)) return false; u = v; cur += 2; break;
+        }
+        case DW_EH_PE_udata4: {
+            uint32_t v = 0; if (!ReadU32(pid, cur, &v)) return false; u = v; cur += 4; break;
+        }
+        case DW_EH_PE_udata8: {
+            uint64_t v = 0; if (!ReadU64Target(pid, cur, &v)) return false; u = v; cur += 8; break;
+        }
+        case DW_EH_PE_sleb128:
+            if (!ReadSleb(pid, &cur, cur + 16, &s)) return false;
+            is_signed = true;
+            break;
+        case DW_EH_PE_sdata2: {
+            uint16_t v = 0; if (!ReadU16Target(pid, cur, &v)) return false; s = SignExtend(v, 16); cur += 2; is_signed = true; break;
+        }
+        case DW_EH_PE_sdata4: {
+            uint32_t v = 0; if (!ReadU32(pid, cur, &v)) return false; s = SignExtend(v, 32); cur += 4; is_signed = true; break;
+        }
+        case DW_EH_PE_sdata8: {
+            uint64_t v = 0; if (!ReadU64Target(pid, cur, &v)) return false; s = (int64_t)v; cur += 8; is_signed = true; break;
+        }
+        default:
+            return false;
+    }
+
+    uintptr_t value = is_signed ? (uintptr_t)s : (uintptr_t)u;
+    if (apply_relative) {
+        switch (enc & 0x70) {
+            case 0x00: break;
+            case DW_EH_PE_pcrel: value += start; break;
+            case DW_EH_PE_datarel: value += data_base; break;
+            default: return false;
+        }
+    }
+
+    if (enc & DW_EH_PE_indirect) {
+        uintptr_t tmp = 0;
+        if (!ReadTarget(pid, value, &tmp, sizeof(tmp))) return false;
+        value = tmp;
+    }
+
+    *p = cur;
+    *out = value;
+    return true;
+}
+
+static int EhEncodedSize(unsigned char enc)
+{
+    switch (enc & 0x0F) {
+        case 0x00: return (int)sizeof(uintptr_t);
+        case 0x02: case 0x0A: return 2;
+        case 0x03: case 0x0B: return 4;
+        case 0x04: case 0x0C: return 8;
+        default: return 0;
+    }
+}
+
+struct SCfiRule
+{
+    unsigned char type; // 0 same, 1 offset, 2 undefined, 3 register, 4 val_offset
+    int64_t offset;
+    unsigned reg;
+};
+
+struct SCfiState
+{
+    unsigned cfa_reg;
+    int64_t cfa_off;
+    SCfiRule regs[32];
+};
+
+struct SCieInfo
+{
+    uintptr_t cie_start;
+    uintptr_t instr_start;
+    uintptr_t instr_end;
+    uint64_t code_align;
+    int64_t data_align;
+    unsigned return_reg;
+    unsigned char fde_enc;
+    bool z_aug;
+};
+
+static void CfiInitState(SCfiState* st)
+{
+    st->cfa_reg = 0;
+    st->cfa_off = 0;
+    for (unsigned i = 0; i < 32; ++i) {
+        st->regs[i].type = 0;
+        st->regs[i].offset = 0;
+        st->regs[i].reg = i;
+    }
+}
+
+static bool CfiSkipEncoded(pid_t pid, uintptr_t* p, unsigned char enc, uintptr_t data_base)
+{
+    uintptr_t ignored = 0;
+    return ReadEncodedPointer(pid, p, enc, data_base, true, &ignored);
+}
+
+
+struct SDwarfLength
+{
+    uintptr_t body;
+    uintptr_t end;
+    bool is64;
+};
+
+static bool ReadDwarfLength(pid_t pid, uintptr_t addr, SDwarfLength* out)
+{
+    uint32_t len32 = 0;
+    if (!ReadU32(pid, addr, &len32) || len32 == 0) return false;
+
+    if (len32 == 0xFFFFFFFFu) {
+        uint64_t len64 = 0;
+        if (!ReadU64Target(pid, addr + 4, &len64)) return false;
+        if (len64 == 0 || len64 > (64ULL * 1024ULL * 1024ULL)) return false;
+        out->body = addr + 12;
+        out->end = out->body + (uintptr_t)len64;
+        out->is64 = true;
+        return out->end > out->body;
+    }
+
+    if (len32 > (64u * 1024u * 1024u)) return false;
+    out->body = addr + 4;
+    out->end = out->body + (uintptr_t)len32;
+    out->is64 = false;
+    return out->end > out->body;
+}
+
+static bool ReadDwarfUnsigned(pid_t pid, uintptr_t addr, bool is64, uint64_t* out)
+{
+    if (is64) return ReadU64Target(pid, addr, out);
+    uint32_t v = 0;
+    if (!ReadU32(pid, addr, &v)) return false;
+    *out = v;
+    return true;
+}
+
+static bool ParseCie(pid_t pid, uintptr_t cie_addr, SCieInfo* out)
+{
+    SDwarfLength dl;
+    if (!ReadDwarfLength(pid, cie_addr, &dl)) return false;
+
+    uint64_t id = 1;
+    if (!ReadDwarfUnsigned(pid, dl.body, dl.is64, &id) || id != 0) return false;
+
+    uintptr_t p = dl.body + (dl.is64 ? 8 : 4);
+    uintptr_t end = dl.end;
+    unsigned char version = 0;
+    if (p >= end || !ReadByteTarget(pid, p++, &version)) return false;
+    if (version != 1 && version != 3 && version != 4) return false;
+
+    char aug[64];
+    size_t an = 0;
+    for (; p < end && an + 1 < sizeof(aug); ++p) {
+        unsigned char c = 0;
+        if (!ReadByteTarget(pid, p, &c)) return false;
+        aug[an++] = (char)c;
+        if (c == 0) break;
+    }
+    if (an == 0 || aug[an - 1] != 0) return false;
+
+    uint64_t code_align = 0;
+    int64_t data_align = 0;
+    uint64_t ret = 0;
+    if (!ReadUleb(pid, &p, end, &code_align)) return false;
+    if (!ReadSleb(pid, &p, end, &data_align)) return false;
+    if (version == 1) {
+        unsigned char r = 0;
+        if (p >= end || !ReadByteTarget(pid, p++, &r)) return false;
+        ret = r;
+    } else {
+        if (!ReadUleb(pid, &p, end, &ret)) return false;
+    }
+
+    unsigned char fde_enc = 0x00;
+    bool z_aug = (aug[0] == 'z');
+    if (z_aug) {
+        uint64_t aug_len = 0;
+        if (!ReadUleb(pid, &p, end, &aug_len)) return false;
+        uintptr_t aug_end = p + (uintptr_t)aug_len;
+        if (aug_end < p || aug_end > end) return false;
+        for (size_t i = 1; aug[i] && p < aug_end; ++i) {
+            if (aug[i] == 'P') {
+                unsigned char enc = 0;
+                if (!ReadByteTarget(pid, p++, &enc)) return false;
+                if (!CfiSkipEncoded(pid, &p, enc, cie_addr)) return false;
+            } else if (aug[i] == 'L') {
+                if (p >= aug_end) return false;
+                ++p;
+            } else if (aug[i] == 'R') {
+                if (p >= aug_end || !ReadByteTarget(pid, p++, &fde_enc)) return false;
+            } else if (aug[i] == 'S') {
+                // Signal frame marker. No payload.
+            } else if (aug[i] == 'B') {
+                // AArch64 BTI marker. No payload.
+            } else {
+                // Unknown augmentation. The length is authoritative, skip it.
+                p = aug_end;
+                break;
+            }
+        }
+        p = aug_end;
+    }
+    if (p > end) return false;
+
+    out->cie_start = cie_addr;
+    out->instr_start = p;
+    out->instr_end = end;
+    out->code_align = code_align ? code_align : 1;
+    out->data_align = data_align ? data_align : -(int)sizeof(uintptr_t);
+    out->return_reg = (unsigned)ret;
+    out->fde_enc = fde_enc;
+    out->z_aug = z_aug;
+    return true;
+}
+
+static bool EvalCfiInstructions(pid_t pid, uintptr_t pc, uintptr_t code_start,
+                                uintptr_t p, uintptr_t end, const SCieInfo* cie, SCfiState* st)
+{
+    uintptr_t loc = code_start;
+    SCfiState stack[32];
+    unsigned stack_n = 0;
+
+    while (p < end) {
+        unsigned char op = 0;
+        if (!ReadByteTarget(pid, p++, &op)) return false;
+
+        unsigned primary = op & 0xC0;
+        if (primary == 0x40) { // DW_CFA_advance_loc
+            loc += (uintptr_t)(op & 0x3F) * (uintptr_t)cie->code_align;
+            if (loc > pc) break;
+            continue;
+        }
+        if (primary == 0x80) { // DW_CFA_offset
+            uint64_t off = 0;
+            if (!ReadUleb(pid, &p, end, &off)) return false;
+            unsigned reg = op & 0x3F;
+            if (reg < 32) {
+                st->regs[reg].type = 1;
+                st->regs[reg].offset = (int64_t)off * cie->data_align;
+            }
+            continue;
+        }
+        if (primary == 0xC0) { // DW_CFA_restore
+            unsigned reg = op & 0x3F;
+            if (reg < 32) {
+                st->regs[reg].type = 0;
+                st->regs[reg].offset = 0;
+                st->regs[reg].reg = reg;
+            }
+            continue;
+        }
+
+        switch (op) {
+            case 0x00: break; // DW_CFA_nop
+            case 0x01: { // DW_CFA_set_loc: address-sized absolute target address.
+                uintptr_t v = 0;
+                if (!ReadTarget(pid, p, &v, sizeof(v))) return false;
+                p += sizeof(v);
+                loc = v;
+                if (loc > pc) return true;
+                break;
+            }
+            case 0x02: { unsigned char v=0; if(p>=end||!ReadByteTarget(pid,p++,&v)) return false; loc += (uintptr_t)v * cie->code_align; if(loc > pc) return true; break; }
+            case 0x03: { uint16_t v=0; if(p+2>end||!ReadU16Target(pid,p,&v)) return false; p+=2; loc += (uintptr_t)v * cie->code_align; if(loc > pc) return true; break; }
+            case 0x04: { uint32_t v=0; if(p+4>end||!ReadU32(pid,p,&v)) return false; p+=4; loc += (uintptr_t)v * cie->code_align; if(loc > pc) return true; break; }
+            case 0x05: { uint64_t reg=0, off=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadUleb(pid,&p,end,&off)) return false; if(reg<32){st->regs[reg].type=1; st->regs[reg].offset=(int64_t)off*cie->data_align;} break; }
+            case 0x06: { uint64_t reg=0; if(!ReadUleb(pid,&p,end,&reg)) return false; if(reg<32){st->regs[reg].type=0; st->regs[reg].offset=0; st->regs[reg].reg=(unsigned)reg;} break; }
+            case 0x07: { uint64_t reg=0; if(!ReadUleb(pid,&p,end,&reg)) return false; if(reg<32) st->regs[reg].type=2; break; }
+            case 0x08: { uint64_t reg=0; if(!ReadUleb(pid,&p,end,&reg)) return false; if(reg<32) st->regs[reg].type=0; break; }
+            case 0x09: { uint64_t reg=0, reg2=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadUleb(pid,&p,end,&reg2)) return false; if(reg<32){st->regs[reg].type=3; st->regs[reg].reg=(unsigned)reg2;} break; }
+            case 0x0A: if (stack_n < sizeof(stack) / sizeof(stack[0])) stack[stack_n++] = *st; else return false; break;
+            case 0x0B: if (stack_n) *st = stack[--stack_n]; else return false; break;
+            case 0x0C: { uint64_t reg=0, off=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadUleb(pid,&p,end,&off)) return false; st->cfa_reg=(unsigned)reg; st->cfa_off=(int64_t)off; break; }
+            case 0x0D: { uint64_t reg=0; if(!ReadUleb(pid,&p,end,&reg)) return false; st->cfa_reg=(unsigned)reg; break; }
+            case 0x0E: { uint64_t off=0; if(!ReadUleb(pid,&p,end,&off)) return false; st->cfa_off=(int64_t)off; break; }
+            case 0x0F: { uint64_t len=0; if(!ReadUleb(pid,&p,end,&len)) return false; if (p + (uintptr_t)len < p || p + (uintptr_t)len > end) return false; p += (uintptr_t)len; break; } // DW_CFA_def_cfa_expression: unsupported, but skip expression.
+            case 0x10: { uint64_t reg=0,len=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadUleb(pid,&p,end,&len)) return false; if (p + (uintptr_t)len < p || p + (uintptr_t)len > end) return false; p += (uintptr_t)len; if (reg < 32) st->regs[reg].type = 2; break; } // expression unsupported.
+            case 0x11: { uint64_t reg=0; int64_t off=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadSleb(pid,&p,end,&off)) return false; if(reg<32){st->regs[reg].type=1; st->regs[reg].offset=off*cie->data_align;} break; }
+            case 0x12: { uint64_t reg=0; int64_t off=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadSleb(pid,&p,end,&off)) return false; st->cfa_reg=(unsigned)reg; st->cfa_off=off*cie->data_align; break; }
+            case 0x13: { int64_t off=0; if(!ReadSleb(pid,&p,end,&off)) return false; st->cfa_off=off*cie->data_align; break; }
+            case 0x14: { uint64_t reg=0, off=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadUleb(pid,&p,end,&off)) return false; if(reg<32){st->regs[reg].type=4; st->regs[reg].offset=(int64_t)off*cie->data_align;} break; }
+            case 0x15: { uint64_t reg=0; int64_t off=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadSleb(pid,&p,end,&off)) return false; if(reg<32){st->regs[reg].type=4; st->regs[reg].offset=off*cie->data_align;} break; }
+            case 0x16: { uint64_t reg=0,len=0; if(!ReadUleb(pid,&p,end,&reg)||!ReadUleb(pid,&p,end,&len)) return false; if (p + (uintptr_t)len < p || p + (uintptr_t)len > end) return false; p += (uintptr_t)len; if (reg < 32) st->regs[reg].type = 2; break; } // val_expression unsupported.
+            case 0x1D: break; // DW_CFA_GNU_window_save, irrelevant for ARM/AArch64.
+            case 0x2D: break; // DW_CFA_AARCH64_negate_ra_state, PAC state only; StripPc handles it.
+            case 0x2E: { uint64_t ignored=0; if(!ReadUleb(pid,&p,end,&ignored)) return false; break; } // DW_CFA_GNU_args_size
+            default:
+                return false;
+        }
+        if (p > end) return false;
+    }
+    return true;
+}
+
+#if defined(__aarch64__)
+static bool FindFdeFromEhFrameHdr(pid_t pid, const SObjectInfo* o, uintptr_t pc,
+                                  uintptr_t* fde_addr_out)
+{
+    if (!o || !o->eh_frame_hdr) return false;
+
+    uintptr_t hdr = o->eh_frame_hdr;
+    unsigned char b[4];
+    if (!ReadTarget(pid, hdr, b, sizeof(b))) return false;
+    if (b[0] != 1) return false;
+
+    uintptr_t p = hdr + 4;
+    uintptr_t eh_frame = 0;
+    uintptr_t count_v = 0;
+    if (!ReadEncodedPointer(pid, &p, b[1], hdr, true, &eh_frame)) return false;
+    if (!ReadEncodedPointer(pid, &p, b[2], hdr, true, &count_v)) return false;
+    if (!eh_frame || count_v == 0 || count_v > 262144) return false;
+
+    unsigned char table_enc = b[3];
+    int esz = EhEncodedSize(table_enc);
+    if (!esz) return false;
+    uintptr_t table = p;
+    size_t lo = 0;
+    size_t hi = (size_t)count_v;
+    uintptr_t best_start = 0;
+    uintptr_t best_fde = 0;
+
+    while (lo < hi) {
+        size_t mid = lo + ((hi - lo) >> 1);
+        uintptr_t ep = table + (uintptr_t)mid * (uintptr_t)(esz * 2);
+        uintptr_t start = 0;
+        uintptr_t fde = 0;
+        if (!ReadEncodedPointer(pid, &ep, table_enc, hdr, true, &start)) return false;
+        if (!ReadEncodedPointer(pid, &ep, table_enc, hdr, true, &fde)) return false;
+        if (start <= pc) {
+            best_start = start;
+            best_fde = fde;
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    if (!best_start || !best_fde) return false;
+    *fde_addr_out = best_fde;
+    return true;
+}
+
+static bool CfiUnwindStepA64(pid_t pid, const SRemoteRegs* cur, SRemoteRegs* next)
+{
+    uintptr_t pc = StripPc((uintptr_t)cur->pc);
+    if (!pc) return false;
+    SObjectInfo* o = GetObjectForPc(pid, pc);
+    if (!o || !o->eh_frame_hdr) return false;
+
+    uintptr_t fde = 0;
+    if (!FindFdeFromEhFrameHdr(pid, o, pc, &fde)) return false;
+
+    SDwarfLength fdl;
+    if (!ReadDwarfLength(pid, fde, &fdl)) return false;
+    uint64_t cie_off = 0;
+    if (!ReadDwarfUnsigned(pid, fdl.body, fdl.is64, &cie_off) || cie_off == 0) return false;
+    uintptr_t fde_end = fdl.end;
+    uintptr_t cie_addr = fdl.body - (uintptr_t)cie_off;
+
+    SCieInfo cie;
+    if (!ParseCie(pid, cie_addr, &cie)) return false;
+
+    uintptr_t p = fdl.body + (fdl.is64 ? 8 : 4);
+    uintptr_t start = 0;
+    uintptr_t range = 0;
+    if (!ReadEncodedPointer(pid, &p, cie.fde_enc, o->eh_frame_hdr, true, &start)) return false;
+    if (!ReadEncodedPointer(pid, &p, cie.fde_enc & 0x0F, 0, false, &range)) return false;
+    if (!range || pc < start || pc >= start + range) return false;
+
+    if (cie.z_aug) {
+        uint64_t aug_len = 0;
+        if (!ReadUleb(pid, &p, fde_end, &aug_len)) return false;
+        if (p + (uintptr_t)aug_len < p || p + (uintptr_t)aug_len > fde_end) return false;
+        p += (uintptr_t)aug_len;
+    }
+
+    SCfiState st;
+    CfiInitState(&st);
+    if (!EvalCfiInstructions(pid, start, start, cie.instr_start, cie.instr_end, &cie, &st)) return false;
+    if (!EvalCfiInstructions(pid, pc, start, p, fde_end, &cie, &st)) return false;
+
+    uint64_t vals[32];
+    for (unsigned i = 0; i < 31; ++i) vals[i] = cur->regs[i];
+    vals[31] = cur->sp;
+
+    if (st.cfa_reg >= 32) return false;
+    uintptr_t cfa = (uintptr_t)vals[st.cfa_reg] + (uintptr_t)st.cfa_off;
+    if (!cfa || cfa < cur->sp || cfa - cur->sp > (1024u * 1024u)) return false;
+
+    *next = *cur;
+    next->sp = cfa;
+
+    for (unsigned reg = 0; reg < 31; ++reg) {
+        SCfiRule* rule = &st.regs[reg];
+        if (rule->type == 1) {
+            uintptr_t addr = cfa + (uintptr_t)rule->offset;
+            uintptr_t v = 0;
+            if (ReadTarget(pid, addr, &v, sizeof(v))) next->regs[reg] = (uint64_t)v;
+        } else if (rule->type == 3 && rule->reg < 32) {
+            next->regs[reg] = vals[rule->reg];
+        } else if (rule->type == 4) {
+            next->regs[reg] = (uint64_t)(cfa + (uintptr_t)rule->offset);
+        }
+    }
+
+    uintptr_t ra = 0;
+    if (cie.return_reg < 31) {
+        SCfiRule* rr = &st.regs[cie.return_reg];
+        if (rr->type == 1) {
+            uintptr_t addr = cfa + (uintptr_t)rr->offset;
+            ReadTarget(pid, addr, &ra, sizeof(ra));
+        } else if (rr->type == 3 && rr->reg < 32) {
+            ra = (uintptr_t)vals[rr->reg];
+        } else if (rr->type == 4) {
+            ra = cfa + (uintptr_t)rr->offset;
+        } else if (rr->type != 2) {
+            ra = (uintptr_t)next->regs[cie.return_reg];
+        }
+    }
+    if (!ra) ra = (uintptr_t)cur->regs[30];
+    uintptr_t caller_pc = RewindLr(ra);
+    if (!caller_pc || caller_pc == pc || !IsExecutablePc(caller_pc)) return false;
+    next->pc = caller_pc;
+    next->regs[30] = (uint64_t)ra;
+    return true;
+}
+#endif
+
+#if defined(__arm__)
+static bool ExidxReadWord(pid_t pid, uintptr_t addr, uint32_t* out)
+{ return ReadU32(pid, addr, out); }
+
+static bool ExidxAppendWordBytes(unsigned char* insn, size_t* n, size_t cap, uint32_t w)
+{
+    if (*n + 4 > cap) return false;
+    insn[(*n)++] = (unsigned char)((w >> 24) & 0xFF);
+    insn[(*n)++] = (unsigned char)((w >> 16) & 0xFF);
+    insn[(*n)++] = (unsigned char)((w >> 8) & 0xFF);
+    insn[(*n)++] = (unsigned char)(w & 0xFF);
+    return true;
+}
+
+static bool ExidxPopRegs(pid_t pid, uint32_t* r, uint32_t* vsp, unsigned first, unsigned last, bool include_lr)
+{
+    for (unsigned reg = first; reg <= last; ++reg) {
+        if (reg > 15) return false;
+        uint32_t val = 0;
+        if (!ReadTarget(pid, *vsp, &val, sizeof(val))) return false;
+        r[reg] = val;
+        *vsp += 4;
+    }
+    if (include_lr) {
+        uint32_t val = 0;
+        if (!ReadTarget(pid, *vsp, &val, sizeof(val))) return false;
+        r[14] = val;
+        *vsp += 4;
+    }
+    return true;
+}
+
+static bool ExecuteExidx(pid_t pid, unsigned char* insn, size_t count, SRemoteRegs* regs)
+{
+    uint32_t r[16];
+    for (int i = 0; i < 16; ++i) r[i] = regs->uregs[i];
+    uint32_t vsp = r[13];
+    bool pc_set = false;
+
+    for (size_t i = 0; i < count; ++i) {
+        unsigned char b = insn[i];
+        if (b == 0x00) {
+            vsp += 4;
+        } else if ((b & 0xC0) == 0x00) {
+            vsp += ((uint32_t)(b & 0x3F) << 2) + 4;
+        } else if ((b & 0xC0) == 0x40) {
+            vsp -= ((uint32_t)(b & 0x3F) << 2) + 4;
+        } else if ((b & 0xF0) == 0x80) {
+            if (i + 1 >= count) return false;
+            uint16_t mask = (uint16_t)(((b & 0x0F) << 8) | insn[++i]);
+            if (mask == 0) return false;
+            for (int reg = 4; reg <= 15; ++reg) {
+                if (mask & (1u << (reg - 4))) {
+                    uint32_t val = 0;
+                    if (!ReadTarget(pid, vsp, &val, sizeof(val))) return false;
+                    r[reg] = val;
+                    vsp += 4;
+                    if (reg == 15) pc_set = true;
+                }
+            }
+        } else if ((b & 0xF0) == 0x90) {
+            unsigned reg = b & 0x0F;
+            if (reg == 13 || reg == 15) return false;
+            vsp = r[reg];
+        } else if ((b & 0xF0) == 0xA0) {
+            unsigned last = 4 + (b & 0x07);
+            bool lr = (b & 0x08) != 0;
+            if (!ExidxPopRegs(pid, r, &vsp, 4, last, lr)) return false;
+        } else if (b == 0xB0) {
+            break;
+        } else if (b == 0xB1) {
+            if (i + 1 >= count) return false;
+            unsigned char mask = insn[++i];
+            if (mask & 0xF0) return false;
+            for (int reg = 0; reg <= 3; ++reg) {
+                if (mask & (1u << reg)) {
+                    uint32_t val = 0;
+                    if (!ReadTarget(pid, vsp, &val, sizeof(val))) return false;
+                    r[reg] = val;
+                    vsp += 4;
+                }
+            }
+        } else if (b == 0xB2) {
+            uint64_t u = 0;
+            unsigned shift = 0;
+            do {
+                if (++i >= count || shift >= 32) return false;
+                unsigned char c = insn[i];
+                u |= (uint64_t)(c & 0x7F) << shift;
+                shift += 7;
+                if ((c & 0x80) == 0) break;
+            } while (true);
+            vsp += 0x204 + ((uint32_t)u << 2);
+        } else if (b == 0xB3) {
+            if (i + 1 >= count) return false;
+            unsigned char x = insn[++i];
+            unsigned count_d = (x & 0x0F) + 1;
+            vsp += count_d * 8 + 4; // VFP FSTMFDX D[ssss]-D[ssss+cccc]
+        } else if ((b & 0xF8) == 0xB8) {
+            unsigned count_d = (b & 0x07) + 1;
+            vsp += count_d * 8 + 4; // VFP FSTMFDX D[8]-D[8+nnn]
+        } else if ((b & 0xF8) == 0xD0) {
+            unsigned count_d = (b & 0x07) + 1;
+            vsp += count_d * 8; // VFP FSTMFDD D[8]-D[8+nnn]
+        } else if (b == 0xC6) {
+            if (i + 1 >= count) return false;
+            unsigned char x = insn[++i];
+            unsigned count_w = (x & 0x0F) + 1;
+            vsp += count_w * 8; // WMMX wR pop approximation.
+        } else if (b == 0xC7) {
+            if (i + 1 >= count) return false;
+            unsigned char mask = insn[++i];
+            for (unsigned reg = 0; reg < 4; ++reg) if (mask & (1u << reg)) vsp += 4;
+        } else if (b >= 0xC0 && b <= 0xC5) {
+            if (i + 1 >= count) return false;
+            unsigned char x = insn[++i];
+            unsigned count_d = (x & 0x0F) + 1;
+            vsp += count_d * 8; // VFP/WMMX double-register pop.
+        } else if (b == 0xB4 || b == 0xB5 || b == 0xB6 || b == 0xB7 || b == 0xC8 || b == 0xC9 || b == 0xCA || b == 0xCB || b == 0xCC || b == 0xCD || b == 0xCE || b == 0xCF) {
+            return false; // Reserved/Intel WMMX forms we cannot safely model.
+        } else {
+            return false;
+        }
+    }
+
+    for (int i = 0; i < 16; ++i) regs->uregs[i] = r[i];
+    regs->uregs[13] = vsp;
+    if (!pc_set) regs->uregs[15] = r[14];
+    return regs->uregs[15] != 0;
+}
+
+static bool ExidxCollectInstructions(pid_t pid, uintptr_t entry_addr, uint32_t data, unsigned char* insn, size_t* n, size_t cap)
+{
+    *n = 0;
+    if (data == 1) return false; // EXIDX_CANTUNWIND
+
+    if (data & 0x80000000u) {
+        unsigned personality = (data >> 24) & 0x0F;
+        if (personality > 2) return false;
+        if (personality == 0) {
+            if (*n + 3 > cap) return false;
+            insn[(*n)++] = (unsigned char)((data >> 16) & 0xFF);
+            insn[(*n)++] = (unsigned char)((data >> 8) & 0xFF);
+            insn[(*n)++] = (unsigned char)(data & 0xFF);
+            return true;
+        }
+
+        unsigned extra_words = (data >> 16) & 0xFF;
+        if (*n + 2 > cap) return false;
+        insn[(*n)++] = (unsigned char)((data >> 8) & 0xFF);
+        insn[(*n)++] = (unsigned char)(data & 0xFF);
+        uintptr_t p = entry_addr + 8;
+        for (unsigned i = 0; i < extra_words; ++i) {
+            uint32_t w = 0;
+            if (!ExidxReadWord(pid, p + i * 4, &w)) return false;
+            if (!ExidxAppendWordBytes(insn, n, cap, w)) return false;
+        }
+        return true;
+    }
+
+    uintptr_t extab = (uintptr_t)Prel31ToAddr(entry_addr + 4, data);
+    uint32_t w = 0;
+    if (!ExidxReadWord(pid, extab, &w)) return false;
+
+    if (w & 0x80000000u) {
+        unsigned personality = (w >> 24) & 0x0F;
+        if (personality > 2) return false;
+        if (personality == 0) {
+            if (*n + 3 > cap) return false;
+            insn[(*n)++] = (unsigned char)((w >> 16) & 0xFF);
+            insn[(*n)++] = (unsigned char)((w >> 8) & 0xFF);
+            insn[(*n)++] = (unsigned char)(w & 0xFF);
+            return true;
+        }
+
+        unsigned extra_words = (w >> 16) & 0xFF;
+        if (*n + 2 > cap) return false;
+        insn[(*n)++] = (unsigned char)((w >> 8) & 0xFF);
+        insn[(*n)++] = (unsigned char)(w & 0xFF);
+        uintptr_t p = extab + 4;
+        for (unsigned i = 0; i < extra_words; ++i) {
+            uint32_t x = 0;
+            if (!ExidxReadWord(pid, p + i * 4, &x)) return false;
+            if (!ExidxAppendWordBytes(insn, n, cap, x)) return false;
+        }
+        return true;
+    }
+
+    // Generic extab: first word is a prel31 personality routine pointer. The next
+    // word carries compact model bits, followed by optional extra instruction words.
+    uint32_t hdr = 0;
+    if (!ExidxReadWord(pid, extab + 4, &hdr) || !(hdr & 0x80000000u)) return false;
+    unsigned personality = (hdr >> 24) & 0x0F;
+    if (personality > 2) return false;
+    if (personality == 0) {
+        if (*n + 3 > cap) return false;
+        insn[(*n)++] = (unsigned char)((hdr >> 16) & 0xFF);
+        insn[(*n)++] = (unsigned char)((hdr >> 8) & 0xFF);
+        insn[(*n)++] = (unsigned char)(hdr & 0xFF);
+        return true;
+    }
+    unsigned extra_words = (hdr >> 16) & 0xFF;
+    if (*n + 2 > cap) return false;
+    insn[(*n)++] = (unsigned char)((hdr >> 8) & 0xFF);
+    insn[(*n)++] = (unsigned char)(hdr & 0xFF);
+    for (unsigned i = 0; i < extra_words; ++i) {
+        uint32_t x = 0;
+        if (!ExidxReadWord(pid, extab + 8 + i * 4, &x)) return false;
+        if (!ExidxAppendWordBytes(insn, n, cap, x)) return false;
+    }
+    return true;
+}
+
+static bool ExidxUnwindStepArm(pid_t pid, const SRemoteRegs* cur, SRemoteRegs* next)
+{
+    uintptr_t pc = StripPc((uintptr_t)cur->uregs[15]);
+    SObjectInfo* o = GetObjectForPc(pid, pc);
+    if (!o || !o->arm_exidx || o->arm_exidx_size < 8) return false;
+
+    size_t count = (size_t)(o->arm_exidx_size / 8);
+    if (count > 262144) count = 262144;
+    size_t lo = 0, hi = count;
+    uintptr_t best_entry = 0;
+    uint32_t best_data = 0;
+    bool found = false;
+
+    while (lo < hi) {
+        size_t mid = lo + ((hi - lo) >> 1);
+        uintptr_t ea = o->arm_exidx + (uintptr_t)mid * 8;
+        uint32_t prel = 0, data = 0;
+        if (!ReadU32(pid, ea, &prel) || !ReadU32(pid, ea + 4, &data)) return false;
+        uintptr_t fn = (uintptr_t)Prel31ToAddr(ea, prel);
+        if (fn <= pc) {
+            best_entry = ea;
+            best_data = data;
+            found = true;
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (!found || best_data == 1) return false;
+
+    unsigned char insn[128];
+    size_t n = 0;
+    if (!ExidxCollectInstructions(pid, best_entry, best_data, insn, &n, sizeof(insn))) return false;
+
+    *next = *cur;
+    if (!ExecuteExidx(pid, insn, n, next)) return false;
+    next->uregs[15] = (uint32_t)RewindLr(next->uregs[15]);
+    return IsExecutablePc((uintptr_t)next->uregs[15]);
+}
+#endif
+
+static size_t MetadataUnwind(pid_t pid, const SRemoteRegs* regs, uintptr_t* frames, size_t cap)
+{
+    if (cap == 0) return 0;
+    SRemoteRegs cur = *regs;
+    size_t n = 0;
+
+    for (;;) {
+        uintptr_t pc = 0;
+#if defined(__aarch64__)
+        pc = StripPc((uintptr_t)cur.pc);
+#else
+        pc = StripPc((uintptr_t)cur.uregs[15]);
+#endif
+        if (!AppendUniqueFrame(frames, &n, cap, pc)) break;
+        if (n >= cap) break;
+
+        SRemoteRegs next;
+        bool ok = false;
+#if defined(__aarch64__)
+        ok = CfiUnwindStepA64(pid, &cur, &next);
+#else
+        ok = ExidxUnwindStepArm(pid, &cur, &next);
+#endif
+        if (!ok) break;
+        cur = next;
+    }
+    return n;
+}
+
 static size_t RemoteUnwind(pid_t pid, const SRemoteRegs* regs, uintptr_t* frames, size_t cap)
 {
+    g_nLastUnwindMethod = 1;
     uintptr_t pc = 0, sp = 0, fp = 0, lr = 0, fp_alt = 0;
     SeedRegs(regs, &pc, &sp, &fp, &lr, &fp_alt);
     size_t n = UnwindOneFp(pid, pc, sp, fp, lr, frames, cap);
@@ -860,6 +1731,24 @@ static size_t RemoteUnwind(pid_t pid, const SRemoteRegs* regs, uintptr_t* frames
         }
     }
 #endif
+    if (n < 3) {
+        uintptr_t meta[256];
+        size_t m = MetadataUnwind(pid, regs, meta, cap > 256 ? 256 : cap);
+        if (m > n) {
+            for (size_t i = 0; i < m; ++i) frames[i] = meta[i];
+            n = m;
+#if defined(__aarch64__)
+            g_nLastUnwindMethod = 2;
+#else
+            g_nLastUnwindMethod = 3;
+#endif
+        }
+    }
+    if (n < 3) {
+        size_t before = n;
+        n = StackScanFallback(pid, sp, frames, n, cap);
+        if (n > before) g_nLastUnwindMethod = 4;
+    }
     return n;
 }
 
@@ -953,6 +1842,9 @@ static bool DiscoverObject(pid_t pid, uintptr_t pc, SObjectInfo* out)
                     case JCRASHER_DT_SONAME: soname_off = (uintptr_t)d.d_un.d_val; break;
                     case JCRASHER_DT_HASH: o.hash = NormalizeDynPtr(&o, val); break;
                     case JCRASHER_DT_GNU_HASH: o.gnu_hash = NormalizeDynPtr(&o, val); break;
+                    case JCRASHER_DT_GNU_EH_FRAME: o.eh_frame_hdr = NormalizeDynPtr(&o, val); break;
+                    case JCRASHER_DT_ARM_EXIDX: o.arm_exidx = NormalizeDynPtr(&o, val); break;
+                    case JCRASHER_DT_ARM_EXIDXSZ: o.arm_exidx_size = (uintptr_t)d.d_un.d_val; break;
                     case JCRASHER_DT_SYMENT: o.syment = (uint32_t)d.d_un.d_val; break;
                     default: break;
                 }
@@ -1183,6 +2075,59 @@ static void WriteRegs(int fd, const SRemoteRegs* r)
 #endif
 }
 
+
+static void WriteShortUnwindDiagnostics(int fd, pid_t pid, pid_t tid, bool attached,
+    const SRemoteRegs* regs, size_t frame_count)
+{
+    uintptr_t pc = 0, sp = 0, fp = 0, lr = 0, fp_alt = 0;
+    SeedRegs(regs, &pc, &sp, &fp, &lr, &fp_alt);
+
+    int stack_i = FindMap(sp);
+    int fp_i = FindMap(fp);
+
+    char line[512];
+    size_t n = 0;
+    AppendString(line, sizeof(line), &n, "<JCrasher: short unwind; frames=");
+    AppendDec(line, sizeof(line), &n, (uint64_t)frame_count);
+    AppendString(line, sizeof(line), &n, " attached=");
+    AppendDec(line, sizeof(line), &n, attached ? 1 : 0);
+    AppendString(line, sizeof(line), &n, " pid=");
+    AppendDec(line, sizeof(line), &n, (uint64_t)pid);
+    AppendString(line, sizeof(line), &n, " tid=");
+    AppendDec(line, sizeof(line), &n, (uint64_t)tid);
+    AppendString(line, sizeof(line), &n, " method=");
+    AppendDec(line, sizeof(line), &n, (uint64_t)g_nLastUnwindMethod);
+    AppendString(line, sizeof(line), &n, ">\n");
+    WriteAll(fd, line, n);
+
+    n = 0;
+    AppendString(line, sizeof(line), &n, "<JCrasher: pc=");
+    AppendHex(line, sizeof(line), &n, (uint64_t)pc, (int)(sizeof(uintptr_t) * 2), true);
+    AppendString(line, sizeof(line), &n, " lr=");
+    AppendHex(line, sizeof(line), &n, (uint64_t)lr, (int)(sizeof(uintptr_t) * 2), true);
+    AppendString(line, sizeof(line), &n, " sp=");
+    AppendHex(line, sizeof(line), &n, (uint64_t)sp, (int)(sizeof(uintptr_t) * 2), true);
+    AppendString(line, sizeof(line), &n, " fp=");
+    AppendHex(line, sizeof(line), &n, (uint64_t)fp, (int)(sizeof(uintptr_t) * 2), true);
+    AppendString(line, sizeof(line), &n, ">\n");
+    WriteAll(fd, line, n);
+
+    n = 0;
+    AppendString(line, sizeof(line), &n, "<JCrasher: stack_map=");
+    AppendDec(line, sizeof(line), &n, stack_i >= 0 ? 1 : 0);
+    AppendString(line, sizeof(line), &n, " fp_map=");
+    AppendDec(line, sizeof(line), &n, fp_i >= 0 ? 1 : 0);
+    if (stack_i >= 0) {
+        AppendString(line, sizeof(line), &n, " stack=[");
+        AppendHex(line, sizeof(line), &n, (uint64_t)g_Maps[stack_i].start, (int)(sizeof(uintptr_t) * 2), true);
+        AppendString(line, sizeof(line), &n, "-");
+        AppendHex(line, sizeof(line), &n, (uint64_t)g_Maps[stack_i].end, (int)(sizeof(uintptr_t) * 2), true);
+        AppendString(line, sizeof(line), &n, "]");
+    }
+    AppendString(line, sizeof(line), &n, ">\n");
+    WriteAll(fd, line, n);
+}
+
 static void DumpThread(int fd, pid_t pid, pid_t tid, bool attached, unsigned flags, size_t max_frames)
 {
     SRemoteRegs regs;
@@ -1203,7 +2148,16 @@ static void DumpThread(int fd, pid_t pid, pid_t tid, bool attached, unsigned fla
 
     uintptr_t frames[256];
     if (max_frames == 0 || max_frames > 256) max_frames = 256;
+
+    pid_t old_peek = g_nPeekTid;
+    g_nPeekTid = attached ? tid : 0;
     size_t n = RemoteUnwind(pid, &regs, frames, max_frames);
+    g_nPeekTid = old_peek;
+
+    if ((flags & DUMP_DIAGNOSTICS) && n <= 2) {
+        WriteShortUnwindDiagnostics(fd, pid, tid, attached, &regs, n);
+    }
+
     for (size_t i = 0; i < n; ++i) WriteFrameLine(fd, i, frames[i], flags);
 }
 
@@ -1237,24 +2191,17 @@ static void DumpCurrentThreadImpl(int fd, pid_t target, unsigned flags, size_t m
     DumpThread(fd, target, g_nCrashTid, false, flags, max_frames);
 }
 
-static bool AttachThreadForDump(pid_t tid, bool* need_wait)
+static bool AttachThread(pid_t tid)
 {
-    if (need_wait) *need_wait = false;
+    if (tid <= 0) return false;
 
     if (SysPtrace(PTRACE_SEIZE, tid, 0, 0) == 0) {
         SysPtrace(PTRACE_INTERRUPT, tid, 0, 0);
-        if (need_wait) *need_wait = true;
         return true;
     }
 
-    // Some OEM kernels reject PTRACE_SEIZE but still allow old attach.
-    // This is used only from the dumper process, not directly from the
-    // signal handler.
-    if (SysPtrace(PTRACE_ATTACH, tid, 0, 0) == 0) {
-        if (need_wait) *need_wait = true;
-        return true;
-    }
-
+    // Some OEM kernels reject SEIZE but still allow classic ATTACH.
+    if (SysPtrace(PTRACE_ATTACH, tid, 0, 0) == 0) return true;
     return false;
 }
 
@@ -1262,36 +2209,27 @@ static void DumpAllThreadsImpl(int fd, pid_t target, unsigned flags, size_t max_
 {
     pid_t tids[1024];
     bool attached[1024];
-    bool wait_stop[1024];
-    for (size_t i = 0; i < 1024; ++i) {
-        attached[i] = false;
-        wait_stop[i] = false;
-    }
-    g_nMemoryTid = 0;
-
+    for (size_t i = 0; i < 1024; ++i) attached[i] = false;
     size_t count = EnumerateTids(target, tids, 1024);
     if (count == 0 && g_nCrashTid > 0) {
         tids[count++] = g_nCrashTid;
     }
 
-    // Attach the crashed thread too. Its registers still come from ucontext,
-    // but ptrace-stop gives us a fallback reader for its stack/ELF memory when
-    // process_vm_readv is blocked by OEM policy.
     for (size_t i = 0; i < count; ++i) {
-        if (AttachThreadForDump(tids[i], &wait_stop[i])) {
-            attached[i] = true;
-            if (g_nMemoryTid <= 0) g_nMemoryTid = tids[i];
-        }
+        // Attach the crashed thread too. Registers still come from ucontext,
+        // but ptrace attachment gives the dumper a PTRACE_PEEKDATA fallback
+        // for stack reads when process_vm_readv() is blocked by the ROM.
+        if (AttachThread(tids[i])) attached[i] = true;
     }
     for (size_t i = 0; i < count; ++i) {
-        if (attached[i] && wait_stop[i]) {
+        if (attached[i]) {
             int st = 0;
             SysWait4(tids[i], &st, __WALL);
         }
     }
 
     if ((flags & DUMP_CRASHED_FIRST) && g_nCrashTid > 0) {
-        DumpThread(fd, target, g_nCrashTid, true, flags, max_frames);
+        DumpThread(fd, target, g_nCrashTid, false, flags, max_frames);
     }
 
     for (size_t i = 0; i < count; ++i) {
@@ -1302,13 +2240,11 @@ static void DumpAllThreadsImpl(int fd, pid_t target, unsigned flags, size_t max_
     for (size_t i = 0; i < count; ++i) {
         if (attached[i]) SysPtrace(PTRACE_DETACH, tids[i], 0, 0);
     }
-    g_nMemoryTid = 0;
 }
 
 static int ChildMain(int fd, pid_t target, unsigned flags, size_t max_frames)
 {
     g_nTargetPid = target;
-    g_nMemoryTid = 0;
     if (!LoadMapsFor(target)) WriteString(fd, "<failed to read maps>\n");
 
     if (flags & DUMP_ALL_THREADS) {
@@ -1805,7 +2741,8 @@ enum eDumpFlags
     DUMP_REGISTERS     = (1u << 1),
     DUMP_SYMBOLS       = (1u << 2),
     DUMP_CRASHED_FIRST = (1u << 3),
-    DUMP_ALL_THREADS   = (1u << 4)
+    DUMP_ALL_THREADS   = (1u << 4),
+    DUMP_DIAGNOSTICS   = (1u << 5)
 };
 
 enum eDumpResult
