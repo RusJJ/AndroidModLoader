@@ -265,7 +265,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     fd_print("!!! THIS IS A CRASH LOG !!!\nIf you are experiencing a crash, give us this file.\n>>> DO NOT SEND US A SCREENSHOT OF THIS FILE <<<\n\n");
 
-    #define DEVVAR_LOG(__v) fd_printf(#__v " = %d", (int)(__v == true))
+    #define DEVVAR_LOG(__v) fd_printf(#__v " = %d | ", (int)(__v == true))
     fd_print("Config variables: | "); DEVVAR_LOG(g_bSimplerCrashLog); DEVVAR_LOG(g_bNoSPInLog);
     DEVVAR_LOG(g_bNoModsInLog);       DEVVAR_LOG(g_bDumpAllThreads);
     DEVVAR_LOG(g_bMoreRegsInfo);      DEVVAR_LOG(g_bDumpThreadRegisters);
@@ -286,7 +286,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         fd_print("Division or module by zero, integer overflow\n");
         break;
     case SIGSEGV:
-        fd_print("Nullw/wrong pointer, stack overflow\n");
+        fd_print("Null/wrong pointer, stack overflow\n");
         break;
     case SIGILL:
         fd_print("Wrong patch/return address, code corruption\n");
@@ -572,4 +572,6 @@ void StartSignalHandler()
     HANDLESIG(SIGILL);
     HANDLESIG(SIGSTKFLT);
     HANDLESIG(SIGTRAP);
+
+    JCrasher::InitAllThreadsDumper();
 }
