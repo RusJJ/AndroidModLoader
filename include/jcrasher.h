@@ -60,6 +60,15 @@
 #ifndef PTRACE_GETREGSET
     #define PTRACE_GETREGSET 0x4204
 #endif
+#ifndef PTRACE_PEEKDATA
+    #define PTRACE_PEEKDATA 2
+#endif
+#ifndef PTRACE_ATTACH
+    #define PTRACE_ATTACH 16
+#endif
+#ifndef PTRACE_DETACH
+    #define PTRACE_DETACH 17
+#endif
 #ifndef PR_SET_PTRACER
     #define PR_SET_PTRACER 0x59616D61
 #endif
@@ -293,6 +302,7 @@ static size_t g_nMapCount;
 static SObjectInfo g_Objects[256];
 static size_t g_nObjectCount;
 static pid_t g_nTargetPid;
+static pid_t g_nMemoryTid;
 
 static const uint32_t JCRASHER_PREINIT_MAGIC = 0x4A435250u; // JCRP
 
@@ -536,6 +546,31 @@ static void WriteAll(int fd, const void* p, size_t n)
 static void WriteString(int fd, const char* s)
 { WriteAll(fd, s, StrLen(s)); }
 
+static bool ReadTargetPtrace(pid_t tid, uintptr_t addr, void* dst, size_t len)
+{
+    if (tid <= 0 || !addr || !dst || !len) return false;
+
+    unsigned char* out = (unsigned char*)dst;
+    size_t done = 0;
+    const size_t ws = sizeof(long);
+    uintptr_t cur = addr & ~(uintptr_t)(ws - 1);
+    size_t skip = (size_t)(addr - cur);
+
+    while (done < len) {
+        long word = SysPtrace(PTRACE_PEEKDATA, tid, (void*)cur, 0);
+        if (word == -1) return false;
+
+        unsigned char* b = (unsigned char*)&word;
+        for (size_t i = skip; i < ws && done < len; ++i) {
+            out[done++] = b[i];
+        }
+        cur += ws;
+        skip = 0;
+    }
+
+    return true;
+}
+
 static bool ReadTarget(pid_t pid, uintptr_t addr, void* dst, size_t len)
 {
     if (!addr || !dst || !len) return false;
@@ -569,7 +604,13 @@ static bool ReadTarget(pid_t pid, uintptr_t addr, void* dst, size_t len)
     remote.iov_base = (void*)addr;
     remote.iov_len = len;
     long r = syscall(SYS_process_vm_readv, pid, &local, 1, &remote, 1, 0);
-    return r == (long)len;
+    if (r == (long)len) return true;
+
+    // Samsung/HyperOS may block process_vm_readv even after preinit.
+    // If the dumper has ptrace-stopped at least one target thread, use
+    // PTRACE_PEEKDATA as a slower but more compatible remote-memory reader.
+    if (g_nMemoryTid > 0) return ReadTargetPtrace(g_nMemoryTid, addr, dst, len);
+    return false;
 }
 
 static bool ReadU32(pid_t pid, uintptr_t addr, uint32_t* out)
@@ -1196,32 +1237,61 @@ static void DumpCurrentThreadImpl(int fd, pid_t target, unsigned flags, size_t m
     DumpThread(fd, target, g_nCrashTid, false, flags, max_frames);
 }
 
+static bool AttachThreadForDump(pid_t tid, bool* need_wait)
+{
+    if (need_wait) *need_wait = false;
+
+    if (SysPtrace(PTRACE_SEIZE, tid, 0, 0) == 0) {
+        SysPtrace(PTRACE_INTERRUPT, tid, 0, 0);
+        if (need_wait) *need_wait = true;
+        return true;
+    }
+
+    // Some OEM kernels reject PTRACE_SEIZE but still allow old attach.
+    // This is used only from the dumper process, not directly from the
+    // signal handler.
+    if (SysPtrace(PTRACE_ATTACH, tid, 0, 0) == 0) {
+        if (need_wait) *need_wait = true;
+        return true;
+    }
+
+    return false;
+}
+
 static void DumpAllThreadsImpl(int fd, pid_t target, unsigned flags, size_t max_frames)
 {
     pid_t tids[1024];
     bool attached[1024];
-    for (size_t i = 0; i < 1024; ++i) attached[i] = false;
+    bool wait_stop[1024];
+    for (size_t i = 0; i < 1024; ++i) {
+        attached[i] = false;
+        wait_stop[i] = false;
+    }
+    g_nMemoryTid = 0;
+
     size_t count = EnumerateTids(target, tids, 1024);
     if (count == 0 && g_nCrashTid > 0) {
         tids[count++] = g_nCrashTid;
     }
 
+    // Attach the crashed thread too. Its registers still come from ucontext,
+    // but ptrace-stop gives us a fallback reader for its stack/ELF memory when
+    // process_vm_readv is blocked by OEM policy.
     for (size_t i = 0; i < count; ++i) {
-        if (tids[i] == g_nCrashTid) continue; // crashed thread regs come from ucontext
-        if (SysPtrace(PTRACE_SEIZE, tids[i], 0, 0) == 0) {
+        if (AttachThreadForDump(tids[i], &wait_stop[i])) {
             attached[i] = true;
-            SysPtrace(PTRACE_INTERRUPT, tids[i], 0, 0);
+            if (g_nMemoryTid <= 0) g_nMemoryTid = tids[i];
         }
     }
     for (size_t i = 0; i < count; ++i) {
-        if (attached[i]) {
+        if (attached[i] && wait_stop[i]) {
             int st = 0;
             SysWait4(tids[i], &st, __WALL);
         }
     }
 
     if ((flags & DUMP_CRASHED_FIRST) && g_nCrashTid > 0) {
-        DumpThread(fd, target, g_nCrashTid, false, flags, max_frames);
+        DumpThread(fd, target, g_nCrashTid, true, flags, max_frames);
     }
 
     for (size_t i = 0; i < count; ++i) {
@@ -1232,11 +1302,13 @@ static void DumpAllThreadsImpl(int fd, pid_t target, unsigned flags, size_t max_
     for (size_t i = 0; i < count; ++i) {
         if (attached[i]) SysPtrace(PTRACE_DETACH, tids[i], 0, 0);
     }
+    g_nMemoryTid = 0;
 }
 
 static int ChildMain(int fd, pid_t target, unsigned flags, size_t max_frames)
 {
     g_nTargetPid = target;
+    g_nMemoryTid = 0;
     if (!LoadMapsFor(target)) WriteString(fd, "<failed to read maps>\n");
 
     if (flags & DUMP_ALL_THREADS) {
