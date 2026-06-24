@@ -36,6 +36,8 @@
 #include <sys/syscall.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <ucontext.h>
 
@@ -59,13 +61,22 @@
     #define PTRACE_GETREGSET 0x4204
 #endif
 #ifndef PR_SET_PTRACER
-    #define PR_SET_PTRACER 0x59616d61
+    #define PR_SET_PTRACER 0x59616D61
 #endif
 #ifndef NT_PRSTATUS
     #define NT_PRSTATUS 1
 #endif
 #ifndef __WALL
     #define __WALL 0x40000000
+#endif
+#ifndef FUTEX_WAIT
+    #define FUTEX_WAIT 0
+#endif
+#ifndef FUTEX_WAKE
+    #define FUTEX_WAKE 1
+#endif
+#ifndef MAP_ANONYMOUS
+    #define MAP_ANONYMOUS 0x20
 #endif
 
 #if defined(__aarch64__) || defined(__arm__)
@@ -80,6 +91,20 @@ enum eDumpFlags
     DUMP_SYMBOLS       = (1u << 2),
     DUMP_CRASHED_FIRST = (1u << 3),
     DUMP_ALL_THREADS   = (1u << 4)
+};
+
+enum eDumpResult
+{
+    DUMP_OK           = 0,
+    DUMP_BAD_FD       = -1,
+    DUMP_PIPE_FAILED  = -2,
+    DUMP_CLONE_FAILED = -3,
+    DUMP_CHILD_FAILED     = -4,
+    DUMP_PATH_FAILED      = -5,
+    DUMP_HELPER_NOT_INIT  = -6,
+    DUMP_HELPER_BUSY      = -7,
+    DUMP_MMAP_FAILED      = -8,
+    DUMP_FD_SEND_FAILED   = -9
 };
 
 namespace Private
@@ -269,6 +294,36 @@ static SObjectInfo g_Objects[256];
 static size_t g_nObjectCount;
 static pid_t g_nTargetPid;
 
+static const uint32_t JCRASHER_PREINIT_MAGIC = 0x4A435250u; // JCRP
+
+struct SPreinitRequest
+{
+    uint32_t magic;
+    uint32_t use_path;
+    uint32_t use_passed_fd;
+    int fd;
+    pid_t target;
+    pid_t crash_tid;
+    unsigned flags;
+    size_t max_frames;
+    SRemoteRegs regs;
+    char path[512];
+};
+
+struct SPreinitShared
+{
+    volatile int state;
+    volatile int result;
+    SPreinitRequest request;
+};
+
+static SPreinitShared* g_pPreinitShared;
+static pid_t g_nPreinitPid;
+static int g_nPreinitFd = -1;
+static int g_nPreinitSockParent = -1;
+static int g_nPreinitSockChild = -1;
+static char g_szPreinitPath[512];
+
 static long SysOpenAt(const char* path, int flags, int mode = 0)
 {
     return syscall(SYS_openat, AT_FDCWD, path, flags, mode);
@@ -285,6 +340,20 @@ static long SysPtrace(long req, pid_t pid, void* addr, void* data)
 { return syscall(SYS_ptrace, req, pid, addr, data); }
 static long SysPrctl(long opt, long a2, long a3 = 0, long a4 = 0, long a5 = 0)
 { return syscall(SYS_prctl, opt, a2, a3, a4, a5); }
+static long SysFutex(volatile int* addr, int op, int val)
+{ return syscall(SYS_futex, addr, op, val, 0, 0, 0); }
+static void* SysMmapShared(size_t len)
+{
+#if defined(SYS_mmap)
+    return (void*)syscall(SYS_mmap, 0, len, PROT_READ | PROT_WRITE,
+        MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+#elif defined(SYS_mmap2)
+    return (void*)syscall(SYS_mmap2, 0, len, PROT_READ | PROT_WRITE,
+        MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+#else
+    return mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+#endif
+}
 static pid_t SysGetPid()
 { return (pid_t)syscall(SYS_getpid); }
 static pid_t SysGetTid()
@@ -470,6 +539,29 @@ static void WriteString(int fd, const char* s)
 static bool ReadTarget(pid_t pid, uintptr_t addr, void* dst, size_t len)
 {
     if (!addr || !dst || !len) return false;
+
+    // OEM kernels/seccomp sometimes block process_vm_readv even for same-process
+    // crash dumping. For the crashing thread path we can read our own mapped
+    // memory directly, but only after /proc/self/maps has been loaded and the
+    // requested span is known to be readable.
+    // Idiots are modifying Android like it's kids toys... *facepalm*
+    if (pid == SysGetPid() && g_nMapCount != 0) {
+        bool readable = false;
+        for (size_t i = 0; i < g_nMapCount; ++i) {
+            if (g_Maps[i].perms[0] != 'r') continue;
+            if (addr >= g_Maps[i].start && addr + len >= addr && addr + len <= g_Maps[i].end) {
+                readable = true;
+                break;
+            }
+        }
+        if (!readable) return false;
+
+        volatile const unsigned char* src = (volatile const unsigned char*)addr;
+        unsigned char* out = (unsigned char*)dst;
+        for (size_t i = 0; i < len; ++i) out[i] = src[i];
+        return true;
+    }
+
     struct iovec local;
     local.iov_base = dst;
     local.iov_len = len;
@@ -1158,10 +1250,95 @@ static int ChildMain(int fd, pid_t target, unsigned flags, size_t max_frames)
 static int RawPipe2(int fds[2])
 {
 #ifdef SYS_pipe2
-    return (int)syscall(SYS_pipe2, fds, O_CLOEXEC);
+    long r = syscall(SYS_pipe2, fds, O_CLOEXEC);
+    if (r == 0) return 0;
+#endif
+#ifdef SYS_pipe
+    return (int)syscall(SYS_pipe, fds);
 #else
     return -1;
 #endif
+}
+
+static int RawSocketPair(int fds[2])
+{
+#ifdef SYS_socketpair
+    return (int)syscall(SYS_socketpair, AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0, fds);
+#else
+    return socketpair(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0, fds);
+#endif
+}
+
+static int SendFd(int sock, int fd)
+{
+    if (sock < 0 || fd < 0) return -1;
+
+    char ch = 'F';
+    struct iovec iov;
+    iov.iov_base = &ch;
+    iov.iov_len = 1;
+
+    union {
+        struct cmsghdr hdr;
+        char buf[CMSG_SPACE(sizeof(int))];
+    } control;
+
+    struct msghdr msg;
+    for (size_t i = 0; i < sizeof(msg); ++i) ((char*)&msg)[i] = 0;
+    for (size_t i = 0; i < sizeof(control); ++i) control.buf[i] = 0;
+
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control.buf;
+    msg.msg_controllen = sizeof(control.buf);
+
+    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    *((int*)CMSG_DATA(cmsg)) = fd;
+
+#ifdef SYS_sendmsg
+    return syscall(SYS_sendmsg, sock, &msg, MSG_NOSIGNAL) == 1 ? 0 : -1;
+#else
+    return sendmsg(sock, &msg, MSG_NOSIGNAL) == 1 ? 0 : -1;
+#endif
+}
+
+static int RecvFd(int sock)
+{
+    if (sock < 0) return -1;
+
+    char ch = 0;
+    struct iovec iov;
+    iov.iov_base = &ch;
+    iov.iov_len = 1;
+
+    union {
+        struct cmsghdr hdr;
+        char buf[CMSG_SPACE(sizeof(int))];
+    } control;
+
+    struct msghdr msg;
+    for (size_t i = 0; i < sizeof(msg); ++i) ((char*)&msg)[i] = 0;
+    for (size_t i = 0; i < sizeof(control); ++i) control.buf[i] = 0;
+
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control.buf;
+    msg.msg_controllen = sizeof(control.buf);
+
+#ifdef SYS_recvmsg
+    long r = syscall(SYS_recvmsg, sock, &msg, 0);
+#else
+    long r = recvmsg(sock, &msg, 0);
+#endif
+    if (r != 1) return -1;
+
+    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+    if (!cmsg) return -1;
+    if (cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) return -1;
+    return *((int*)CMSG_DATA(cmsg));
 }
 
 static pid_t RawCloneForkLike()
@@ -1174,22 +1351,276 @@ static pid_t RawCloneForkLike()
 #endif
 }
 
+static void PreinitChildMain()
+{
+    if (!g_pPreinitShared) syscall(SYS_exit, 1);
+
+    while (g_pPreinitShared->state == 0) {
+        SysFutex(&g_pPreinitShared->state, FUTEX_WAIT, 0);
+    }
+
+    if (g_pPreinitShared->state != 1) syscall(SYS_exit, 1);
+
+    SPreinitRequest* r = &g_pPreinitShared->request;
+    if (r->magic != JCRASHER_PREINIT_MAGIC) {
+        g_pPreinitShared->result = DUMP_CHILD_FAILED;
+        syscall(SYS_exit, 1);
+    }
+
+    g_nTargetPid = r->target;
+    g_nCrashTid = r->crash_tid;
+    g_CrashRegs = r->regs;
+    g_bHaveCrash = true;
+
+    int fd = r->fd;
+    bool close_fd = false;
+    if (r->use_path) {
+        fd = (int)SysOpenAt(r->path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
+        close_fd = true;
+    } else if (r->use_passed_fd) {
+        fd = RecvFd(g_nPreinitSockChild);
+        close_fd = true;
+    }
+
+    if (fd < 0) {
+        g_pPreinitShared->result = r->use_path ? DUMP_PATH_FAILED : DUMP_BAD_FD;
+        syscall(SYS_exit, 1);
+    }
+
+    unsigned forced = r->flags | DUMP_ALL_THREADS | DUMP_CRASHED_FIRST |
+        DUMP_THREAD_HEADER | DUMP_SYMBOLS;
+
+    g_pPreinitShared->result = DUMP_CHILD_FAILED;
+    ChildMain(fd, r->target, forced, r->max_frames ? r->max_frames : 64);
+
+    if (close_fd) SysClose(fd);
+    g_pPreinitShared->result = DUMP_OK;
+    syscall(SYS_exit, 0);
+}
+
+static int InitPreinitDumper(int fd, const char* path)
+{
+    if (g_nPreinitPid > 0 && g_pPreinitShared) return DUMP_OK;
+
+    if (path && path[0]) {
+        CopyString(g_szPreinitPath, sizeof(g_szPreinitPath), path);
+        g_nPreinitFd = -1;
+    } else if (fd >= 0) {
+        g_nPreinitFd = fd;
+        g_szPreinitPath[0] = 0;
+    } else {
+        g_nPreinitFd = -1;
+        g_szPreinitPath[0] = 0;
+    }
+
+    int socks[2] = {-1, -1};
+    if (RawSocketPair(socks) != 0) return DUMP_PIPE_FAILED;
+    g_nPreinitSockParent = socks[0];
+    g_nPreinitSockChild = socks[1];
+
+    void* mem = SysMmapShared(sizeof(SPreinitShared));
+    if (mem == (void*)-1 || !mem) {
+        SysClose(g_nPreinitSockParent);
+        SysClose(g_nPreinitSockChild);
+        g_nPreinitSockParent = -1;
+        g_nPreinitSockChild = -1;
+        return DUMP_MMAP_FAILED;
+    }
+
+    g_pPreinitShared = (SPreinitShared*)mem;
+    g_pPreinitShared->state = 0;
+    g_pPreinitShared->result = DUMP_HELPER_NOT_INIT;
+
+    pid_t child = RawCloneForkLike();
+    if (child < 0) {
+        SysClose(g_nPreinitSockParent);
+        SysClose(g_nPreinitSockChild);
+        g_nPreinitSockParent = -1;
+        g_nPreinitSockChild = -1;
+        g_pPreinitShared = 0;
+        return DUMP_CLONE_FAILED;
+    }
+
+    if (child == 0) {
+        SysClose(g_nPreinitSockParent);
+        g_nPreinitSockParent = -1;
+        PreinitChildMain();
+        syscall(SYS_exit, 1);
+        __builtin_unreachable();
+    }
+
+    SysClose(g_nPreinitSockChild);
+    g_nPreinitSockChild = -1;
+    g_nPreinitPid = child;
+    SysPrctl(PR_SET_PTRACER, child);
+    return DUMP_OK;
+}
+
+static int DumpWithPreinitDumper(void* crashed_context, unsigned flags, size_t max_frames, int out_fd, const char* out_path)
+{
+    if (!g_pPreinitShared || g_nPreinitPid <= 0) return DUMP_HELPER_NOT_INIT;
+    if (g_pPreinitShared->state != 0) return DUMP_HELPER_BUSY;
+
+    CaptureCrash(crashed_context, SysGetTid());
+
+    SPreinitRequest* r = &g_pPreinitShared->request;
+    r->magic = JCRASHER_PREINIT_MAGIC;
+    r->target = SysGetPid();
+    r->crash_tid = g_nCrashTid;
+    r->flags = flags | DUMP_ALL_THREADS | DUMP_CRASHED_FIRST |
+        DUMP_THREAD_HEADER | DUMP_SYMBOLS;
+    r->max_frames = max_frames ? max_frames : 64;
+    r->regs = g_CrashRegs;
+
+    r->use_path = 0;
+    r->use_passed_fd = 0;
+    r->fd = -1;
+    r->path[0] = 0;
+
+    if (out_path && out_path[0]) {
+        r->use_path = 1;
+        CopyString(r->path, sizeof(r->path), out_path);
+    } else if (out_fd >= 0) {
+        r->use_passed_fd = 1;
+    } else if (g_szPreinitPath[0]) {
+        r->use_path = 1;
+        CopyString(r->path, sizeof(r->path), g_szPreinitPath);
+    } else if (g_nPreinitFd >= 0) {
+        r->fd = g_nPreinitFd;
+    } else {
+        return DUMP_BAD_FD;
+    }
+
+    g_pPreinitShared->result = DUMP_CHILD_FAILED;
+    __sync_synchronize();
+
+    if (r->use_passed_fd && SendFd(g_nPreinitSockParent, out_fd) != 0) {
+        return DUMP_FD_SEND_FAILED;
+    }
+
+    g_pPreinitShared->state = 1;
+    SysFutex(&g_pPreinitShared->state, FUTEX_WAKE, 1);
+
+    int st = 0;
+    long wr = SysWait4(g_nPreinitPid, &st, 0);
+    SysPrctl(PR_SET_PTRACER, 0);
+    if (wr != g_nPreinitPid) return DUMP_CHILD_FAILED;
+    if (st != 0 && g_pPreinitShared->result == DUMP_CHILD_FAILED) return DUMP_CHILD_FAILED;
+    return g_pPreinitShared->result;
+}
+
 } // namespace Private
 
-inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_frames)
+inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_frames, bool fallback_to_current);
+
+inline int InitAllThreadsDumper()
 {
-    if (fd < 0) return -1;
+    return Private::InitPreinitDumper(-1, 0);
+}
+
+inline int InitAllThreadsDumperFd(int fd)
+{
+    return Private::InitPreinitDumper(fd, 0);
+}
+
+inline int InitAllThreadsDumperPath(const char* path)
+{
+    if (!path || !path[0]) return DUMP_PATH_FAILED;
+    return Private::InitPreinitDumper(-1, path);
+}
+
+inline bool HasAllThreadsDumper()
+{
+    return Private::g_pPreinitShared && Private::g_nPreinitPid > 0;
+}
+
+inline bool HasAllThreadsDumperFd(int fd)
+{
+    return HasAllThreadsDumper() && fd >= 0;
+}
+
+inline bool HasAllThreadsDumperPath(const char* path)
+{
+    return HasAllThreadsDumper() && path && path[0];
+}
+
+inline int DumpAllThreadsPreinit(void* crashed_context, unsigned flags,
+    size_t max_frames)
+{
+    int r = Private::DumpWithPreinitDumper(crashed_context, flags, max_frames, -1, 0);
+    if (r == DUMP_OK) return r;
+
+    if (Private::g_nPreinitFd >= 0) {
+        DumpFd(Private::g_nPreinitFd, crashed_context, flags & ~DUMP_ALL_THREADS,
+            max_frames, true);
+    } else if (Private::g_szPreinitPath[0]) {
+        int fd = (int)Private::SysOpenAt(Private::g_szPreinitPath,
+            O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            DumpFd(fd, crashed_context, flags & ~DUMP_ALL_THREADS, max_frames, true);
+            Private::SysClose(fd);
+        }
+    }
+    return r;
+}
+
+inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_frames, bool fallback_to_current = true)
+{
+    if (fd < 0) return DUMP_BAD_FD;
+
+    if (fallback_to_current && (flags & DUMP_ALL_THREADS) && HasAllThreadsDumperFd(fd)) {
+        int r = Private::DumpWithPreinitDumper(crashed_context, flags, max_frames, fd, 0);
+        if (r == DUMP_OK) return r;
+
+        Private::WriteString(fd, "<JCrasher: preinit helper failed; fallback to current thread>\n");
+        return DumpFd(fd, crashed_context, flags & ~DUMP_ALL_THREADS, max_frames, true);
+    }
+
     Private::CaptureCrash(crashed_context, Private::SysGetTid());
 
-    int sync_pipe[2] = {-1, -1};
-    if (Private::RawPipe2(sync_pipe) != 0) return -1;
-
     pid_t target = Private::SysGetPid();
+    unsigned forced = flags | DUMP_THREAD_HEADER | DUMP_SYMBOLS;
+    if (forced & DUMP_ALL_THREADS) forced |= DUMP_CRASHED_FIRST;
+
+    // Current-thread mode must not depend on clone/ptrace/process_vm_readv.
+    // Some OEM ROMs block or harden that path, which produced empty logs.
+    // This direct path uses only the provided ucontext, raw /proc/self/maps
+    // reads, validated local memory reads, and write().
+    if (!(forced & DUMP_ALL_THREADS)) {
+        Private::g_nTargetPid = target;
+        if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
+        Private::DumpCurrentThreadImpl(fd, target, forced, max_frames ? max_frames : 64);
+        return 0;
+    }
+
+    int sync_pipe[2] = {-1, -1};
+    if (Private::RawPipe2(sync_pipe) != 0) {
+        Private::WriteString(fd, fallback_to_current ?
+            "<JCrasher: pipe failed; fallback to current thread>\n" :
+            "<JCrasher: pipe failed>\n");
+        if (fallback_to_current) {
+            forced &= ~DUMP_ALL_THREADS;
+            Private::g_nTargetPid = target;
+            if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
+            Private::DumpCurrentThreadImpl(fd, target, forced, max_frames ? max_frames : 64);
+        }
+        return DUMP_PIPE_FAILED;
+    }
+
     pid_t child = Private::RawCloneForkLike();
     if (child < 0) {
         Private::SysClose(sync_pipe[0]);
         Private::SysClose(sync_pipe[1]);
-        return -1;
+        Private::WriteString(fd, fallback_to_current ?
+            "<JCrasher: clone failed; fallback to current thread>\n" :
+            "<JCrasher: clone failed>\n");
+        if (fallback_to_current) {
+            forced &= ~DUMP_ALL_THREADS;
+            Private::g_nTargetPid = target;
+            if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
+            Private::DumpCurrentThreadImpl(fd, target, forced, max_frames ? max_frames : 64);
+        }
+        return DUMP_CLONE_FAILED;
     }
 
     if (child == 0) {
@@ -1197,8 +1628,6 @@ inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_fram
         char c = 0;
         (void)Private::SysRead(sync_pipe[0], &c, 1);
         Private::SysClose(sync_pipe[0]);
-        unsigned forced = flags | DUMP_THREAD_HEADER | DUMP_SYMBOLS;
-        if (forced & DUMP_ALL_THREADS) forced |= DUMP_CRASHED_FIRST;
         Private::ChildMain(fd, target, forced, max_frames ? max_frames : 64);
         syscall(SYS_exit, 0);
         __builtin_unreachable();
@@ -1212,16 +1641,46 @@ inline int DumpFd(int fd, void* crashed_context, unsigned flags, size_t max_fram
     int st = 0;
     Private::SysWait4(child, &st, 0);
     Private::SysPrctl(PR_SET_PTRACER, 0);
+
+    // If the dumper child was killed by OEM policy/seccomp before writing, do
+    // not leave an empty file. Fall back to the current thread only.
+    if (st != 0) {
+        Private::WriteString(fd, fallback_to_current ?
+            "<JCrasher: dumper child failed; fallback to current thread>\n" :
+            "<JCrasher: dumper child failed>\n");
+        if (fallback_to_current) {
+            forced &= ~DUMP_ALL_THREADS;
+            Private::g_nTargetPid = target;
+            if (!Private::LoadMapsFor(target)) Private::WriteString(fd, "<JCrasher: failed to read /proc/self/maps>\n");
+            Private::DumpCurrentThreadImpl(fd, target, forced, max_frames ? max_frames : 64);
+        }
+        return DUMP_CHILD_FAILED;
+    }
+
     return 0;
 }
 
 inline int DumpPath(const char* path, void* crashed_context, unsigned flags,
     size_t max_frames)
 {
-    if (!path || !path[0]) return -1;
+    if (!path || !path[0]) return DUMP_PATH_FAILED;
+
+    if ((flags & DUMP_ALL_THREADS) && HasAllThreadsDumperPath(path)) {
+        int r = Private::DumpWithPreinitDumper(crashed_context, flags, max_frames, -1, path);
+        if (r == DUMP_OK) return r;
+
+        int fd = (int)Private::SysOpenAt(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            Private::WriteString(fd, "<JCrasher: preinit helper failed; fallback to current thread>\n");
+            DumpFd(fd, crashed_context, flags & ~DUMP_ALL_THREADS, max_frames, true);
+            Private::SysClose(fd);
+        }
+        return r;
+    }
+
     int fd = (int)Private::SysOpenAt(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644);
-    if (fd < 0) return -1;
-    int r = DumpFd(fd, crashed_context, flags, max_frames);
+    if (fd < 0) return DUMP_PATH_FAILED;
+    int r = DumpFd(fd, crashed_context, flags, max_frames, true);
     Private::SysClose(fd);
     return r;
 }
@@ -1237,6 +1696,14 @@ inline int DumpAllThreadsFd(int fd, void* crashed_context, unsigned flags,
 {
     return DumpFd(fd, crashed_context, flags | DUMP_ALL_THREADS | DUMP_CRASHED_FIRST,
         max_frames);
+}
+
+
+inline int TryDumpAllThreadsFd(int fd, void* crashed_context, unsigned flags,
+    size_t max_frames)
+{
+    return DumpFd(fd, crashed_context, flags | DUMP_ALL_THREADS | DUMP_CRASHED_FIRST,
+        max_frames, false);
 }
 
 inline int DumpCurrentThreadPath(const char* path, void* crashed_context, unsigned flags,
@@ -1269,18 +1736,48 @@ enum eDumpFlags
     DUMP_ALL_THREADS   = (1u << 4)
 };
 
+enum eDumpResult
+{
+    DUMP_OK               =  0,
+    DUMP_BAD_FD           = -1,
+    DUMP_PIPE_FAILED      = -2,
+    DUMP_CLONE_FAILED     = -3,
+    DUMP_CHILD_FAILED     = -4,
+    DUMP_PATH_FAILED      = -5,
+    DUMP_HELPER_NOT_INIT  = -6,
+    DUMP_HELPER_BUSY      = -7,
+    DUMP_MMAP_FAILED      = -8,
+    DUMP_FD_SEND_FAILED   = -9
+};
+
 inline int DumpFd(int, void*, unsigned, size_t)
-{ return -1; }
+{ return DUMP_BAD_FD; }
 inline int DumpPath(const char*, void*, unsigned, size_t)
-{ return -1; }
+{ return DUMP_PATH_FAILED; }
 inline int DumpCurrentThreadFd(int, void*, unsigned, size_t)
-{ return -1; }
+{ return DUMP_BAD_FD; }
 inline int DumpAllThreadsFd(int, void*, unsigned, size_t)
-{ return -1; }
+{ return DUMP_BAD_FD; }
+inline int TryDumpAllThreadsFd(int, void*, unsigned, size_t)
+{ return DUMP_BAD_FD; }
 inline int DumpCurrentThreadPath(const char*, void*, unsigned, size_t)
-{ return -1; }
+{ return DUMP_PATH_FAILED; }
 inline int DumpAllThreadsPath(const char*, void*, unsigned, size_t)
-{ return -1; }
+{ return DUMP_PATH_FAILED; }
+inline int InitAllThreadsDumper()
+{ return DUMP_CLONE_FAILED; }
+inline int InitAllThreadsDumperFd(int)
+{ return DUMP_BAD_FD; }
+inline int InitAllThreadsDumperPath(const char*)
+{ return DUMP_PATH_FAILED; }
+inline bool HasAllThreadsDumper()
+{ return false; }
+inline bool HasAllThreadsDumperFd(int)
+{ return false; }
+inline bool HasAllThreadsDumperPath(const char*)
+{ return false; }
+inline int DumpAllThreadsPreinit(void*, unsigned, size_t)
+{ return DUMP_HELPER_NOT_INIT; }
 
 } // namespace JCrasher
 
