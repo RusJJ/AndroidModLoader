@@ -527,15 +527,18 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     else
     {
         fd_print("\n----------------------------------------------------\n");
+        uint32_t crasherFlags = JCrasher::DUMP_DIAGNOSTICS;
+        if(g_bDumpThreadRegisters) crasherFlags |= JCrasher::DUMP_REGISTERS;
+                
         if(g_bDumpAllThreads)
         {
             fd_print("Call stack (of all threads):\n");
-            JCrasher::DumpAllThreadsFd(g_nLogFileFd, ucontext, JCrasher::DUMP_REGISTERS, 64);
+            JCrasher::DumpAllThreadsFd(g_nLogFileFd, ucontext, crasherFlags, 64);
         }
         else
         {
             fd_print("Call stack:\n");
-            JCrasher::DumpCurrentThreadFd(g_nLogFileFd, ucontext, JCrasher::DUMP_REGISTERS, 64);
+            JCrasher::DumpCurrentThreadFd(g_nLogFileFd, ucontext, crasherFlags, 64);
         }
     }
 
