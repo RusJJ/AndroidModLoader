@@ -6,6 +6,7 @@
 #include <cstring>
 #include <stdlib.h>
 #include <signal.h>
+#include <math.h>
 
 #if defined(__arm__) || defined(_WIN32)
     #define AML32
@@ -129,6 +130,25 @@ inline char *strxcpy(char* __restrict__ dst, const char* __restrict__ src, int l
     }
     return dst;
 }
+inline int strindexof(const char* haystack, const char* needle)
+{
+    const char* ptr = strstr(haystack, needle);
+    return ptr ? (int)(ptr - haystack) : -1;
+}
+inline bool strcontains(const char* str, const char* sub)
+{
+    return (strstr(str, sub) != NULL);
+}
+inline bool strstarts(const char* str, const char* prefix)
+{
+    size_t lenstr = strlen(str), lenpre = strlen(prefix);
+    return (lenstr >= lenpre && strncmp(str, prefix, lenpre) == 0);
+}
+inline bool strends(const char* str, const char* suffix)
+{
+    size_t lenstr = strlen(str), lensuf = strlen(suffix);
+    return (lenstr >= lensuf && strcmp(str + lenstr - lensuf, suffix) == 0);
+}
 
 inline int clampint(int min, int max, int v)
 {
@@ -154,6 +174,8 @@ inline void clampfloat(float min, float max, float* v)
 }
 
 #define ARRAY_SIZE(__aVar)  ((size_t)( sizeof(__aVar) / sizeof(__aVar[0]) ))
+#define RAD_TO_DEG(__f) ( (__f) * (180.0f / M_PI) )
+#define DEG_TO_RAD(__f) ( (__f) * (M_PI / 180.0f) )
 
 class ModInfo
 {
