@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/syscall.h>
+#include <sys/system_properties.h> // __system_property_get
 #include <unistd.h>
 #include <dlfcn.h>
 #include <aml.h>

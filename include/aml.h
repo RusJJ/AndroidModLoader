@@ -148,6 +148,8 @@ public:
     int64_t     GetAppVersionCode();
     const char* GetApkPath();
     const char* GetApkMD5();
+    uint32_t    GetStringHash(const char* str, size_t len = 0); // murmur3 hash
+    uint32_t    GetCRC32(const void* str, size_t len);
 };
 
 extern char g_szAMLFeatures[2048];

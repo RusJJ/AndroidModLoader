@@ -9,9 +9,12 @@
 #include <dirent.h>
 #include <sys/stat.h> // mkdir
 #include <sys/sendfile.h> // sendfile
+#include <sys/system_properties.h> // __system_property_get
 #include <fcntl.h> // "open" flags
 #include <android/looper.h> // ALooper
 #include <dlfcn.h>
+#include <errno.h>
+#include <pthread.h>
 #include <limits.h>
 
 #include <aml.h>

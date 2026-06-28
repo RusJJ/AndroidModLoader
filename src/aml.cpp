@@ -1507,6 +1507,70 @@ void AML::ListInterfaces(ListInterfacesCallback cb, void* data)
     interfaces->ListInterfaces(cb, data);
 }
 
+uint32_t AML::GetStringHash(const char* str, size_t len)
+{
+    if(!len) len = strlen(str);
+    
+    const uint8_t* data = (const uint8_t*)str;
+    const int nblocks = len / 4;
+    uint32_t h1 = 0xDEADBEEF; // constant seed for AMLs Murmur3 implementation
+
+    const uint32_t c1 = 0xCC9E2D51, c2 = 0x1B873593;
+
+    const uint32_t* blocks = (const uint32_t*)(data + nblocks * 4);
+
+    for(int i = -nblocks; i; ++i)
+    {
+        uint32_t k1 = blocks[i];
+
+        k1 *= c1;
+        k1 = (k1 << 15) | (k1 >> 17);
+        k1 *= c2;
+
+        h1 ^= k1;
+        h1 = (h1 << 13) | (h1 >> 19);
+        h1 = h1 * 5 + 0xE6546B64;
+    }
+
+    const uint8_t* tail = (const uint8_t*)(data + nblocks * 4);
+    uint32_t k1 = 0;
+
+    switch(len & 3)
+    {
+        case 3: k1 ^= tail[2] << 16;
+        case 2: k1 ^= tail[1] << 8;
+        case 1: k1 ^= tail[0];
+                k1 *= c1; 
+                k1 = (k1 << 15) | (k1 >> 17); 
+                k1 *= c2; 
+                h1 ^= k1;
+    };
+
+    h1 ^= len;
+    h1 ^= h1 >> 16;
+    h1 *= 0x85EBCA6B;
+    h1 ^= h1 >> 13;
+    h1 *= 0xC2B2AE35;
+    h1 ^= h1 >> 16;
+
+    return h1;
+}
+
+uint32_t AML::GetCRC32(const void* str, size_t len)
+{
+    const uint8_t* bytes = (const uint8_t*)str;
+    uint32_t crc = 0xFFFFFFFF;
+    for(size_t i = 0; i < len; i++)
+    {
+        crc ^= bytes[i];
+        for(int j = 0; j < 8; ++j)
+        {
+            crc = (crc >> 1) ^ (0xEDB88320 & (-(crc & 1)));
+        }
+    }
+    return ~crc;
+}
+
 
 
 static AML amlLocal;
