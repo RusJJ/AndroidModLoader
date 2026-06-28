@@ -8,8 +8,5 @@
     return-void
 .end method
 
-.method public static native earlyLaunchAMLCore(Ljava/lang/String;Ljava/lang/String;)V
-.end method
-
-.method public static native launchAMLCore()V
+.method public static native launchAMLCore(Ljava/lang/String;)V
 .end method

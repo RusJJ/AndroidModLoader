@@ -5,6 +5,8 @@
 #endif
 #include <string>
 #include <unordered_map>
+#include <vector>
+#include <string_view>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h> // mkdir
@@ -470,32 +472,51 @@ AAssetManager* GetCurrentAssetManager()
     return ( g_AssetManager = GetAssetManager(env) );
 }
 
-struct LibraryLoadData
+std::vector<void*> g_vLibrariesToBeLoaded;
+template <typename Func> void AML_SplitText(const char* txt, Func action)
 {
-    LibraryLoadData() : initMembersList(NULL), initMembersCount(0) { }
-    typedef void(*initArrayMember)();
+    if(!txt) return;
 
-    initArrayMember* initMembersList;
-    int initMembersCount;
-};
-static LibraryLoadData g_LoadDatas[2];
-void AML_PostLoadLib(int libNum)
-{
-    libNum--;
+    std::string_view text(txt);
+    size_t start = 0;
+    size_t end = text.find(',');
 
-    const int size = g_LoadDatas[libNum].initMembersCount;
-    for(int i = 0; i < size; ++i)
+    while(end != std::string_view::npos)
     {
-        g_LoadDatas[libNum].initMembersList[i]();
+        action(text.substr(start, end - start));
+        
+        start = end + 1;
+        end = text.find(',', start);
+    }
+
+    if(start < text.size()) action(text.substr(start));
+}
+void AML_InitLibs(const char* libsArray)
+{
+    g_vLibrariesToBeLoaded.clear();
+    if(!libsArray || !libsArray[0]) return; // Nothing to load.
+    
+    AML_SplitText(libsArray, [](std::string_view item)
+    {
+        std::string lib(item);
+        if(lib.size() < 4 || ( lib[0] != 'l' || lib[1] != 'i' || lib[2] != 'b') )
+        {
+            lib = "lib" + lib + ".so";
+        }
+        void* libHandle = dlopen(lib.c_str(), RTLD_NOW);
+        if(libHandle) g_vLibrariesToBeLoaded.push_back(libHandle);
+    });
+}
+void AML_PostLoadLibs()
+{
+    for(void* libHandle : g_vLibrariesToBeLoaded)
+    {
+        auto libEntry = (void(*)(JavaVM*, void*))dlsym(libHandle, "JNI_OnLoad");
+        if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
     }
 }
 
-void* AML_dlopen(const char* lib, int libNum)
-{
-    return dlopen(lib, RTLD_NOW);
-}
-
-void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
+void StartAMLRightNow(const char* libsArray = NULL)
 {
     if(g_bAMLStarted)
     {
@@ -529,15 +550,7 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     }
 
     // Preload libs
-    void *lib1 = NULL, *lib2 = NULL;
-    if(libName1 && libName1[0])
-    {
-        lib1 = AML_dlopen(libName1, 1);
-    }
-    if(libName2 && libName2[0])
-    {
-        lib2 = AML_dlopen(libName2, 2);
-    }
+    AML_InitLibs(libsArray);
     
     /* Must Have for mods */
     modlist->AddMod(amlmodinfo, 0, "localpath (core)");
@@ -780,40 +793,22 @@ void StartAMLRightNow(const char* libName1 = NULL, const char* libName2 = NULL)
     /* Fake crash for crash handler testing (does not work?) */
     //if(g_bCrashAML) __builtin_trap(); // Dont let really weird guys to use this...
 
-    // TODO: should be loaded in a different thread..?
-    if(lib1)
-    {
-        AML_PostLoadLib(1);
-        auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib1, "JNI_OnLoad");
-        if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
-    }
-    if(lib2)
-    {
-        AML_PostLoadLib(2);
-        auto libEntry = (void(*)(JavaVM*, void*))dlsym(lib2, "JNI_OnLoad");
-        if(libEntry) libEntry(g_pJavaVM, g_pJavaReserved);
-    }
+    // Final initialisation (mods can now modify JNI_OnLoad! )
+    AML_PostLoadLibs();
 
     g_bAMLStarted = true;
 }
 
 
-extern "C" JNIEXPORT void JNICALL Java_net_rusjj_amlcore_launchAMLCore(JNIEnv *env, jclass clazz)
-{
-    // Late start
-    StartAMLRightNow();
-}
-extern "C" JNIEXPORT void JNICALL Java_net_rusjj_amlcore_earlyLaunchAMLCore(JNIEnv *env, jclass clazz, jstring lib1, jstring lib2)
-{
-    // Early stage starting
-    // LAUNCHES lib1 AND lib2 BY ITSELF!!!
-    const char* szLib1 = lib1 ? env->GetStringUTFChars(lib1, NULL) : NULL;
-    const char* szLib2 = lib2 ? env->GetStringUTFChars(lib2, NULL) : NULL;
 
-    StartAMLRightNow(szLib1, szLib2);
+extern "C" JNIEXPORT void JNICALL Java_net_rusjj_amlcore_launchAMLCore(JNIEnv *env, jclass clazz, jstring libsArray)
+{
+    // Early stage. Launches required libraries, JNI_OnLoad is delayed.
+    const char* szLibsArray = (libsArray ? env->GetStringUTFChars(libsArray, NULL) : NULL);
 
-    if(lib1 && szLib1) env->ReleaseStringUTFChars(lib1, szLib1);
-    if(lib2 && szLib2) env->ReleaseStringUTFChars(lib2, szLib2);
+    StartAMLRightNow(szLibsArray);
+
+    if(szLibsArray) env->ReleaseStringUTFChars(libsArray, szLibsArray);
 }
 
 static ALooper* g_pJavaUILooper = NULL;
