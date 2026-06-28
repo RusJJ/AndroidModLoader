@@ -1,32 +1,33 @@
 #include <mod/logger.h>
 #include <modslist.h>
+
 #include <fstream>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <dlfcn.h>
 #include <aml.h>
 #include <jnifn.h>
 #include <cxxabi.h> // char* demangled = abi::__cxa_demangle(mangled, nullptr, nullptr, &status); free(demangled);
-#include "xunwind.h"
-
-// execinfo.h
-typedef int (*backtrace_fn)(void**, int);
-typedef char** (*backtrace_symbols_fn)(void* const*, int);
+#include "jcrasher.h"
 
 #define STACKDUMP_SIZE 0x510
-std::ofstream g_pLogFile;
+static int g_nLogFileFd = -1;
 
 struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
-extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads, g_bEHUnwind, g_bMoreRegsInfo, g_bUnixBacktrace;
+extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads,
+            g_bMoreRegsInfo, g_bDumpThreadRegisters;
 extern int g_nAndroidSDKVersion;
 
 static stack_t stackstruct;
-static char signalstack[128 * 1024]; // 128kB
-static uintptr_t g_frames[128];
-static void* btBuffer[64];
-
-extern jobject appContext;
-extern JNIEnv* env;
+static char signalstack[256 * 1024]; // 256kB
+static char signalbuf[1024];
+#define fd_printf(format, ...) \
+    do{ int _macro_len = snprintf(signalbuf, sizeof(signalbuf), format, ##__VA_ARGS__); \
+        if(_macro_len > 0) write(g_nLogFileFd, signalbuf, _macro_len); } while(0)
+#define fd_print(text) write(g_nLogFileFd, text, sizeof(text)-1)
 
 ModDesc* pLastModProcessed = NULL;
 
@@ -192,17 +193,51 @@ inline const char* GetFilenamePart(const char* path)
     return &path[idx];
 }
 
-bool bHasHandledError = false;
+static volatile sig_atomic_t g_handling_signal = 0;
+static void ContinueToOldHandler(int sig, siginfo_t* si, void* ctx)
+{
+    int id = SignalInnerId(sig);
+    if(id < 0) _exit(128 + sig);
+
+    struct sigaction old = oldSigaction[id];
+    sigaction(sig, &old, NULL);
+
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, sig);
+    sigprocmask(SIG_UNBLOCK, &set, NULL);
+
+    if(old.sa_flags & SA_SIGINFO)
+    {
+        if(old.sa_sigaction) old.sa_sigaction(sig, si, ctx);
+    }
+    else
+    {
+        if(old.sa_handler == SIG_DFL)
+        {
+            syscall(SYS_tgkill, getpid(), gettid(), sig);
+        }
+        else if(old.sa_handler == SIG_IGN)
+        {
+            signal(sig, SIG_DFL);
+            syscall(SYS_tgkill, getpid(), gettid(), sig);
+        }
+        else if(old.sa_handler)
+        {
+            old.sa_handler(sig);
+        }
+    }
+
+    // If previous handler returned, force fatal exit (this should not happen.)
+    signal(sig, SIG_DFL);
+    syscall(SYS_tgkill, getpid(), gettid(), sig);
+    _exit(128 + sig);
+}
+
 void Handler(int sig, siginfo_t *si, void *ptr)
 {
-    if(bHasHandledError)
-    {
-        exit(0);
-        return;
-    }
-    bHasHandledError = true;
-
-    void* libC = dlopen("libc.so", RTLD_NOW | RTLD_GLOBAL);
+    if(g_handling_signal) ContinueToOldHandler(sig, si, ptr);
+    g_handling_signal = 1;
 
     char *stack;
     ucontext_t* ucontext = (ucontext_t*)ptr;
@@ -215,48 +250,52 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     #endif
     uintptr_t faultAddr = (uintptr_t)si->si_addr;
 
-    char path[320], pathText[512];
+    char path[512], pathText[512];
     snprintf(path, sizeof(path), "%s/aml_crashlog.txt", aml->GetAndroidDataRootPath());
     snprintf(pathText, sizeof(pathText), "Application has been crashed!\n\nCrashlog should be saved in %s", path);
     logger->Error("Exception Signal %d - %s (%s)", sig, SignalEnum(sig), CodeEnum(sig, si->si_code));
     logger->Error("%s", pathText);
-    g_pLogFile.open(path, std::ios::out | std::ios::trunc);
 
+    g_nLogFileFd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if(g_nLogFileFd < 0)
+    {
+        logger->Error("Failed to open aml_crashlog.txt !");
+        goto skip_logging;
+    }
 
-    char* stackLog = NULL;
-    if(!g_pLogFile.is_open()) goto skip_logging;
+    fd_print("!!! THIS IS A CRASH LOG !!!\nIf you are experiencing a crash, give us this file.\n>>> DO NOT SEND US A SCREENSHOT OF THIS FILE <<<\n\n");
 
-    g_pLogFile << "!!! THIS IS A CRASH LOG !!!\nIf you are experiencing a crash, give us this file.\n>>> DO NOT SEND US A SCREENSHOT OF THIS FILE <<<" << std::endl << std::endl;
+    #define DEVVAR_LOG(__v) fd_printf(#__v " = %d | ", (int)(__v == true))
+    fd_print("Config variables: | "); DEVVAR_LOG(g_bSimplerCrashLog); DEVVAR_LOG(g_bNoSPInLog);
+    DEVVAR_LOG(g_bNoModsInLog);       DEVVAR_LOG(g_bDumpAllThreads);
+    DEVVAR_LOG(g_bMoreRegsInfo);      DEVVAR_LOG(g_bDumpThreadRegisters);
+    fd_print("\n");
 
-    #define DEVVAR_LOG(__v) g_pLogFile << #__v << (__v ? " = 1 | " : " = 0 | ")
-    g_pLogFile << "Config variables: | "; DEVVAR_LOG(g_bSimplerCrashLog); DEVVAR_LOG(g_bNoSPInLog);
-    DEVVAR_LOG(g_bNoModsInLog); DEVVAR_LOG(g_bDumpAllThreads); DEVVAR_LOG(g_bEHUnwind); DEVVAR_LOG(g_bMoreRegsInfo); DEVVAR_LOG(g_bUnixBacktrace); g_pLogFile << std::endl;
-
-    g_pLogFile << "Exception Signal " << sig << " - " << SignalEnum(sig) << " (" << CodeEnum(sig, si->si_code) << ")" << std::endl;
-    g_pLogFile << "Fault address: 0x" << std::hex << std::uppercase << faultAddr << " (0x" << (uintptr_t)si->si_addr << ") at 0x" << PC << std::nouppercase << std::endl;
-    g_pLogFile << "A POSSIBLE (!) reason of the crash:\n- ";
+    fd_printf("Exception Signal %d - %s (%s)\n", sig, SignalEnum(sig), CodeEnum(sig, si->si_code));
+    fd_printf("Fault address: " PTRFMT " (" PTRFMT ") at " PTRFMT "\n", faultAddr, (uintptr_t)si->si_addr, PC);
+    fd_print("A POSSIBLE (!) reasons of the crash:\n- ");
     switch(sig)
     {
     case SIGABRT:
-        g_pLogFile << "Probably the game is closed by something (Android`s Low Memory Killer?)" << std::endl;
+        fd_print("Memory assertion, stack smashing, heap corruption, exception\n");
         break;
     case SIGBUS:
-        g_pLogFile << "Not enough memory, or invalid execution address, or a bad mod patch" << std::endl;
+        fd_print("Corrupted memory pointer, wrong file pointer, hardware memory error\n");
         break;
     case SIGFPE:
-        g_pLogFile << "An error somewhere in the code, often - dividing by zero" << std::endl;
+        fd_print("Division or module by zero, integer overflow\n");
         break;
     case SIGSEGV:
-        g_pLogFile << "An application tried to access the memory address that is unaccessible, protected or just wrong" << std::endl;
+        fd_print("Null/wrong pointer, stack overflow\n");
         break;
     case SIGILL:
-        g_pLogFile << "Corrupted application stack, wrong call address or no privileges to do something" << std::endl;
+        fd_print("Wrong patch/return address, code corruption\n");
         break;
     case SIGSTKFLT:
-        g_pLogFile << "Stack fault on coprocessor" << std::endl;
+        fd_print("Stack fault on coprocessor\n"); // We.. dont have it?
         break;
     case SIGTRAP:
-        g_pLogFile << "It`s a trap! Somewhere in the game was called a function to FORCE CLOSE the game" << std::endl;
+        fd_print("Broken mod/patch (undefined behavior), debugger activated, mod/patch reached wrong address\n");
         break;
     }
 
@@ -266,117 +305,99 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         // Success
         if(dlInfo.dli_fname)
         {
-            g_pLogFile << "Library base: 0x" << std::hex << std::uppercase << (uintptr_t)dlInfo.dli_fbase << std::endl;
-            g_pLogFile << GetFilenamePart(dlInfo.dli_fname) << " + 0x" << std::hex << std::uppercase << (PC - (uintptr_t)dlInfo.dli_fbase);
+            fd_printf("Library base: " PTRFMT "\n", (uintptr_t)dlInfo.dli_fbase);
+            fd_printf("%s + " PTRFMT, GetFilenamePart(dlInfo.dli_fname), (PC - (uintptr_t)dlInfo.dli_fbase));
         }
         else
         {
             if(!dlInfo.dli_fbase) goto label_unsuccess;
-            g_pLogFile << "Library base: 0x" << std::hex << std::uppercase << (uintptr_t)dlInfo.dli_fbase << std::endl;
-            g_pLogFile << "Program counter: Unknown Lib + 0x" << std::hex << std::uppercase << (PC - (uintptr_t)dlInfo.dli_fbase);
+            fd_printf("Library base: " PTRFMT "\n", (uintptr_t)dlInfo.dli_fbase);
+            fd_printf("Program counter: Unknown Lib + " PTRFMT, (PC - (uintptr_t)dlInfo.dli_fbase));
         }
     }
     else
     {
         // Unsuccess
       label_unsuccess:
-        g_pLogFile << "Failed to get a library. Program counter: 0x" << std::hex << std::uppercase << PC;
+        fd_printf("Failed to get a library. Program counter: " PTRFMT, PC);
     }
-
-    if(dlInfo.dli_sname)
-    {
-        g_pLogFile << std::nouppercase << " (" << dlInfo.dli_sname << ")" << std::endl;
-    }
-    else
-    {
-        g_pLogFile << std::endl;
-    }
-    g_pLogFile.flush();
+    if(dlInfo.dli_sname) fd_printf(" (%s)", dlInfo.dli_sname);
 
     char sysprop_str[92];
-    g_pLogFile << "\n----------------------------------------------------\nShort device info:" << std::endl;
-    g_pLogFile << "Android SDK Version: " << std::dec << g_nAndroidSDKVersion << std::endl;
+    fd_print("\n\n----------------------------------------------------\nShort device info:\n");
+    fd_printf("Android SDK Version: %d\n", g_nAndroidSDKVersion);
     if(__system_property_get("ro.product.brand", sysprop_str) || __system_property_get("ro.product.system.brand", sysprop_str))
     {
-        g_pLogFile.flush();
-        g_pLogFile << "Brand: " << sysprop_str << std::endl;
+        fd_printf("Brand: %s\n", sysprop_str);
     }
     if(__system_property_get("ro.product.device", sysprop_str) || __system_property_get("ro.product.system.device", sysprop_str))
     {
-        g_pLogFile.flush();
-        g_pLogFile << "Device: " << sysprop_str << std::endl;
+        fd_printf("Device: %s\n", sysprop_str);
     }
     if(__system_property_get("ro.system.product.cpu.abilist", sysprop_str))
     {
-        g_pLogFile.flush();
-        g_pLogFile << "Supported ABIs: " << sysprop_str;
-        if(strstr(sysprop_str, "86") != NULL) g_pLogFile << " (it looks like you`re on emulator?)";
-        g_pLogFile << std::endl;
+        fd_printf("Supported ABIs: %s", sysprop_str);
+        if(strstr(sysprop_str, "86") != NULL) fd_print(" (it looks like you`re on emulator?)");
+        fd_print("\n");
     }
     if(__system_property_get("ro.build.date", sysprop_str))
     {
-        g_pLogFile.flush();
-        g_pLogFile << "OS Build Date: " << sysprop_str << std::endl;
+        fd_printf("OS Build Date: %s\n", sysprop_str);
     }
     if(__system_property_get("ro.build.id", sysprop_str) || __system_property_get("ro.system.build.id", sysprop_str))
     {
-        g_pLogFile.flush();
-        g_pLogFile << "OS Build ID: " << sysprop_str << std::endl;
+        fd_printf("OS Build ID: %s\n", sysprop_str);
     }
-    g_pLogFile.flush();
 
-
-    g_pLogFile << "\n----------------------------------------------------\nRegisters:" << std::endl;
+    fd_print("\n----------------------------------------------------\nRegisters:\n");
 
     // dlInfo.dli_sname in register might point to the variable with corrupted name
-    #define SHOWREG(__t, __v)   g_pLogFile << #__t ":\t" << std::dec << __v << "\t0x" << std::hex << std::uppercase << __v; \
-                                if((void*)(__v) && dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) { \
-                                    g_pLogFile << " (" << GetFilenamePart(dlRegInfo.dli_fname) << " + 0x" << std::hex << std::uppercase << ((uintptr_t)(__v) - (uintptr_t)dlRegInfo.dli_fbase) << ")"; \
-                                    /*if(dlRegInfo.dli_sname) { g_pLogFile << std::nouppercase << " (" << dlInfo.dli_sname << ")"; }*/ \
-                                } g_pLogFile << std::endl
+    #define SHOWREG(__t, __v)   fd_printf(#__t ":\t" PTRNUMFMT "\t" PTRFMT, (uintptr_t)(__v), (uintptr_t)(__v)); \
+                                if((void*)(__v) && dladdr((void*)(__v), &dlRegInfo) != 0 && dlRegInfo.dli_fname) \
+                                    fd_printf(" (%s + " PTRFMT ")", GetFilenamePart(dlRegInfo.dli_fname), ((uintptr_t)(__v) - (uintptr_t)dlRegInfo.dli_fbase) ); \
+                                fd_print("\n"); \
 
-                                
     #ifdef AML32
         if(g_bMoreRegsInfo)
         {
             static Dl_info dlRegInfo;
-            SHOWREG(R0, mcontext->arm_r0);
-            SHOWREG(R1, mcontext->arm_r1);
-            SHOWREG(R2, mcontext->arm_r2);
-            SHOWREG(R3, mcontext->arm_r3);
-            SHOWREG(R4, mcontext->arm_r4);
-            SHOWREG(R5, mcontext->arm_r5);
-            SHOWREG(R6, mcontext->arm_r6);
-            SHOWREG(R7, mcontext->arm_r7);
-            SHOWREG(R8, mcontext->arm_r8);
-            SHOWREG(R9, mcontext->arm_r9);
-            SHOWREG(R10, mcontext->arm_r10);
-            SHOWREG(R11, mcontext->arm_fp);
-            SHOWREG(R12, mcontext->arm_ip);
-            SHOWREG(SP, mcontext->arm_sp);
-            SHOWREG(LR, mcontext->arm_lr);
-            SHOWREG(PC, mcontext->arm_pc);
+            SHOWREG(R0,   mcontext->arm_r0);
+            SHOWREG(R1,   mcontext->arm_r1);
+            SHOWREG(R2,   mcontext->arm_r2);
+            SHOWREG(R3,   mcontext->arm_r3);
+            SHOWREG(R4,   mcontext->arm_r4);
+            SHOWREG(R5,   mcontext->arm_r5);
+            SHOWREG(R6,   mcontext->arm_r6);
+            SHOWREG(R7,   mcontext->arm_r7);
+            SHOWREG(R8,   mcontext->arm_r8);
+            SHOWREG(R9,   mcontext->arm_r9);
+            SHOWREG(R10,  mcontext->arm_r10);
+            SHOWREG(R11,  mcontext->arm_fp);
+            SHOWREG(R12,  mcontext->arm_ip);
+            SHOWREG(SP,   mcontext->arm_sp);
+            SHOWREG(LR,   mcontext->arm_lr);
+            SHOWREG(PC,   mcontext->arm_pc);
             SHOWREG(CPSR, mcontext->arm_cpsr);
         }
         else
         {
-            g_pLogFile << "R0:   " << std::dec << mcontext->arm_r0 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r0   << std::endl;
-            g_pLogFile << "R1:   " << std::dec << mcontext->arm_r1 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r1   << std::endl;
-            g_pLogFile << "R2:   " << std::dec << mcontext->arm_r2 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r2   << std::endl;
-            g_pLogFile << "R3:   " << std::dec << mcontext->arm_r3 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r3   << std::endl;
-            g_pLogFile << "R4:   " << std::dec << mcontext->arm_r4 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r4   << std::endl;
-            g_pLogFile << "R5:   " << std::dec << mcontext->arm_r5 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r5   << std::endl;
-            g_pLogFile << "R6:   " << std::dec << mcontext->arm_r6 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r6   << std::endl;
-            g_pLogFile << "R7:   " << std::dec << mcontext->arm_r7 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r7   << std::endl;
-            g_pLogFile << "R8:   " << std::dec << mcontext->arm_r8 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r8   << std::endl;
-            g_pLogFile << "R9:   " << std::dec << mcontext->arm_r9 <<   " 0x" << std::hex << std::uppercase << mcontext->arm_r9   << std::endl;
-            g_pLogFile << "R10:  " << std::dec << mcontext->arm_r10 <<  " 0x" << std::hex << std::uppercase << mcontext->arm_r10  << std::endl;
-            g_pLogFile << "R11:  " << std::dec << mcontext->arm_fp <<   " 0x" << std::hex << std::uppercase << mcontext->arm_fp   << std::endl;
-            g_pLogFile << "R12:  " << std::dec << mcontext->arm_ip <<   " 0x" << std::hex << std::uppercase << mcontext->arm_ip   << std::endl;
-            g_pLogFile << "SP:   " << std::dec << mcontext->arm_sp <<   " 0x" << std::hex << std::uppercase << mcontext->arm_sp   << std::endl;
-            g_pLogFile << "LR:   " << std::dec << mcontext->arm_lr <<   " 0x" << std::hex << std::uppercase << mcontext->arm_lr   << std::endl;
-            g_pLogFile << "PC:   " << std::dec << mcontext->arm_pc <<   " 0x" << std::hex << std::uppercase << mcontext->arm_pc   << std::endl;
-            g_pLogFile << "CPSR: " << std::dec << mcontext->arm_cpsr << " 0x" << std::hex << std::uppercase << mcontext->arm_cpsr << std::endl;
+            fd_printf("R0:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r0  , (uintptr_t)mcontext->arm_r0  );
+            fd_printf("R1:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r1  , (uintptr_t)mcontext->arm_r1  );
+            fd_printf("R2:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r2  , (uintptr_t)mcontext->arm_r2  );
+            fd_printf("R3:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r3  , (uintptr_t)mcontext->arm_r3  );
+            fd_printf("R4:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r4  , (uintptr_t)mcontext->arm_r4  );
+            fd_printf("R5:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r5  , (uintptr_t)mcontext->arm_r5  );
+            fd_printf("R6:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r6  , (uintptr_t)mcontext->arm_r6  );
+            fd_printf("R7:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r7  , (uintptr_t)mcontext->arm_r7  );
+            fd_printf("R8:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r8  , (uintptr_t)mcontext->arm_r8  );
+            fd_printf("R9:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r9  , (uintptr_t)mcontext->arm_r9  );
+            fd_printf("R10:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_r10 , (uintptr_t)mcontext->arm_r10 );
+            fd_printf("R11:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_fp  , (uintptr_t)mcontext->arm_fp  );
+            fd_printf("R12:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_ip  , (uintptr_t)mcontext->arm_ip  );
+            fd_printf("SP:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_sp  , (uintptr_t)mcontext->arm_sp  );
+            fd_printf("LR:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_lr  , (uintptr_t)mcontext->arm_lr  );
+            fd_printf("PC:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_pc  , (uintptr_t)mcontext->arm_pc  );
+            fd_printf("CPSR: " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->arm_cpsr, (uintptr_t)mcontext->arm_cpsr);
         }
     #else
         if(g_bMoreRegsInfo)
@@ -419,56 +440,53 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         }
         else
         {
-            g_pLogFile << "X0:   " << std::dec << mcontext->regs[0] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[0]  << std::endl;
-            g_pLogFile << "X1:   " << std::dec << mcontext->regs[1] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[1]  << std::endl;
-            g_pLogFile << "X2:   " << std::dec << mcontext->regs[2] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[2]  << std::endl;
-            g_pLogFile << "X3:   " << std::dec << mcontext->regs[3] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[3]  << std::endl;
-            g_pLogFile << "X4:   " << std::dec << mcontext->regs[4] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[4]  << std::endl;
-            g_pLogFile << "X5:   " << std::dec << mcontext->regs[5] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[5]  << std::endl;
-            g_pLogFile << "X6:   " << std::dec << mcontext->regs[6] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[6]  << std::endl;
-            g_pLogFile << "X7:   " << std::dec << mcontext->regs[7] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[7]  << std::endl;
-            g_pLogFile << "X8:   " << std::dec << mcontext->regs[8] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[8]  << std::endl;
-            g_pLogFile << "X9:   " << std::dec << mcontext->regs[9] <<  " 0x" << std::hex << std::uppercase << mcontext->regs[9]  << std::endl;
-            g_pLogFile << "X10:  " << std::dec << mcontext->regs[10] << " 0x" << std::hex << std::uppercase << mcontext->regs[10] << std::endl;
-            g_pLogFile << "X11:  " << std::dec << mcontext->regs[11] << " 0x" << std::hex << std::uppercase << mcontext->regs[11] << std::endl;
-            g_pLogFile << "X12:  " << std::dec << mcontext->regs[12] << " 0x" << std::hex << std::uppercase << mcontext->regs[12] << std::endl;
-            g_pLogFile << "X13:  " << std::dec << mcontext->regs[13] << " 0x" << std::hex << std::uppercase << mcontext->regs[13] << std::endl;
-            g_pLogFile << "X14:  " << std::dec << mcontext->regs[14] << " 0x" << std::hex << std::uppercase << mcontext->regs[14] << std::endl;
-            g_pLogFile << "X15:  " << std::dec << mcontext->regs[15] << " 0x" << std::hex << std::uppercase << mcontext->regs[15] << std::endl;
-            g_pLogFile << "X16:  " << std::dec << mcontext->regs[16] << " 0x" << std::hex << std::uppercase << mcontext->regs[16] << std::endl;
-            g_pLogFile << "X17:  " << std::dec << mcontext->regs[17] << " 0x" << std::hex << std::uppercase << mcontext->regs[17] << std::endl;
-            g_pLogFile << "X18:  " << std::dec << mcontext->regs[18] << " 0x" << std::hex << std::uppercase << mcontext->regs[18] << std::endl;
-            g_pLogFile << "X19:  " << std::dec << mcontext->regs[19] << " 0x" << std::hex << std::uppercase << mcontext->regs[19] << std::endl;
-            g_pLogFile << "X20:  " << std::dec << mcontext->regs[20] << " 0x" << std::hex << std::uppercase << mcontext->regs[20] << std::endl;
-            g_pLogFile << "X21:  " << std::dec << mcontext->regs[21] << " 0x" << std::hex << std::uppercase << mcontext->regs[21] << std::endl;
-            g_pLogFile << "X22:  " << std::dec << mcontext->regs[22] << " 0x" << std::hex << std::uppercase << mcontext->regs[22] << std::endl;
-            g_pLogFile << "X23:  " << std::dec << mcontext->regs[23] << " 0x" << std::hex << std::uppercase << mcontext->regs[23] << std::endl;
-            g_pLogFile << "X24:  " << std::dec << mcontext->regs[24] << " 0x" << std::hex << std::uppercase << mcontext->regs[24] << std::endl;
-            g_pLogFile << "X25:  " << std::dec << mcontext->regs[25] << " 0x" << std::hex << std::uppercase << mcontext->regs[25] << std::endl;
-            g_pLogFile << "X26:  " << std::dec << mcontext->regs[26] << " 0x" << std::hex << std::uppercase << mcontext->regs[26] << std::endl;
-            g_pLogFile << "X27:  " << std::dec << mcontext->regs[27] << " 0x" << std::hex << std::uppercase << mcontext->regs[27] << std::endl;
-            g_pLogFile << "X28:  " << std::dec << mcontext->regs[28] << " 0x" << std::hex << std::uppercase << mcontext->regs[28] << std::endl;
-            g_pLogFile << "X29:  " << std::dec << mcontext->regs[29] << " 0x" << std::hex << std::uppercase << mcontext->regs[29] << std::endl;
-            g_pLogFile << "X30:  " << std::dec << mcontext->regs[30] << " 0x" << std::hex << std::uppercase << mcontext->regs[30] << std::endl;
-            g_pLogFile << "SP:   " << std::dec << mcontext->sp <<       " 0x" << std::hex << std::uppercase << mcontext->sp       << std::endl;
-            g_pLogFile << "PC:   " << std::dec << mcontext->pc <<       " 0x" << std::hex << std::uppercase << mcontext->pc       << std::endl;
-            g_pLogFile << "CPSR: " << std::dec << mcontext->pstate <<   " 0x" << std::hex << std::uppercase << mcontext->pstate   << std::endl;
+            fd_printf("X0:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[0] , (uintptr_t)mcontext->regs[0] );
+            fd_printf("X1:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[1] , (uintptr_t)mcontext->regs[1] );
+            fd_printf("X2:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[2] , (uintptr_t)mcontext->regs[2] );
+            fd_printf("X3:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[3] , (uintptr_t)mcontext->regs[3] );
+            fd_printf("X4:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[4] , (uintptr_t)mcontext->regs[4] );
+            fd_printf("X5:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[5] , (uintptr_t)mcontext->regs[5] );
+            fd_printf("X6:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[6] , (uintptr_t)mcontext->regs[6] );
+            fd_printf("X7:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[7] , (uintptr_t)mcontext->regs[7] );
+            fd_printf("X8:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[8] , (uintptr_t)mcontext->regs[8] );
+            fd_printf("X9:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[9] , (uintptr_t)mcontext->regs[9] );
+            fd_printf("X10:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[10], (uintptr_t)mcontext->regs[10]);
+            fd_printf("X11:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[11], (uintptr_t)mcontext->regs[11]);
+            fd_printf("X12:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[12], (uintptr_t)mcontext->regs[12]);
+            fd_printf("X13:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[13], (uintptr_t)mcontext->regs[13]);
+            fd_printf("X14:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[14], (uintptr_t)mcontext->regs[14]);
+            fd_printf("X15:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[15], (uintptr_t)mcontext->regs[15]);
+            fd_printf("X16:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[16], (uintptr_t)mcontext->regs[16]);
+            fd_printf("X17:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[17], (uintptr_t)mcontext->regs[17]);
+            fd_printf("X18:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[18], (uintptr_t)mcontext->regs[18]);
+            fd_printf("X19:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[19], (uintptr_t)mcontext->regs[19]);
+            fd_printf("X20:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[20], (uintptr_t)mcontext->regs[20]);
+            fd_printf("X21:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[21], (uintptr_t)mcontext->regs[21]);
+            fd_printf("X22:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[22], (uintptr_t)mcontext->regs[22]);
+            fd_printf("X23:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[23], (uintptr_t)mcontext->regs[23]);
+            fd_printf("X24:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[24], (uintptr_t)mcontext->regs[24]);
+            fd_printf("X25:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[25], (uintptr_t)mcontext->regs[25]);
+            fd_printf("X26:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[26], (uintptr_t)mcontext->regs[26]);
+            fd_printf("X27:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[27], (uintptr_t)mcontext->regs[27]);
+            fd_printf("X28:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[28], (uintptr_t)mcontext->regs[28]);
+            fd_printf("X29:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[29], (uintptr_t)mcontext->regs[29]);
+            fd_printf("X30:  " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->regs[30], (uintptr_t)mcontext->regs[30]);
+            fd_printf("SP:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->sp      , (uintptr_t)mcontext->sp      );
+            fd_printf("PC:   " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->pc      , (uintptr_t)mcontext->pc      );
+            fd_printf("CPSR: " PTRNUMFMT " " PTRFMT "\n", (uintptr_t)mcontext->pstate  , (uintptr_t)mcontext->pstate  );
         }
     #endif
-    g_pLogFile.flush();
 
     if(!g_bNoModsInLog)
     {
-        modlist->PrintModsList(g_pLogFile);
-        g_pLogFile.flush();
+        modlist->PrintModsList(g_nLogFileFd);
     }
 
     if(pLastModProcessed)
     {
-        g_pLogFile << "\n----------------------------------------------------\nLatest mod processed:\n";
-        g_pLogFile << pLastModProcessed->m_pInfo->Name() << " (" << pLastModProcessed->m_pInfo->Author() << ", version " << pLastModProcessed->m_pInfo->VersionString() << ")\n";
-        g_pLogFile << " - GUID: " << pLastModProcessed->m_pInfo->GUID() << " | Base: 0x" << std::hex << std::uppercase << (uintptr_t)pLastModProcessed->m_pHandle << " | Path: " << pLastModProcessed->m_szLibPath << "\n";
-        g_pLogFile.flush();
+        fd_print("\n----------------------------------------------------\nLatest mod processed:\n");
+        fd_printf("%s (%s, version %s)\n", pLastModProcessed->m_pInfo->Name(), pLastModProcessed->m_pInfo->Author(), pLastModProcessed->m_pInfo->VersionString());
+        fd_printf(" - GUID: %s | Base " PTRFMT " | Path: %s\n", pLastModProcessed->m_pInfo->GUID(), (uintptr_t)pLastModProcessed->m_pHandle, pLastModProcessed->m_szLibPath);
     }
 
     #ifdef AML32
@@ -479,100 +497,54 @@ void Handler(int sig, siginfo_t *si, void *ptr)
 
     if(!g_bNoSPInLog && stack)
     {
-        g_pLogFile << "\n----------------------------------------------------\nPrinting " << std::dec << STACKDUMP_SIZE << " bytes of stack:" << std::endl;
-        g_pLogFile << std::hex << std::uppercase;
-        g_pLogFile.flush();
+        fd_printf("\n----------------------------------------------------\nPrinting %d bytes of stack:\n", STACKDUMP_SIZE);
         for(int i = 1; i <= STACKDUMP_SIZE; ++i)
         {
-            g_pLogFile << " " << std::setfill('0') << std::setw(2) << (int)(stack[i - 1]);
+            fd_printf(" %02X", (int)(stack[i - 1]));
             if(i % 16 == 0)
             {
-                g_pLogFile << " (SP+0x" << std::setfill('0') << std::setw(3) << 16 * ((i / 16) - 1) << ") [";
+                fd_printf(" (SP+0x%03X) [", (int)( 16 * ((i / 16) - 1) ));
                 int endv = i;
                 for(int j = i-16; j < endv && j < STACKDUMP_SIZE; ++j)
                 {
                     char spc = stack[j];
-                    if(std::isalnum(spc) || std::ispunct(spc)) g_pLogFile << spc;
-                    else g_pLogFile << '.';
+                    if(std::isalnum(spc) || std::ispunct(spc)) fd_printf("%c", spc);
+                    fd_print(".");
                 }
-                g_pLogFile << "]" << std::endl;
-                g_pLogFile.flush();
+                fd_print("]\n");
             }
         }
     }
     else if(!stack)
     {
-        g_pLogFile << "\n----------------------------------------------------\nA program stack is missing..?!\n";
-        g_pLogFile.flush();
+        fd_print("\n----------------------------------------------------\n- A program stack is missing..?!\n");
     }
 
-    if(!g_bSimplerCrashLog)
+    if(g_bSimplerCrashLog)
     {
-        bool bSkipCrashLog = false;
-        if(g_bUnixBacktrace && g_nAndroidSDKVersion > 33 && libC)
+        fd_print("\n----------------------------------------------------\nCall stack:\n- You disabled a detailed callstack dump!\n- This is not helpful. Do it if you know what you do.");
+    }
+    else
+    {
+        fd_print("\n----------------------------------------------------\n");
+        uint32_t crasherFlags = JCrasher::DUMP_DIAGNOSTICS;
+        if(g_bDumpThreadRegisters) crasherFlags |= JCrasher::DUMP_REGISTERS;
+                
+        if(g_bDumpAllThreads)
         {
-            backtrace_fn backtrace_ptr = (backtrace_fn)dlsym(libC, "backtrace");
-            backtrace_symbols_fn backtrace_symbols_ptr = (backtrace_symbols_fn)dlsym(libC, "backtrace_symbols");
-
-            if(backtrace_ptr && backtrace_symbols_ptr)
-            {
-                int symbolsCount = backtrace_ptr(btBuffer, 64);
-                char** symbols = backtrace_symbols_ptr(btBuffer, symbolsCount);
-                if(symbols)
-                {
-                    if(symbolsCount)
-                    {
-                        bSkipCrashLog = true;
-                        g_pLogFile << "\n----------------------------------------------------\n" << "Call stack:\n";
-                        for(int i = 0; i < symbolsCount; ++i)
-                        {
-                            g_pLogFile << symbols[i] << std::endl;
-                        }
-                        g_pLogFile.flush();
-                    }
-                    free(symbols);
-                }
-            }
-        }
-      #ifdef IO_GITHUB_HEXHACKING_XUNWIND
-        if(!bSkipCrashLog && ( g_bEHUnwind || g_nAndroidSDKVersion > 33) )
-        {
-          go_EHUnwind:
-            stackLog = NULL;
-            g_bDumpAllThreads = false;
-
-            size_t frames_sz = xunwind_eh_unwind(g_frames, sizeof(g_frames) / sizeof(g_frames[0]), ucontext);
-            if(frames_sz > 0)
-            {
-                stackLog = xunwind_frames_get(g_frames, frames_sz, "");
-            }
+            fd_print("Call stack (of all threads):\n");
+            JCrasher::DumpAllThreadsFd(g_nLogFileFd, ucontext, crasherFlags, 64);
         }
         else
         {
-            stackLog = xunwind_cfi_get(XUNWIND_CURRENT_PROCESS, g_bDumpAllThreads ? XUNWIND_ALL_THREADS : XUNWIND_CURRENT_THREAD, ucontext, "");
-            if(!stackLog && g_nAndroidSDKVersion > 33) goto go_EHUnwind; // Android 14 and upper does not have libbacktrace?
+            fd_print("Call stack:\n");
+            JCrasher::DumpCurrentThreadFd(g_nLogFileFd, ucontext, crasherFlags, 64);
         }
-        if(stackLog)
-        {
-            if(stackLog[0])
-            {
-                g_pLogFile << "\n----------------------------------------------------\n" << (g_bDumpAllThreads ? "Call stack (of all threads):\n" : "Call stack:\n") << stackLog;
-                g_pLogFile.flush();
-            }
-            free(stackLog);
-        }
-        else
-        {
-            g_pLogFile << "\n----------------------------------------------------\nCall stack:\nA system returned no crash log!";
-            g_pLogFile.flush();
-        }
-      #endif
     }
 
-    g_pLogFile << "\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n";
-    g_pLogFile << "If you`re having problems using OFFICIAL mods, please report about this problem in our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!";
-    g_pLogFile.flush();
-    g_pLogFile.close();
+    fd_print("\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n");
+    fd_print("If you`re having problems using OFFICIAL mods, please report about this problem in our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!");
+    close(g_nLogFileFd);
     
   skip_logging:
     logger->Info("Notifying mods about the crash...");
@@ -580,19 +552,11 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     logger->Info("Telling mods to unload after the crash...");
     modlist->ProcessUnloading();
 
-    //oldSigaction[SignalInnerId(sig)].sa_sigaction(sig, si, ptr);
-    //exit(0);
-    int id = SignalInnerId(sig);
-    if(id >= 0)
-    {
-        sigaction(sig, &oldSigaction[id], NULL);
-        raise(sig);
-    }
-    _exit(128 + sig);
+    ContinueToOldHandler(sig, si, ptr);
 }
 
 #define HANDLESIG(_code) sigbreak = newSigaction + SignalInnerId(_code); sigbreak->sa_sigaction = &Handler; \
-                         sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND; sigemptyset(&sigbreak->sa_mask); \
+                         sigbreak->sa_flags = SA_SIGINFO | SA_ONSTACK; sigemptyset(&sigbreak->sa_mask); \
                          sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
 void StartSignalHandler()
 {
@@ -610,4 +574,6 @@ void StartSignalHandler()
     HANDLESIG(SIGILL);
     HANDLESIG(SIGSTKFLT);
     HANDLESIG(SIGTRAP);
+
+    JCrasher::InitAllThreadsDumper();
 }

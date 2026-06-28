@@ -1,7 +1,6 @@
 #ifndef __MODSLIST_H
 #define __MODSLIST_H
 
-#include <fstream>
 #include <mod/amlmod.h>
 
 struct Mods;
@@ -55,7 +54,7 @@ public:
     void ProcessUpdater();
     void ProcessCrash(const char* szLibName, int sig, int code, uintptr_t libaddr, mcontext_t* mcontext);
     int  GetModsNum();
-    void PrintModsList(std::ofstream& logfile);
+    void PrintModsList(int logfileFd);
 
 // Callbacks
 public:

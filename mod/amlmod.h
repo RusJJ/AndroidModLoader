@@ -20,6 +20,16 @@
 
 
 
+#ifdef AML32
+    #define PTRFMT "0x%08X"
+    #define PTRNUMFMT "%u"
+#else
+    #define PTRFMT "0x%016lX"
+    #define PTRNUMFMT "%lu"
+#endif
+
+
+
 #ifdef __clang__
     #define TARGET_ARM __attribute__((target("no-thumb-mode")))
     #define TARGET_THUMB  __attribute__((target("thumb-mode")))
