@@ -301,7 +301,7 @@ void LoadMods(const char* path)
                     }
                     else
                     {
-                        logger->Info("Mod (GUID %s) has been preprocessed.", pModInfo->GUID());
+                        logger->Info("Mod (GUID %s) has been pre-processed.", pModInfo->GUID());
                         keepLoaded = true;
                     }
                 }

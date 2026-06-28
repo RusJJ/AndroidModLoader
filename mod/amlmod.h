@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <math.h>
+#include <algorithm>
 
 #if defined(__arm__) || defined(_WIN32)
     #define AML32
@@ -160,31 +161,38 @@ inline bool strends(const char* str, const char* suffix)
     return (lenstr >= lensuf && strcmp(str + lenstr - lensuf, suffix) == 0);
 }
 
-inline int clampint(int min, int max, int v)
+inline int clampint(const int min_val, const int max_val, int v)
 {
-    if(v < min) return min;
-    else if(v > max) return max;
-    return v;
+    return std::max(min_val, std::min(max_val, v));
 }
-inline void clampint(int min, int max, int* v)
+inline void clampint(const int min, const int max, int* v)
 {
-    if(*v < min) *v = min;
-    else if(*v > max) *v = max;
+    if(v) *v = clampint(min, max, *v);
 }
-inline float clampfloat(float min, float max, float v)
+inline float clampfloat(const float min_val, const float max_val, float v)
 {
-    if(v < min) return min;
-    else if(v > max) return max;
-    return v;
+    return std::max(min_val, std::min(max_val, v));
 }
 inline void clampfloat(float min, float max, float* v)
 {
-    if(*v < min) *v = min;
-    else if(*v > max) *v = max;
+    if(v) *v = clampint(min, max, *v);
 }
 inline float lerp(float a, float b, float t)
 {
     return (1.0f - t) * a + t * b;
+}
+inline float invlerp(float a, float b, float value)
+{
+    if (a == b) return 0.0f;
+    return (value - a) / (b - a);
+}
+template <typename T> T sq(T x)
+{
+    return x * x;
+}
+template <typename T> T cube(T x)
+{
+    return x * x * x;
 }
 
 inline bool randbool()
@@ -203,6 +211,10 @@ inline float randfloat(float min, float max)
 {
     return min + ((float)rand() / (float)RAND_MAX) * (max - min);
 }
+inline int randsign()
+{
+    return (rand() & 1) ? 1 : -1;
+}
 inline float remap(float value, float low1, float high1, float low2, float high2)
 {
     return low2 + (value - low1) * (high2 - low2) / (high1 - low1);
@@ -218,6 +230,14 @@ inline float wrapfloat(float value, float min, float max)
     float result = fmodf(value - min, range);
     if(result < 0.0f) result += range;
     return result + min;
+}
+inline int wrapint(int value, int min_val, int max_val)
+{
+    int range = max_val - min_val;
+    if(range <= 0) return min_val;
+    int result = (value - min_val) % range;
+    if(result < 0) result += range;
+    return result + min_val;
 }
 
 #define ONE_OVER_PI 0.31830988618379067154f
@@ -289,6 +309,66 @@ inline void fastsincos(float x, float* out_sin, float* out_cos)
 template <typename T> int getsign(T val)
 {
     return (T(0) < val) - (val < T(0));
+}
+inline bool is_pow2(int x) // if its 1,2,4,8, ... , 256, 512, ...
+{
+    return ( (x > 0) && ((x & (x - 1)) == 0) );
+}
+inline unsigned int next_pow2(unsigned int x)
+{
+    if (x == 0) return 1;
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return ++x;
+}
+inline int bitcount(unsigned int x)
+{
+    int count = 0;
+    while(x)
+    {
+        x &= (x - 1);
+        ++count;
+    }
+    return count;
+}
+inline unsigned int rotl(unsigned int value, unsigned int shift)
+{
+    const unsigned int mask = (8 * sizeof(value)) - 1;
+    shift &= mask;
+    return (value << shift) | (value >> ((-shift) & mask));
+}
+inline unsigned int rotr(unsigned int value, unsigned int shift)
+{
+    const unsigned int mask = (8 * sizeof(value)) - 1;
+    shift &= mask;
+    return (value >> shift) | (value << ((-shift) & mask));
+}
+inline bool evenvalue(int v)
+{
+    return ((v & 0x1) == 0);
+}
+inline bool oddvalue(int v)
+{
+    return !evenvalue(v);
+}
+inline float roundsnap(float val, float step_val)
+{
+    if(step_val == 0.0) return val;
+    return floorf((val / step_val) + 0.5) * step_val;
+}
+inline float ceilsnap(float val, float step_val)
+{
+    if(step_val == 0.0f) return val;
+    return ceilf(val / step_val) * step_val;
+}
+inline float floorsnap(float val, float step_val)
+{
+    if(step_val == 0.0f) return val;
+    return floorf(val / step_val) * step_val;
 }
 
 

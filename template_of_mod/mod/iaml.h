@@ -2,10 +2,10 @@
 #define _IAML
 
 // Usage: place 3 lines somewhere in the code AFTER #include <mod/amlmod.h>
-// #if !defined(IAML_VER) && IAML_VER < 01040000
-//     #error "You need to update your MOD folder to 1.4.0!"
+// #if !defined(IAML_VER) && IAML_VER < 01040100
+//     #error "You need to update your MOD folder to 1.4.1!"
 // #endif
-#define IAML_VER 01040000
+#define IAML_VER 01040100
 
 #include <stdint.h>
 #include <type_traits>
@@ -253,6 +253,8 @@ public:
     virtual int64_t     GetAppVersionCode();
     virtual const char* GetApkPath();
     virtual const char* GetApkMD5();
+    virtual uint32_t    GetStringHash(const char* str, size_t len = 0); // murmur3 hash
+    virtual uint32_t    GetCRC32(const void* str, size_t len);
 
 
     // Inlines (shortcuts for you!)
