@@ -175,7 +175,7 @@ inline float clampfloat(const float min_val, const float max_val, float v)
 }
 inline void clampfloat(float min, float max, float* v)
 {
-    if(v) *v = clampint(min, max, *v);
+    if(v) *v = clampfloat(min, max, *v);
 }
 inline float lerp(float a, float b, float t)
 {
