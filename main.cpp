@@ -668,7 +668,7 @@ void StartAMLRightNow(const char* libsArray = NULL)
     g_bNoModsInLog = cfg->GetBool("NoModsInCrashLog", false, "DevTools");
     g_bMLSOnlyManualSaves = cfg->GetBool("MLSOnlyManualSaves", false, "DevTools");
     g_bDumpAllThreads = cfg->GetBool("CrashLogFromAllThreads", true, "DevTools");
-    g_bDumpThreadRegisters = cfg->GetBool("CrashLogFromAllThreads", true, "DevTools");
+    g_bDumpThreadRegisters = cfg->GetBool("CrashLogThreadRegisters", true, "DevTools");
     g_bMoreRegsInfo = cfg->GetBool("MoreRegistersInfo", true, "DevTools");
 
     cfg->Save();

@@ -2,9 +2,12 @@
 #include <modslist.h>
 
 #include <fstream>
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <time.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <sys/system_properties.h> // __system_property_get
 #include <unistd.h>
 #include <dlfcn.h>
@@ -14,6 +17,8 @@
 #include "jcrasher.h"
 
 #define STACKDUMP_SIZE 0x510
+#define DUMP_BUDGET_MSECS 5000
+#define WATCHDOG_KILL_SECS 15
 static int g_nLogFileFd = -1;
 
 struct sigaction newSigaction[7];
@@ -195,6 +200,9 @@ inline const char* GetFilenamePart(const char* path)
 }
 
 static volatile sig_atomic_t g_handling_signal = 0;
+static volatile pid_t g_nDumpingTid = 0;
+static pid_t g_nHandlerPid = 0;
+static char g_szLaunchTime[40] = "unknown";
 static void ContinueToOldHandler(int sig, siginfo_t* si, void* ctx)
 {
     int id = SignalInnerId(sig);
@@ -235,10 +243,88 @@ static void ContinueToOldHandler(int sig, siginfo_t* si, void* ctx)
     _exit(128 + sig);
 }
 
+static pid_t RawFork()
+{
+    // libc's fork() takes the allocator's locks, and we may have crashed holding them.
+    return (pid_t)syscall(SYS_clone, SIGCHLD, 0, 0, 0, 0);
+}
+
+// Mods run after the dump and can hang on any lock. SIGKILL cannot be blocked.
+static void ArmWatchdog()
+{
+    const pid_t target = (pid_t)syscall(SYS_getpid);
+    const pid_t middle = RawFork();
+    if(middle == 0)
+    {
+        if(RawFork() == 0)
+        {
+            // Raw: close() runs fdsan. An inherited window fd keeps the dead app on screen.
+            for(int fd = 3; fd < 1024; ++fd) syscall(SYS_close, fd);
+
+            const timespec tick = { 0, 100000000 };
+            for(int i = 0; i < WATCHDOG_KILL_SECS * 10; ++i)
+            {
+                nanosleep(&tick, NULL);
+                if(kill(target, 0) != 0 && errno == ESRCH) _exit(0);
+            }
+            kill(target, SIGKILL);
+        }
+        _exit(0);
+    }
+    if(middle > 0)
+    {
+        int status;
+        while(waitpid(middle, &status, 0) < 0 && errno == EINTR) { }
+    }
+}
+
+// One write per line. Reads only what is mapped: a bad read in here kills the process.
+static void DumpHexLines(int fd, const uint8_t* data, int size)
+{
+    const int readable = (int)JCrasher::ReadableBytes((uintptr_t)data, size);
+    if(readable < size)
+    {
+        fd_printf("[only %d of %d bytes are readable]\n", readable, size);
+        size = readable;
+    }
+
+    for(int start = 0; start < size; start += 16)
+    {
+        const int end = (start + 16 < size) ? start + 16 : size;
+        char line[128];
+        int len = 0;
+        for(int i = start; i < end; ++i) len += snprintf(line + len, sizeof(line) - len, " %02X", data[i]);
+        len += snprintf(line + len, sizeof(line) - len, " (SP+0x%03X) [", start);
+        for(int i = start; i < end; ++i)
+        {
+            const unsigned char c = data[i];
+            line[len++] = (std::isalnum(c) || std::ispunct(c)) ? (char)c : '.';
+        }
+        line[len++] = ']';
+        line[len++] = '\n';
+        write(fd, line, len);
+    }
+}
+
 void Handler(int sig, siginfo_t *si, void *ptr)
 {
-    if(g_handling_signal) ContinueToOldHandler(sig, si, ptr);
-    g_handling_signal = 1;
+    // A forked child inherits this handler. It must not reopen the log with O_TRUNC.
+    if((pid_t)syscall(SYS_getpid) != g_nHandlerPid) _exit(128 + sig);
+
+    JCrasher::NestedFaultRecover();
+
+    if(__sync_lock_test_and_set(&g_handling_signal, 1))
+    {
+        // Faulted in our own unguarded code or in a mod's crash callback.
+        if((pid_t)syscall(SYS_gettid) == g_nDumpingTid) ContinueToOldHandler(sig, si, ptr);
+
+        // Another thread. Chaining here would kill the process mid-dump.
+        const timespec tick = { 0, 100000000 };
+        for(int i = 0; i < (WATCHDOG_KILL_SECS + 2) * 10; ++i) nanosleep(&tick, NULL);
+        _exit(128 + sig);
+    }
+    g_nDumpingTid = (pid_t)syscall(SYS_gettid);
+    ArmWatchdog();
 
     char *stack;
     ucontext_t* ucontext = (ucontext_t*)ptr;
@@ -264,7 +350,10 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         goto skip_logging;
     }
 
-    fd_print("!!! THIS IS A CRASH LOG !!!\nIf you are experiencing a crash, give us this file.\n>>> DO NOT SEND US A SCREENSHOT OF THIS FILE <<<\n\n");
+    fd_print("!!! THIS IS A CRASH LOG !!!\n");
+    fd_printf("Launch time: %s\n", g_szLaunchTime);
+    fd_print("\n>>> DO NOT SEND US A SCREENSHOT, WE NEED FILE <<<\n\n");
+    fd_print("  If you`re having problems using OFFICIAL mods, please report about\n  this problem in our OFFICIAL server: https://discord.gg/2MY7W39kBg\n  Please follow the rules and head to the #help section!\n\n");
 
     #define DEVVAR_LOG(__v) fd_printf(#__v " = %d | ", (int)(__v == true))
     fd_print("Config variables: | "); DEVVAR_LOG(g_bSimplerCrashLog); DEVVAR_LOG(g_bNoSPInLog);
@@ -478,6 +567,17 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         }
     #endif
 
+    // First: the mods list and the raw stack read memory that may be gone.
+    if(g_bSimplerCrashLog)
+    {
+        fd_print("\n----------------------------------------------------\nCall stack:\n- You disabled a detailed callstack dump!\n- This is not helpful. Do it if you know what you do.");
+    }
+    else
+    {
+        fd_print("\n----------------------------------------------------\nCall stack:\n");
+        JCrasher::DumpCurrentThread(g_nLogFileFd, ucontext);
+    }
+
     if(!g_bNoModsInLog)
     {
         modlist->PrintModsList(g_nLogFileFd);
@@ -490,6 +590,12 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         fd_printf(" - GUID: %s | Base " PTRFMT " | Path: %s\n", pLastModProcessed->m_pInfo->GUID(), (uintptr_t)pLastModProcessed->m_pHandle, pLastModProcessed->m_szLibPath);
     }
 
+    if(!g_bSimplerCrashLog && g_bDumpAllThreads)
+    {
+        fd_print("\n----------------------------------------------------\nCall stacks of other threads:\n");
+        JCrasher::DumpOtherThreads(g_nLogFileFd, DUMP_BUDGET_MSECS, g_bDumpThreadRegisters);
+    }
+
     #ifdef AML32
         stack = (char*)mcontext->arm_sp;
     #else
@@ -499,55 +605,20 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     if(!g_bNoSPInLog && stack)
     {
         fd_printf("\n----------------------------------------------------\nPrinting %d bytes of stack:\n", STACKDUMP_SIZE);
-        for(int i = 1; i <= STACKDUMP_SIZE; ++i)
-        {
-            fd_printf(" %02X", (int)(stack[i - 1]));
-            if(i % 16 == 0)
-            {
-                fd_printf(" (SP+0x%03X) [", (int)( 16 * ((i / 16) - 1) ));
-                int endv = i;
-                for(int j = i-16; j < endv && j < STACKDUMP_SIZE; ++j)
-                {
-                    char spc = stack[j];
-                    if(std::isalnum(spc) || std::ispunct(spc)) fd_printf("%c", spc);
-                    fd_print(".");
-                }
-                fd_print("]\n");
-            }
-        }
+        DumpHexLines(g_nLogFileFd, (const uint8_t*)stack, STACKDUMP_SIZE);
     }
     else if(!stack)
     {
         fd_print("\n----------------------------------------------------\n- A program stack is missing..?!\n");
     }
 
-    if(g_bSimplerCrashLog)
-    {
-        fd_print("\n----------------------------------------------------\nCall stack:\n- You disabled a detailed callstack dump!\n- This is not helpful. Do it if you know what you do.");
-    }
-    else
-    {
-        fd_print("\n----------------------------------------------------\n");
-        uint32_t crasherFlags = JCrasher::DUMP_DIAGNOSTICS;
-        if(g_bDumpThreadRegisters) crasherFlags |= JCrasher::DUMP_REGISTERS;
-                
-        if(g_bDumpAllThreads)
-        {
-            fd_print("Call stack (of all threads):\n");
-            JCrasher::DumpAllThreadsFd(g_nLogFileFd, ucontext, crasherFlags, 64);
-        }
-        else
-        {
-            fd_print("Call stack:\n");
-            JCrasher::DumpCurrentThreadFd(g_nLogFileFd, ucontext, crasherFlags, 64);
-        }
-    }
-
-    fd_print("\n----------------------------------------------------\n\t\tEND OF REPORT\n----------------------------------------------------\n\n");
-    fd_print("If you`re having problems using OFFICIAL mods, please report about this problem in our OFFICIAL server:\n\t\thttps://discord.gg/2MY7W39kBg\nPlease follow the rules and head to the #help section!");
+    fd_print("\n----------------------------------------------------\n                    END OF REPORT.\n----------------------------------------------------");
     close(g_nLogFileFd);
     
   skip_logging:
+    // Mods can malloc, log or dlopen. A frozen thread may hold any of those locks.
+    JCrasher::ResumeOtherThreads();
+
     logger->Info("Notifying mods about the crash...");
     modlist->ProcessCrash(dlInfo.dli_fname ? GetFilenamePart(dlInfo.dli_fname) : "", sig, si->si_code, (uintptr_t)dlInfo.dli_fbase, mcontext);
     logger->Info("Telling mods to unload after the crash...");
@@ -561,10 +632,22 @@ void Handler(int sig, siginfo_t *si, void *ptr)
                          sigaction(_code, sigbreak, oldSigaction + SignalInnerId(_code))
 void StartSignalHandler()
 {
-    stackstruct.ss_sp = &signalstack[0];
-    stackstruct.ss_size = sizeof(signalstack);
-    stackstruct.ss_flags = 0;
-    sigaltstack(&stackstruct, NULL);
+    g_nHandlerPid = (pid_t)syscall(SYS_getpid);
+
+    // localtime_r is not safe in a crash handler, so this is taken up front.
+    const time_t launchTime = time(NULL);
+    struct tm launchLocal;
+    if(localtime_r(&launchTime, &launchLocal)) strftime(g_szLaunchTime, sizeof(g_szLaunchTime), "%Y-%m-%d %H:%M:%S %z", &launchLocal);
+
+    // bionic normally gave this thread a guarded stack already, keep that one.
+    stack_t current = {};
+    if(sigaltstack(NULL, &current) != 0 || (current.ss_flags & SS_DISABLE))
+    {
+        stackstruct.ss_sp = &signalstack[0];
+        stackstruct.ss_size = sizeof(signalstack);
+        stackstruct.ss_flags = 0;
+        sigaltstack(&stackstruct, NULL);
+    }
 
     struct sigaction* sigbreak = NULL;
 
@@ -576,5 +659,5 @@ void StartSignalHandler()
     HANDLESIG(SIGSTKFLT);
     HANDLESIG(SIGTRAP);
 
-    JCrasher::InitAllThreadsDumper();
+    JCrasher::Init();
 }
