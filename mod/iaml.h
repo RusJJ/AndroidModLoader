@@ -393,6 +393,40 @@ ReturnType CallVirtual(void* instance, int index, Args... args)
     return function(instance, args...);
 }
 
+class JUTFString
+{
+public:
+    inline JUTFString(jstring jstr, JNIEnv* env = NULL) : m_jStr(jstr), m_szChars(NULL)
+    {
+        m_pEnv = env ? env : aml->GetJNIEnvironment();
+        if(m_pEnv && m_jStr) m_szChars = m_pEnv->GetStringUTFChars(m_jStr, NULL);
+    }
+    inline ~JUTFString()
+    {
+        if(m_pEnv && m_jStr && m_szChars) m_pEnv->ReleaseStringUTFChars(m_jStr, m_szChars);
+    }
+    inline const char* c_str() const { return m_szChars ? m_szChars : ""; }
+    inline operator const char*() const { return c_str(); }
+    inline operator bool() const { return m_szChars != NULL; }
+
+private:
+    JNIEnv* m_pEnv;
+    jstring m_jStr;
+    const char* m_szChars;
+};
+
+inline bool ClearJNIException(JNIEnv* env = NULL)
+{
+    if(!env) env = aml->GetJNIEnvironment();
+    if(env && env->ExceptionCheck())
+    {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        return true;
+    }
+    return false;
+}
+
 
 
 /* Do not use big conversions */
