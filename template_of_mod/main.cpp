@@ -15,8 +15,8 @@ MYMODCFG(net.rusjj.mymod.guid, AML Mod Template, 1.0, RusJJ)
 
 uintptr_t pGameLibrary = 0;
 ConfigEntry* pCfgMyBestEntry;
-FLogger file_log("warns.txt"); // /sdcard/Documents/net.rusjj.mymod.guid/warns.txt
-FLogger file_log2("baa/errors.log"); // /sdcard/Documents/net.rusjj.mymod.guid/baa/errors.log
+FLogger file_log("warns.txt"); // /sdcard/Documents/AMLModLogs/net.rusjj.mymod.guid/warns.txt
+FLogger file_log2("baa/errors.log"); // /sdcard/Documents/AMLModLogs/net.rusjj.mymod.guid/baa/errors.log
 
 ON_MOD_LOAD()
 {

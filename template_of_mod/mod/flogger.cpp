@@ -40,12 +40,12 @@ bool FLogger::OpenViaMediaStore()
         if(subLen >= sizeof(subDir)) subLen = sizeof(subDir) - 1;
         memcpy(subDir, m_szFileName, subLen);
         subDir[subLen] = 0;
-        snprintf(relPath, sizeof(relPath), "Documents/%s/%s/", modinfo->GUID(), subDir);
+        snprintf(relPath, sizeof(relPath), "Documents/AMLModLogs/%s/%s/", modinfo->GUID(), subDir);
         snprintf(displayName, sizeof(displayName), "%s", lastSlash + 1);
     }
     else
     {
-        snprintf(relPath, sizeof(relPath), "Documents/%s/", modinfo->GUID());
+        snprintf(relPath, sizeof(relPath), "Documents/AMLModLogs/%s/", modinfo->GUID());
         snprintf(displayName, sizeof(displayName), "%s", m_szFileName);
     }
 
@@ -160,11 +160,11 @@ bool FLogger::Open()
         size_t len = strlen(root);
         if(root[len - 1] == '/')
         {
-            snprintf(fullPath, sizeof(fullPath), "%sDocuments/%s/%s", root, modinfo->GUID(), m_szFileName);
+            snprintf(fullPath, sizeof(fullPath), "%sDocuments/AMLModLogs/%s/%s", root, modinfo->GUID(), m_szFileName);
         }
         else
         {
-            snprintf(fullPath, sizeof(fullPath), "%s/Documents/%s/%s", root, modinfo->GUID(), m_szFileName);
+            snprintf(fullPath, sizeof(fullPath), "%s/Documents/AMLModLogs/%s/%s", root, modinfo->GUID(), m_szFileName);
         }
 
         char dirPath[512];
