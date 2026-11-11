@@ -1,5 +1,6 @@
 #include <mod/amlmod.h>
 #include <mod/logger.h>
+#include <mod/flogger.h>
 #include <mod/config.h>
 
 MYMODCFG(net.rusjj.mymod.guid, AML Mod Template, 1.0, RusJJ)
@@ -14,10 +15,14 @@ MYMODCFG(net.rusjj.mymod.guid, AML Mod Template, 1.0, RusJJ)
 
 uintptr_t pGameLibrary = 0;
 ConfigEntry* pCfgMyBestEntry;
+FLogger file_log("warns.txt"); // /sdcard/Documents/net.rusjj.mymod.guid/warns.txt
+FLogger file_log2("baa/errors.log"); // /sdcard/Documents/net.rusjj.mymod.guid/baa/errors.log
 
-extern "C" void OnModLoad()
+ON_MOD_LOAD()
 {
     logger->SetTag("Mod Template");
+    
+    file_log.Write("Loading the mod...");
     
     pGameLibrary = aml->GetLib("libMyGame.so");
     if(pGameLibrary)
@@ -27,6 +32,7 @@ extern "C" void OnModLoad()
     else
     {
         logger->Error("MyGame mod is not loaded :(");
+        file_log2.Error("Mod is not loaded!");
         return; // Do not load our mod?
     }
 
@@ -40,4 +46,6 @@ extern "C" void OnModLoad()
     delete Config::pLastEntry; // Clean-up of the latest ConfigEntry*
     
     cfg->Save(); // Will only save if something was changed
+    
+    file_log.Info("Mod is loaded, config saved.");
 }
