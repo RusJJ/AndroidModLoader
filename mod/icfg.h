@@ -5,6 +5,8 @@
 #ifndef _ICFG
 #define _ICFG
 
+#define CFG_INTERFACE_STR "AMLConfig"
+
 class ICFG
 {
 public:

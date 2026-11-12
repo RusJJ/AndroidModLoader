@@ -35,6 +35,7 @@
 
 // Should be after config.h in main.cpp
 #include <icfg_desc.h>
+#include <iaudio_desc.h>
 // Should be after config.h in main.cpp
 
 #include <interfaces.h>
@@ -76,12 +77,12 @@ JNIEnv* g_env = NULL;
 std::unordered_map<std::string, jobject> g_InjectedInstances;
 
 // Main
-static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.4.1", "RusJJ aka [-=KILL MAN=-]");
+static ModInfo modinfoLocal("net.rusjj.aml", "AML Core", "1.5.0", "RusJJ aka [-=KILL MAN=-]");
 ModInfo* amlmodinfo = &modinfoLocal;
 
-static Config cfgLocal("ModLoaderCore");
-Config* cfg = &cfgLocal;
-static CFG icfgLocal; ICFG* icfg = &icfgLocal;
+static Config cfgLocal("ModLoaderCore"); Config* cfg = &cfgLocal;
+static CFG icfgLocal;                    ICFG* icfg = &icfgLocal;
+static Audio iaudioLocal;                IAudio* iaudio = &iaudioLocal;
 
 inline size_t __strlen(const char *str)
 {
@@ -184,7 +185,7 @@ inline bool CopyFile(const char* file, const char* dest)
         }
     }
 
-    bool success = !ferror(source) && !ferror(target) && fclose(target) == 0;
+    bool success = !ferror(source) && !ferror(target) && (fclose(target) == 0);
     fclose(source);
     return success;
 }
@@ -244,14 +245,14 @@ void LoadMods(const char* path)
         const char* gameName = HasFakeAppName() ? g_szFakeAppName : g_szAppName;
         while ((diread = readdir(dir)) != NULL)
         {
-            if(diread->d_name[0] == '.' &&
-                (diread->d_name[1] == '.' || diread->d_name[1] == 0)) continue; // Skip . and ..
+            if(diread->d_name[0] == '.' && (diread->d_name[1] == '.' || diread->d_name[1] == 0)) continue; // Skip . and ..
             if(!EndsWithSO(diread->d_name))
             {
                 // Useless info for us
                 //logger->Error("File %s is not a mod, atleast it is NOT .SO file!", diread->d_name);
                 continue;
             }
+
             int srcLen = snprintf(buf, sizeof(buf), "%s/%s", path, diread->d_name);
             int tmpLen = snprintf(dataBuf, sizeof(dataBuf), "%s/%s", g_szDataDir, diread->d_name);
             if(srcLen < 0 || srcLen >= (int)sizeof(buf) || tmpLen < 0 || tmpLen >= (int)sizeof(dataBuf))
@@ -259,6 +260,7 @@ void LoadMods(const char* path)
                 logger->Error("Skipping mod %s: path is too long", diread->d_name);
                 continue;
             }
+            
             //unlink(dataBuf);
             chmod(dataBuf, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP); // XMDS
             int removeStatus = remove(dataBuf);
@@ -554,8 +556,9 @@ void StartAMLRightNow(const char* libsArray = NULL)
     
     /* Must Have for mods */
     modlist->AddMod(amlmodinfo, 0, "localpath (core)");
-    interfaces->Register("AMLInterface", aml);
-    interfaces->Register("AMLConfig", icfg);
+    interfaces->Register(AML_INTERFACE_STR, aml);
+    interfaces->Register(CFG_INTERFACE_STR, icfg);
+    interfaces->Register(AUDIO_INTERFACE_STR, iaudio);
 
     /* Permissions! We really need them for configs! */
     /*if(!HasPermissionGranted(g_env, appContext, "READ_EXTERNAL_STORAGE") ||

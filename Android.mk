@@ -24,14 +24,14 @@ LOCAL_CPP_EXTENSION     := .cpp .cc
 LOCAL_SHARED_LIBRARIES  := armpatch gloss
 LOCAL_MODULE            := AML
 LOCAL_SRC_FILES         := main.cpp src/interface.cpp src/aml.cpp src/modpaks.cpp src/signal.cpp \
-                           src/modslist.cpp src/icfg.cpp src/vtable_hooker.cpp src/alog.cpp src/mls.cpp \
+                           src/modslist.cpp src/icfg.cpp src/vtable_hooker.cpp src/alog.cpp src/mls.cpp src/iaudio.cpp \
                            mod/logger.cpp mod/config.cpp
 
  ## FLAGS ##
 LOCAL_CFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -DNO_HOOKDEFINES -DFASTMAN92_CODE -std=c17 -mthumb
 LOCAL_CXXFLAGS += -O2 -mfloat-abi=softfp -DNDEBUG -D__AML -DNO_HOOKDEFINES -DFASTMAN92_CODE -std=c++17 -mthumb -fexceptions
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include $(LOCAL_PATH)/AML_PrecompiledLibs/include
-LOCAL_LDLIBS += -llog -ldl -landroid
+LOCAL_LDLIBS += -llog -ldl -landroid -lOpenSLES -lmediandk
 
 # Uncomment these two lines to add IL2CPP support! (NOT WORKING)
 #    LOCAL_SRC_FILES += il2cpp/gc.cpp il2cpp/functions.cpp

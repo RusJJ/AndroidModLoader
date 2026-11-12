@@ -17,6 +17,8 @@
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 
+#define AML_INTERFACE_STR "AMLInterface"
+
 // Because the name was changed to be more understandable
 #define PlaceB PlaceJMP
 
