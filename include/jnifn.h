@@ -24,11 +24,6 @@ inline LocalRef<T> MakeJniLocalRef(JNIEnv* env, T ref)
     });
 }
 
-inline void ClearJNIException(JNIEnv* env)
-{
-    if(env && env->ExceptionCheck()) env->ExceptionClear();
-}
-
 inline jobject GetGlobalContext(JNIEnv *env)
 {
     if(!env) return NULL;
