@@ -30,6 +30,9 @@
 #ifndef AUDIO_MAX_VOICES
     #define AUDIO_MAX_VOICES                32
 #endif
+#ifndef AUDIO_VOLUME_POWER
+    #define AUDIO_VOLUME_POWER              2.0f // perceptual volume curve like in games, 1 = linear
+#endif
 #ifndef AUDIO_STREAM_FRAMES
     #define AUDIO_STREAM_FRAMES             32768 // power of 2
 #endif
@@ -93,7 +96,7 @@ struct AudioVoice
 {
     AudioSound* pSound;
     double fPos;
-    float fVolume;
+    float fGain;
     bool bLoop, bPaused;
     int nState;
     int64_t nStopIn, nPauseIn;
@@ -126,9 +129,13 @@ struct UnloadEvent
     void* pUserData;
 };
 static std::vector<UnloadEvent> g_unloadEvents;
-static float g_fGlobalVolume = 1.0f;
+static float g_fGlobalVolume = 1.0f, g_fGlobalGain = 1.0f;
 static int32_t g_nOutRate = 48000;
 
+static float VolumeToGain(float fVolume)
+{
+    return (fVolume > 0.0f) ? powf(fVolume, AUDIO_VOLUME_POWER) : 0.0f;
+}
 static void PushEvent(AudioVoice& v, int nType, int nReason)
 {
     AudioSound* snd = v.pSound;
@@ -232,7 +239,7 @@ static void MixVoices(float* out, int32_t frames)
         int32_t n = frames;
         if(v.nStopIn >= 0 && v.nStopIn < n) n = (int32_t)v.nStopIn;
         if(v.nPauseIn >= 0 && v.nPauseIn < n) n = (int32_t)v.nPauseIn;
-        float vol = v.fVolume * g_fGlobalVolume / 32768.0f;
+        float vol = v.fGain * g_fGlobalGain / 32768.0f;
         if(snd->pStream ? MixStream(v, snd->pStream, out, n, vol) : MixSound(v, snd, out, n, vol))
         {
             bEvents = true;
@@ -1088,7 +1095,7 @@ AudioVoiceHandle Audio::Play(AudioSoundHandle hSound, float fVolume, bool bLoop)
         for(AudioVoice& v : g_voices)
         {
             if(v.nState != VOICE_FREE) continue;
-            v = { snd, 0.0, fmaxf(fVolume, 0.0f), bLoop, false, VOICE_ACTIVE, -1, -1 };
+            v = { snd, 0.0, VolumeToGain(fVolume), bLoop, false, VOICE_ACTIVE, -1, -1 };
             voice = &v;
             break;
         }
@@ -1173,12 +1180,13 @@ void Audio::SetVolume(AudioVoiceHandle hVoice, float fVolume)
 {
     if(!hVoice) return;
     std::lock_guard<std::mutex> lock(g_audioMutex);
-    hVoice->fVolume = fmaxf(fVolume, 0.0f);
+    hVoice->fGain = VolumeToGain(fVolume);
 }
 void Audio::SetGlobalVolume(float fVolume)
 {
     std::lock_guard<std::mutex> lock(g_audioMutex);
     g_fGlobalVolume = fmaxf(fVolume, 0.0f);
+    g_fGlobalGain = VolumeToGain(fVolume);
 }
 float Audio::GetGlobalVolume()
 {
