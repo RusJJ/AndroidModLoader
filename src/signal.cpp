@@ -16,6 +16,10 @@
 #include <cxxabi.h> // char* demangled = abi::__cxa_demangle(mangled, nullptr, nullptr, &status); free(demangled);
 #include "jcrasher.h"
 
+#if __has_include("jhook.h")
+    #include "jhook.h"
+#endif
+
 #define STACKDUMP_SIZE 0x510
 #define DUMP_BUDGET_MSECS 5000
 #define WATCHDOG_KILL_SECS 15
@@ -589,6 +593,26 @@ void Handler(int sig, siginfo_t *si, void *ptr)
         fd_printf("%s (%s, version %s)\n", pLastModProcessed->m_pInfo->Name(), pLastModProcessed->m_pInfo->Author(), pLastModProcessed->m_pInfo->VersionString());
         fd_printf(" - GUID: %s | Base " PTRFMT " | Path: %s\n", pLastModProcessed->m_pInfo->GUID(), (uintptr_t)pLastModProcessed->m_pHandle, pLastModProcessed->m_szLibPath);
     }
+
+    #ifdef __JHOOK_H
+    {
+        int trampsSize = JHook::g_nInstrStoresNum * sizeof(JHook::InstrStore);
+        uint8_t* tramps = (uint8_t*)JHook::g_InstrStorage;
+        fd_printf("\n----------------------------------------------------\nPrinting %d bytes of %d trampolines:\n", trampsSize, JHook::g_nInstrStoresNum);
+        fd_printf(BYBIT("Tramps Base: 0x%08X\n", "Tramps Base: 0x%016lX\n"), (uintptr_t)tramps);
+        DumpHexLines(g_nLogFileFd, tramps, trampsSize);
+
+        fd_printf("\n----------------------------------------------------\nPrinting bytes of %d gaps:\n", JHook::g_nGapStoresNum);
+        for(int t = 0; t < JHook::g_nGapStoresNum; ++t)
+        {
+            JHook::GapStore& g = JHook::g_GapStorage[t];
+            int gapSize = (int)(g.current - g.start);
+            uint8_t* gapData = (uint8_t*)g.start;
+            fd_printf(BYBIT("Gap %d Base: 0x%08X\n", "Gap %d Base: 0x%016lX\n"), t, (uintptr_t)gapData);
+            DumpHexLines(g_nLogFileFd, gapData, gapSize);
+        }
+    }
+    #endif
 
     if(!g_bSimplerCrashLog && g_bDumpAllThreads)
     {

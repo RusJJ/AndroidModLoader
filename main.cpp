@@ -788,9 +788,9 @@ void StartAMLRightNow(const char* libsArray = NULL)
     pLastModProcessed = NULL;
 
     #ifdef AML32
-        snprintf(g_szUserAgent, sizeof(g_szUserAgent), "AndroidModLoader/%s (Android; ARM; ARM32)", amlmodinfo->VersionString());
+        snprintf(g_szUserAgent, sizeof(g_szUserAgent), "AndroidModLoader/v%s (Android; ARM; ARM32)", amlmodinfo->VersionString());
     #else
-        snprintf(g_szUserAgent, sizeof(g_szUserAgent), "AndroidModLoader/%s (Android; ARM; ARM64)", amlmodinfo->VersionString());
+        snprintf(g_szUserAgent, sizeof(g_szUserAgent), "AndroidModLoader/v%s (Android; ARM; ARM64)", amlmodinfo->VersionString());
     #endif
 
     /* Fake crash for crash handler testing (does not work?) */

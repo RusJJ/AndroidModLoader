@@ -407,3 +407,4 @@ GTASA_STRUCTS.h
 RW_STRUCTS.h
 .vscode/settings.json
 jc_test.cpp
+include/jhook.h
