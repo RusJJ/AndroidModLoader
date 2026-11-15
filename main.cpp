@@ -53,7 +53,7 @@ pid_t g_MainThreadID = 0;
 bool g_bShowUpdatedToast, g_bShowUpdateFailedToast, g_bEnableFileDownloads;
 bool g_bCrashAML = false, g_bNoMods = false, g_bSimplerCrashLog = false, g_bNoSPInLog = false,
      g_bNoModsInLog = false, g_bMLSOnlyManualSaves = false, g_bDumpAllThreads = true,
-     g_bMoreRegsInfo = true, g_bDumpThreadRegisters = true;
+     g_bMoreRegsInfo = true, g_bDumpThreadRegisters = true, g_bDumpJHookSystemData = false;
 int g_nEnableNews, g_nDownloadTimeout;
 int g_nAndroidSDKVersion = 0, g_nFailedToLoad = 0, g_nLatestDownloadErrorCode = 0;
 ConfigEntry* g_pLastNewsId;
@@ -673,6 +673,7 @@ void StartAMLRightNow(const char* libsArray = NULL)
     g_bDumpAllThreads = cfg->GetBool("CrashLogFromAllThreads", true, "DevTools");
     g_bDumpThreadRegisters = cfg->GetBool("CrashLogThreadRegisters", true, "DevTools");
     g_bMoreRegsInfo = cfg->GetBool("MoreRegistersInfo", true, "DevTools");
+    g_bDumpJHookSystemData = cfg->GetBool("DumpJHookSystemData", false, "DevTools");
 
     cfg->Save();
 

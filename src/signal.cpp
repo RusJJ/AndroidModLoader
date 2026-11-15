@@ -28,12 +28,12 @@ static int g_nLogFileFd = -1;
 struct sigaction newSigaction[7];
 struct sigaction oldSigaction[7];
 extern bool g_bSimplerCrashLog, g_bNoSPInLog, g_bNoModsInLog, g_bDumpAllThreads,
-            g_bMoreRegsInfo, g_bDumpThreadRegisters;
+            g_bMoreRegsInfo, g_bDumpThreadRegisters, g_bDumpJHookSystemData;
 extern int g_nAndroidSDKVersion;
 
 static stack_t stackstruct;
 static char signalstack[256 * 1024]; // 256kB
-static char signalbuf[1024];
+static char signalbuf[2048]; // 2kB
 #define fd_printf(format, ...) \
     do{ int _macro_len = snprintf(signalbuf, sizeof(signalbuf), format, ##__VA_ARGS__); \
         if(_macro_len > 0) write(g_nLogFileFd, signalbuf, _macro_len); } while(0)
@@ -595,6 +595,7 @@ void Handler(int sig, siginfo_t *si, void *ptr)
     }
 
     #ifdef __JHOOK_H
+    if(g_bDumpJHookSystemData)
     {
         int trampsSize = JHook::g_nInstrStoresNum * sizeof(JHook::InstrStore);
         uint8_t* tramps = (uint8_t*)JHook::g_InstrStorage;
