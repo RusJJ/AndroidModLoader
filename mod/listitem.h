@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __LISTITEM_H
+#define __LISTITEM_H
 
 #include <stddef.h> // use of undeclared identifier 'NULL'
 
@@ -9,19 +10,21 @@
     unsigned int nCount; \
     typedef __cls_name MyClass; \
     \
-    inline unsigned int Count() { return !this ? 0 : First()->nCount; } \
+    inline unsigned int Count() { __cls_name *self = this; __asm__("" : "+r"(self)); return !self ? 0 : First()->nCount; } \
     inline __cls_name *First() \
     { \
-        if(!this) return NULL; \
         __cls_name *first = this; \
+        __asm__("" : "+r"(first)); \
+        if(!first) return NULL; \
         if(first->pPrev == this) { first->pPrev = NULL; return this; } \
         while(first->pPrev != NULL) first = first->pPrev; \
         return first; \
     } \
     inline __cls_name *CalcLast() \
     { \
-        if(!this) return NULL; \
         __cls_name *last = this; \
+        __asm__("" : "+r"(last)); \
+        if(!this) return NULL; \
         while(last->pNext != NULL) last = last->pNext; \
         return last; \
     } \
@@ -100,3 +103,5 @@
 #define LIST_FOR_REVERSE(__list) for(auto item = __list ? __list->pLast : NULL, itemPrev = item ? item->pPrev : NULL; item != NULL; item = itemPrev, itemPrev = item ? item->pPrev : NULL)
 #define LIST_FOR_REVERSE_FAST(__list) for(auto item = __list ? __list->pLast : NULL; item != NULL; item = item->pPrev)
 #define LIST_RESET(__list, __resetFunc) LIST_FOR(__list) { __resetFunc(); item->Remove(&__list); }
+
+#endif // __LISTITEM_H
