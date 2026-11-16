@@ -3,6 +3,8 @@
 
 #include <string>
 #include <jni.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <unordered_map>
@@ -350,6 +352,7 @@ inline jobject InjectSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSi
     if (!fp.Get()) return NULL;
     fwrite(dexBytes, 1, dexSize, fp.Get());
     fp.Release();
+    chmod(dexFilePath.c_str(), S_IRUSR | S_IRGRP | S_IROTH); // android 14+ fix
 
     auto dexLoaderClass = MakeJniLocalRef(env, env->FindClass("dalvik/system/DexClassLoader"));
     if(!dexLoaderClass.Get()) { ClearJNIException(env); return NULL; }
