@@ -31,6 +31,16 @@ LIST_START(MLSKeychain)
     MLSStorage storage;
 LIST_END()
 
+static inline bool IsValidMLSKey(const char* key)
+{
+    if(!key) return false;
+    for(int i = 0; i < MAX_VAL_LEN; ++i)
+    {
+        if(key[i] == 0) return true;
+    }
+    return false;
+}
+
 void MLS::LoadFile()
 {
     char path[256];
@@ -104,6 +114,8 @@ void MLS::DeleteValue(const char* key)
 
 void MLS::SetInt(const char* key, int32_t val)
 {
+    if(!IsValidMLSKey(key)) return;
+
     LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
@@ -124,6 +136,8 @@ void MLS::SetInt(const char* key, int32_t val)
 }
 void MLS::SetFloat(const char* key, float val)
 {
+    if(!IsValidMLSKey(key)) return;
+
     LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
@@ -146,6 +160,8 @@ void MLS::SetFloat(const char* key, float val)
 #pragma clang diagnostic ignored "-Wformat" // dumb ass clang cries about "ld needs to be lld" and "lld needs to be ld" at the SAME TIME
 void MLS::SetInt64(const char* key, int64_t val)
 {
+    if(!IsValidMLSKey(key)) return;
+
     LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))
@@ -167,6 +183,8 @@ void MLS::SetInt64(const char* key, int64_t val)
 #pragma clang diagnostic pop
 void MLS::SetStr(const char* key, const char *val)
 {
+    if(!IsValidMLSKey(key)) return;
+
     LIST_FOR_FAST(listSets)
     {
         if(!strcmp(item->storage.szKey, key))

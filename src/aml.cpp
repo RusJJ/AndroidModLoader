@@ -6,6 +6,7 @@
 #include <mls.h>
 #include <unordered_map>
 #include <sstream>
+#include <mutex>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -272,6 +273,8 @@ void AML::PlaceBLX(uintptr_t addr, uintptr_t dest)
 static std::vector<int> ParsePattern(const char* pattern)
 {
     std::vector<int> bytes;
+    if(!pattern || !pattern[0]) return bytes;
+
     std::stringstream ss(pattern);
     std::string hex;
     while(ss >> hex)
@@ -280,9 +283,16 @@ static std::vector<int> ParsePattern(const char* pattern)
         {
             bytes.push_back(-1);
         }
+        else if(hex.size() <= 2 && isxdigit((unsigned char)hex[0]) && 
+                ( hex.size() == 1 || isxdigit((unsigned char)hex[1])) )
+        {
+            bytes.push_back((int)(std::strtoul(hex.c_str(), NULL, 16)));
+        }
         else
         {
-            bytes.push_back((int)(std::stoul(hex, nullptr, 16)));
+            logger->Error("Bad bytes pattern \"%s\" in \"%s\"!", hex.c_str(), pattern);
+            bytes.clear();
+            break;
         }
     }
     return bytes;
@@ -961,7 +971,7 @@ void AML::ShowDialog(const char* title, const char* message, const char* buttonT
 {
     if (!title || !message) return;
 
-    JNIEnv* env = GetJNIEnvironment();
+    JNIEnv* env = GetCurrentJNI();
     if(!env) return;
     
     jobject activityContext = ::GetCurrentActivity();
@@ -1112,7 +1122,7 @@ void AML::GetNewsString(char* buf, size_t len)
 
 int AML::GetAndroidSystemResID(const char* innerClass, const char* fieldName)
 {
-    JNIEnv* env = GetJNIEnvironment();
+    JNIEnv* env = GetCurrentJNI();
     if(!env || !innerClass || !fieldName) return 0;
 
     char classPath[128];
@@ -1271,7 +1281,7 @@ void AML::OpenURL(const char* url)
 {
     if(!url || !url[0]) return;
 
-    JNIEnv* env = GetJNIEnvironment();
+    JNIEnv* env = GetCurrentJNI();
     if(!env) return;
 
     jobject ctx = ::GetCurrentActivity();
@@ -1325,7 +1335,7 @@ void AML::OpenURL(const char* url)
 
 jobject AML::CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...)
 {
-    JNIEnv* env = GetJNIEnvironment();
+    JNIEnv* env = GetCurrentJNI();
     if(!env) return NULL;
 
     jclass jcls = env->FindClass(cls);
@@ -1360,7 +1370,7 @@ jobject AML::CallStaticJavaMethod(const char* cls, const char* method, const cha
 
 jobject AML::GetStaticJavaField(const char* cls, const char* field, const char* sig)
 {
-    JNIEnv* env = GetJNIEnvironment();
+    JNIEnv* env = GetCurrentJNI();
     if(!env) return NULL;
 
     jclass jcls = env->FindClass(cls);
@@ -1392,7 +1402,7 @@ jobject AML::GetStaticJavaField(const char* cls, const char* field, const char* 
 
 bool AML::SetStaticJavaField(const char* cls, const char* field, const char* sig, jobject value)
 {
-    JNIEnv* env = GetJNIEnvironment();
+    JNIEnv* env = GetCurrentJNI();
     if(!env) return false;
 
     jclass jcls = env->FindClass(cls);
