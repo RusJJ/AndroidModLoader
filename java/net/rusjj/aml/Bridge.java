@@ -116,6 +116,7 @@ public class Bridge
                 {
                     if(visible == a) visible = null;
                     Overlay.detach(a);
+                    closeDialogs(a);
                 }
                 @Override public void onActivityPaused(Activity a) {}
                 @Override public void onActivityCreated(Activity a, Bundle b) {}
@@ -212,8 +213,22 @@ public class Bridge
     }
 
     // Shown non-focusable first: a focusable window that is not immersive brings the system bars back
+    private static final WeakHashMap<AlertDialog, Activity> openDialogs = new WeakHashMap<>();
+    // Android drops the window of a destroyed screen without dismissing its dialogs, their callbacks would never run
+    private static void closeDialogs(Activity a)
+    {
+        for(Map.Entry<AlertDialog, Activity> e : new ArrayList<>(openDialogs.entrySet()))
+        {
+            if(e.getValue() != a) continue;
+            try { e.getKey().dismiss(); }
+            catch(RuntimeException ex) { Log.e("AndroidModLoader", "Cannot close a dialog", ex); }
+            openDialogs.remove(e.getKey());
+        }
+    }
+
     private static void present(AlertDialog dialog, Activity activity, Style style)
     {
+        openDialogs.put(dialog, activity);
         Window window = dialog.getWindow();
         View game = activity.getWindow().getDecorView();
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
@@ -261,8 +276,14 @@ public class Bridge
         if(style.gravity != 0) window.setGravity(style.gravity);
         if(style.width > 0)
         {
-            int screen = ctx.getResources().getDisplayMetrics().widthPixels;
-            window.setLayout((style.width <= 1.0f) ? (int)(screen * style.width) : (int)(style.width * density), ViewGroup.LayoutParams.WRAP_CONTENT);
+            // Again on every layout: a rotation changes the screen width under an open dialog
+            Runnable fit = () -> {
+                int screen = ctx.getResources().getDisplayMetrics().widthPixels;
+                int width = (style.width <= 1.0f) ? (int)(screen * style.width) : (int)(style.width * density);
+                if(window.getAttributes().width != width) window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+            };
+            fit.run();
+            window.getDecorView().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> fit.run());
         }
 
         Typeface font = loadFont(ctx, style.font);

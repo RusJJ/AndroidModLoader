@@ -1001,9 +1001,24 @@ bool AML::CreateDirRecursive(const char* path)
     return (mkdir(tmp, 0777) == 0 || errno == EEXIST);
 }
 
+// The visible screen. Global refs are never deleted, a mod may still hold one from an earlier call
 jobject AML::GetCurrentActivity()
 {
-    return ::GetCurrentActivity();
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return ::GetCurrentActivity();
+    auto visible = MakeJNILocalRef(env, GetVisibleActivity(env));
+    if(!visible.Get()) return NULL;
+
+    static std::mutex refsMutex;
+    static std::vector<jobject> refs;
+    std::lock_guard<std::mutex> lock(refsMutex);
+    for(jobject ref : refs)
+    {
+        if(env->IsSameObject(ref, visible.Get())) return ref;
+    }
+    jobject ref = env->NewGlobalRef(visible.Get());
+    if(ref) refs.push_back(ref);
+    return ref;
 }
 
 void AML::GetNewsString(char* buf, size_t len)

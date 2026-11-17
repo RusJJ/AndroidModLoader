@@ -539,7 +539,7 @@ int  GetLatestDownloadErrorCode();
 ```cpp
 JNIEnv*  GetJNIEnvironment();   JavaVM* GetJavaVM();
 jobject  GetAppContextObject(); jobject GetCurrentContext();
-jobject  GetCurrentActivity();
+jobject  GetCurrentActivity();          // layar yang dilihat pemain, pointer yang sama untuk layar yang sama
 bool     PushToJavaUIThread(void (*fn)(void*), void* data = NULL);
 jobject  CallStaticJavaMethod(const char* cls, const char* method, const char* sig, ...);
 jobject  GetStaticJavaField(const char* cls, const char* field, const char* sig);

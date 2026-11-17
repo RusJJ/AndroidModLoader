@@ -270,7 +270,7 @@ public:
     virtual bool        RemoveFile(const char* path);
     virtual bool        RemoveDir(const char* path, bool recursive = false);
     virtual bool        CreateDirRecursive(const char* path);
-    virtual jobject     GetCurrentActivity();
+    virtual jobject     GetCurrentActivity(); // The screen the player sees
     virtual void        GetNewsString(char* buf, size_t len);
     virtual int         GetAndroidSystemResID(const char* innerClass, const char* fieldName); // "style", "Theme_DeviceDefault_Alert"
     virtual int         ListDir(const char* path, ListDirCallback cb, void* data);
