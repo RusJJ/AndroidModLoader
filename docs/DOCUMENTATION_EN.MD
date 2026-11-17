@@ -411,6 +411,8 @@ const char* GetDeviceManufacturer();
 const char* GetDeviceModel();
 uint64_t GetTotalRAM();                            // bytes
 uint64_t GetAvailableRAM();                        // bytes, MemAvailable from /proc/meminfo
+int   GetThermalStatus();                          // PowerManager.THERMAL_STATUS_*: 0 none .. 6 shutdown, -1 below Android 10
+bool  IsCharging();                                // always false below Android 6
 ```
 
 ### Clipboard (AML 1.5.0)
@@ -449,11 +451,19 @@ Every dialog (and `ShowDialog`) also has a variation that takes a `DialogStyle` 
 ```cpp
 struct DialogStyle
 {
-    int      baseTheme;                 // android.R.style.*
-    uint32_t background, text, accent;  // ARGB
-    float    cornerRadius;              // dp
-    float    dimAmount;                 // 0.0 - 1.0, negative removes the dim
-}; // zero fields keep the theme's values
+    int         structSize;              // Set by the constructor, lets AML add fields later
+    int         baseTheme;               // android.R.style.*, 0 is the default theme
+    uint32_t    background, text, title, accent, border; // ARGB, 0 keeps the theme's
+    float       cornerRadius;            // dp, negative keeps the theme's
+    float       borderWidth;             // dp, 0 is no border
+    float       dimAmount;               // 0.0 - 1.0, negative keeps the theme's
+    float       textSize, titleSize;     // sp, 0 keeps the theme's
+    float       width;                   // Up to 1.0 is a part of the screen width, more is dp. 0 keeps the theme's
+    int         gravity;                 // android.view.Gravity (48 is top, 80 is bottom), 0 keeps the theme's
+    bool        cancelable;              // false: only the buttons close it, not Back or a tap outside
+    const char* font;                    // .ttf or .otf: an absolute path or a path inside APK assets. NULL keeps the theme's
+    DialogStyle();
+}; // the constructor keeps the theme's look, change only what you need
 
 void ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
 void ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, ...);
@@ -469,13 +479,25 @@ static void OnName(const char* text, void* data)
     if(text) snprintf(g_szName, sizeof(g_szName), "%s", text);
 }
 
-DialogStyle style = {};
+DialogStyle style;
 style.background   = 0xFF1E1E24;
 style.text         = 0xFFEEEEEE;
 style.accent       = 0xFF4FC3F7;
 style.cornerRadius = 16.0f;
 aml->ShowInputDialog(&style, "Player name", g_szName, OnName, NULL, "Up to 16 letters");
 ```
+
+### App lifecycle (AML 1.5.0)
+```cpp
+enum eLifecycleEvent { LIFECYCLE_PAUSE = 0, LIFECYCLE_RESUME, LIFECYCLE_FOCUS_LOST, LIFECYCLE_FOCUS_GAINED };
+typedef void(*LifecycleCallback)(int event, void* data);
+
+void AddLifecycleListener(LifecycleCallback cb, void* data = NULL);
+void RemoveLifecycleListener(LifecycleCallback cb, void* data = NULL);
+bool IsAppInForeground();
+bool HasWindowFocus();
+```
+AML only observes the game's activity and overrides nothing, so the game behaves exactly the same. Listeners run on AML's own thread, never on the game's UI thread, so a slow listener cannot delay the game; events still arrive in order. Pause/resume means the game went to the background or came back. Focus is also lost while the notification shade, a dialog or the keyboard covers the game. AML's own dialogs are not reported as focus changes, so showing one from a focus event cannot loop. The two getters only read a flag and are safe to call every frame. Nothing is set up until a mod calls one of these functions.
 
 ### Networking / downloads
 ```cpp
@@ -805,6 +827,7 @@ ON_MOD_UNLOAD()
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Device/UI |
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Dialogs with a result (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Clipboard |
+| `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Lifecycle |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | System info |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Target app identity/version |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Hook macros |

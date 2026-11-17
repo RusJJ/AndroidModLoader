@@ -10,6 +10,8 @@
 #include <atomic>
 #include <memory>
 #include <thread>
+#include <deque>
+#include <condition_variable>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -25,7 +27,7 @@
 
 #include <Gloss.h>
 
-#include <dex_dialogs.h>
+#include <dex_bridge.h>
 #include <httputils.h>
 #include <cryptutils.h>
 JMD5 g_MD5;
@@ -57,6 +59,8 @@ static LocalRef<T> MakeJNILocalRef(JNIEnv* env, T ref)
         if(localRef) env->DeleteLocalRef(localRef);
     });
 }
+
+static jobject GetVisibleActivity(JNIEnv* env);
 
 static char g_szAppVersionName[96] = "";
 static char g_szApkPath[512] = "";
@@ -403,16 +407,26 @@ const char* AML::GetSymNameXDL(void* ptr)
     return ARMPatch::GetSymNameXDL(ptr);
 }
 
+// Toasts need a Looper thread, so threads of mods and AML would fail
+struct SToastTask { std::string text; bool longerDuration; };
+static void ToastTask(void* data)
+{
+    SToastTask* task = (SToastTask*)data;
+    ShowToastMessage(GetCurrentJNI(), appContext, task->text.c_str(), task->longerDuration ? 1 : 0);
+    delete task;
+}
 void AML::ShowToast(bool longerDuration, const char* fmt, ...)
 {
     if(!fmt) return;
     
-    static char txt[512];
+    char txt[512];
     va_list args;
     va_start(args, fmt);
     vsnprintf(txt, sizeof(txt), fmt, args);
-    ShowToastMessage(GetCurrentJNI(), appContext, txt, longerDuration ? 1 : 0);
     va_end(args);
+
+    SToastTask* task = new SToastTask { txt, longerDuration };
+    if(!::PushToJavaUIThread(ToastTask, task)) ToastTask(task);
 }
 
 bool AML::DownloadFile(const char* url, const char* saveto)
@@ -708,92 +722,22 @@ void AML::CancelVibro()
     if(env && InitVibroJNI(env)) env->CallVoidMethod(g_VibratorObject, g_VibrateCancelMethod);
 }
 
-bool g_bBatteryInited = false;
-jstring g_pLevelStr;
-float g_fCachedScale;
-jmethodID g_GetLevelMethod;
-jobject g_BatteryIntent;
-float AML::GetBatteryLevel()
+static jobject NewSystemServiceRef(const char* name)
 {
     JNIEnv* env = GetCurrentJNI();
-    if(!env) return -1.0f;
+    jobject context = ::GetCurrentContext();
+    if(!env || !context) return NULL;
 
-    if(!g_bBatteryInited)
-    {
-        jobject context = ::GetCurrentContext();
-        if(!context) return -1.0f;
+    auto serviceName = MakeJNILocalRef(env, env->NewStringUTF(name));
+    auto service = MakeJNILocalRef(env, CallJavaMethod<jobject>(context, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;", serviceName.Get()));
+    return service.Get() ? env->NewGlobalRef(service.Get()) : NULL;
+}
 
-        auto intentFilterCls = MakeJNILocalRef(env, env->FindClass("android/content/IntentFilter"));
-        if(!intentFilterCls.Get()) { if(env->ExceptionCheck()) env->ExceptionClear(); return -1.0f; }
-        jmethodID ctor = env->GetMethodID(intentFilterCls.Get(), "<init>", "(Ljava/lang/String;)V");
-        auto action = MakeJNILocalRef(env, env->NewStringUTF("android.intent.action.BATTERY_CHANGED"));
-        if(!ctor || !action.Get())
-        {
-            if(env->ExceptionCheck()) env->ExceptionClear();
-            return -1.0f;
-        }
-        auto filter = MakeJNILocalRef(env, env->NewObject(intentFilterCls.Get(), ctor, action.Get()));
-        if(env->ExceptionCheck() || !filter.Get())
-        {
-            if(env->ExceptionCheck()) env->ExceptionClear();
-            return -1.0f;
-        }
-
-        auto contextCls = MakeJNILocalRef(env, env->GetObjectClass(context));
-        if(!contextCls.Get())
-        {
-            if(env->ExceptionCheck()) env->ExceptionClear();
-            return -1.0f;
-        }
-        jmethodID registerReceiver = env->GetMethodID(contextCls.Get(), "registerReceiver", "(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;)Landroid/content/Intent;");
-        if(!registerReceiver)
-        {
-            if(env->ExceptionCheck()) env->ExceptionClear();
-            return -1.0f;
-        }
-        auto batteryIntent = MakeJNILocalRef(env, env->CallObjectMethod(context, registerReceiver, NULL, filter.Get()));
-        if(env->ExceptionCheck()) env->ExceptionClear();
-        g_BatteryIntent = batteryIntent.Get() ? env->NewGlobalRef(batteryIntent.Get()) : NULL;
-        if(!g_BatteryIntent)
-        {
-            return -1.0f;
-        }
-
-        auto intentCls = MakeJNILocalRef(env, env->GetObjectClass(g_BatteryIntent));
-        if(!intentCls.Get())
-        {
-            if(env->ExceptionCheck()) env->ExceptionClear();
-            env->DeleteGlobalRef(g_BatteryIntent);
-            g_BatteryIntent = NULL;
-            return -1.0f;
-        }
-        g_GetLevelMethod = env->GetMethodID(intentCls.Get(), "getIntExtra", "(Ljava/lang/String;I)I");
-        auto levelStr = MakeJNILocalRef(env, env->NewStringUTF("level"));
-        g_pLevelStr = levelStr.Get() ? (jstring)env->NewGlobalRef(levelStr.Get()) : NULL;
-        auto scaleStr = MakeJNILocalRef(env, env->NewStringUTF("scale"));
-        if(!g_GetLevelMethod || !levelStr.Get() || !g_pLevelStr || !scaleStr.Get())
-        {
-            if(env->ExceptionCheck()) env->ExceptionClear();
-            if(g_BatteryIntent) { env->DeleteGlobalRef(g_BatteryIntent); g_BatteryIntent = NULL; }
-            if(g_pLevelStr) { env->DeleteGlobalRef(g_pLevelStr); g_pLevelStr = NULL; }
-            return -1.0f;
-        }
-        g_fCachedScale = (float)env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, scaleStr.Get(), -1);
-
-        if(!intentCls.Get() || !g_GetLevelMethod || !g_pLevelStr || g_fCachedScale <= 0.0f)
-        {
-            if(env->ExceptionCheck()) env->ExceptionClear();
-            if(g_BatteryIntent) { env->DeleteGlobalRef(g_BatteryIntent); g_BatteryIntent = NULL; }
-            if(g_pLevelStr) { env->DeleteGlobalRef(g_pLevelStr); g_pLevelStr = NULL; }
-            return -1.0f;
-        }
-        g_bBatteryInited = true;
-    }
-
-    jint level = env->CallIntMethod(g_BatteryIntent, g_GetLevelMethod, g_pLevelStr, -1);
-    if(env->ExceptionCheck()) { env->ExceptionClear(); return -1.0f; }
-    if(level < 0 || g_fCachedScale <= 0.0f) return -1.0f;
-    return ((level * 100.0f) / g_fCachedScale);
+float AML::GetBatteryLevel()
+{
+    static jobject batteryManager = NewSystemServiceRef("batterymanager");
+    int level = batteryManager ? CallJavaMethod<jint>(batteryManager, "getIntProperty", "(I)I", (jint)4) : -1; // BATTERY_PROPERTY_CAPACITY
+    return (level > 0 && level <= 100) ? (float)level : -1.0f;
 }
 
 const char* AML::GetNativeLibsPath()
@@ -974,66 +918,8 @@ bool AML::ComparePattern(uintptr_t addr, const char* pattern)
 
 void AML::ShowDialog(const char* title, const char* message, const char* buttonText, int styleResource)
 {
-    if (!title || !message) return;
-
-    JNIEnv* env = GetCurrentJNI();
-    if(!env) return;
-    
-    jobject activityContext = ::GetCurrentActivity();
-    if(!activityContext) return;
-
-    jclass builderClass = env->FindClass("android/app/AlertDialog$Builder");
-    if(!builderClass) return;
-
-    jmethodID builderCtor;
-    if(styleResource == 0)
-    {
-        builderCtor = env->GetMethodID(builderClass, "<init>", "(Landroid/content/Context;)V");
-    }
-    else
-    {
-        builderCtor = env->GetMethodID(builderClass, "<init>", "(Landroid/content/Context;I)V");
-    }
-    jmethodID setTitleMethod = env->GetMethodID(builderClass, "setTitle", "(Ljava/lang/CharSequence;)Landroid/app/AlertDialog$Builder;");
-    jmethodID setMessageMethod = env->GetMethodID(builderClass, "setMessage", "(Ljava/lang/CharSequence;)Landroid/app/AlertDialog$Builder;");
-    jmethodID setPosBtnMethod = env->GetMethodID(builderClass, "setPositiveButton", "(Ljava/lang/CharSequence;Landroid/content/DialogInterface$OnClickListener;)Landroid/app/AlertDialog$Builder;");
-    jmethodID showMethod = env->GetMethodID(builderClass, "show", "()Landroid/app/AlertDialog;");
-
-    if(!builderCtor || !setTitleMethod || !setMessageMethod || !setPosBtnMethod || !showMethod)
-    {
-        env->DeleteLocalRef(builderClass);
-        return;
-    }
-
-    jstring titleStr = env->NewStringUTF(title);
-    jstring messageStr = env->NewStringUTF(message);
-    const char* btnLabel = buttonText ? buttonText : "OK";
-    jstring btnStr = env->NewStringUTF(btnLabel);
-
-    jobject builderObj;
-    if(styleResource == 0)
-    {
-        builderObj = env->NewObject(builderClass, builderCtor, activityContext);
-    }
-    else
-    {
-        builderObj = env->NewObject(builderClass, builderCtor, activityContext, styleResource);
-    }
-
-    if(builderObj)
-    {
-        env->CallObjectMethod(builderObj, setTitleMethod, titleStr);
-        env->CallObjectMethod(builderObj, setMessageMethod, messageStr);
-        env->CallObjectMethod(builderObj, setPosBtnMethod, btnStr, NULL);
-        
-        jobject dialogObj = env->CallObjectMethod(builderObj, showMethod);
-        if(dialogObj) env->DeleteLocalRef(dialogObj);
-        env->DeleteLocalRef(builderObj);
-    }
-    env->DeleteLocalRef(titleStr);
-    env->DeleteLocalRef(messageStr);
-    env->DeleteLocalRef(btnStr);
-    env->DeleteLocalRef(builderClass);
+    DialogStyle style; style.baseTheme = styleResource;
+    ShowDialog(&style, title, message, buttonText);
 }
 
 bool AML::FileExists(const char* path)
@@ -1289,7 +1175,8 @@ void AML::OpenURL(const char* url)
     JNIEnv* env = GetCurrentJNI();
     if(!env) return;
 
-    jobject ctx = ::GetCurrentActivity();
+    auto activity = MakeJNILocalRef(env, GetVisibleActivity(env));
+    jobject ctx = activity.Get();
     if(!ctx) return;
 
     auto intentClass = MakeJNILocalRef(env, env->FindClass("android/content/Intent"));
@@ -1786,8 +1673,8 @@ float AML::GetRefreshRate()
     JNIEnv* env = GetCurrentJNI();
     if(!env) return 0.0f;
 
-    jobject context = ::GetCurrentActivity();
-    if(!context) context = ::GetCurrentContext();
+    auto activity = MakeJNILocalRef(env, GetVisibleActivity(env));
+    jobject context = activity.Get() ? activity.Get() : ::GetCurrentContext();
     if(!context) return 0.0f;
 
     auto serviceName = MakeJNILocalRef(env, env->NewStringUTF("window"));
@@ -1799,10 +1686,11 @@ float AML::GetRefreshRate()
 static void KeepScreenOnTask(void* data)
 {
     JNIEnv* env = GetCurrentJNI();
-    jobject activity = ::GetCurrentActivity();
-    if(!env || !activity) return;
+    if(!env) return;
+    auto activity = MakeJNILocalRef(env, GetVisibleActivity(env));
+    if(!activity.Get()) return;
 
-    auto window = MakeJNILocalRef(env, CallJavaMethod<jobject>(activity, "getWindow", "()Landroid/view/Window;"));
+    auto window = MakeJNILocalRef(env, CallJavaMethod<jobject>(activity.Get(), "getWindow", "()Landroid/view/Window;"));
     CallJavaMethod<void>(window.Get(), data ? "addFlags" : "clearFlags", "(I)V", (jint)0x80); // FLAG_KEEP_SCREEN_ON
 }
 bool AML::SetKeepScreenOn(bool keepOn)
@@ -1815,8 +1703,10 @@ void AML::ShareText(const char* text, const char* title)
     if(!text) return;
 
     JNIEnv* env = GetCurrentJNI();
-    jobject activity = ::GetCurrentActivity();
-    if(!env || !activity) return;
+    if(!env) return;
+    auto visible = MakeJNILocalRef(env, GetVisibleActivity(env));
+    jobject activity = visible.Get();
+    if(!activity) return;
 
     auto intentClass = MakeJNILocalRef(env, env->FindClass("android/content/Intent"));
     jmethodID ctor = intentClass.Get() ? env->GetMethodID(intentClass.Get(), "<init>", "(Ljava/lang/String;)V") : NULL;
@@ -1880,30 +1770,45 @@ uint64_t AML::GetAvailableRAM()
     return (uint64_t)sysconf(_SC_AVPHYS_PAGES) * (uint64_t)sysconf(_SC_PAGESIZE);
 }
 
-// Dialogs are java/net/rusjj/aml/Dialogs.java, rebuild its DEX with java/build_dex.ps1
+int AML::GetThermalStatus()
+{
+    if(g_nAndroidSDKVersion < 29) return -1;
+    static jobject powerManager = NewSystemServiceRef("power");
+    return powerManager ? CallJavaMethod<jint>(powerManager, "getCurrentThermalStatus", "()I") : -1;
+}
+
+bool AML::IsCharging()
+{
+    if(g_nAndroidSDKVersion < 23) return false;
+    static jobject batteryManager = NewSystemServiceRef("batterymanager");
+    return batteryManager && CallJavaMethod<jboolean>(batteryManager, "isCharging", "()Z");
+}
+
+// Dialogs and lifecycle are java/net/rusjj/aml/Bridge.java, rebuild its DEX with java/build_dex.ps1
 enum eDialogKind { DIALOG_ALERT = 0, DIALOG_INPUT, DIALOG_CONFIRM, DIALOG_CHOICE, DIALOG_MULTICHOICE, DIALOG_SLIDER, DIALOG_KINDS };
 static const char* const g_DialogMethods[DIALOG_KINDS][2] =
 {
-    { "showAlert",       "(Landroid/app/Activity;[B[B[B[IJ)V" },
-    { "showInput",       "(Landroid/app/Activity;[B[B[BI[IJ)V" },
-    { "showConfirm",     "(Landroid/app/Activity;[B[B[B[B[IJ)V" },
-    { "showChoice",      "(Landroid/app/Activity;[B[[BI[IJ)V" },
-    { "showMultiChoice", "(Landroid/app/Activity;[B[[B[Z[IJ)V" },
-    { "showSlider",      "(Landroid/app/Activity;[BIII[IJ)V" },
+    { "showAlert",       "([B[B[B[I[BJ)V" },
+    { "showInput",       "([B[B[BI[I[BJ)V" },
+    { "showConfirm",     "([B[B[B[B[I[BJ)V" },
+    { "showChoice",      "([B[[BI[I[BJ)V" },
+    { "showMultiChoice", "([B[[B[Z[I[BJ)V" },
+    { "showSlider",      "([BIII[I[BJ)V" },
 };
 struct SDialogTask
 {
     int kind;
     void* cb;
     void* data;
-    jint style[6]; // Dialogs.java's layout of DialogStyle
+    jint style[14]; // Bridge.java's Style
+    std::string font;
     std::string title;
     std::vector<std::string> strs; // Alert: message, button. Input: text, hint. Confirm: message, yes, no. Choices: items
     std::vector<jboolean> checked;
     int i0, i1, i2; // Input: inputType. Choice: selected. Slider: min, max, value
 };
-static std::mutex g_DialogsMutex;
-static jobject g_DialogsObject = NULL;
+static std::mutex g_BridgeMutex;
+static jobject g_BridgeObject = NULL;
 static jmethodID g_DialogsMethodIDs[DIALOG_KINDS];
 
 static void FinishDialog(SDialogTask* task, bool ok, int value, const std::string& bytes)
@@ -1925,7 +1830,7 @@ static void FinishDialog(SDialogTask* task, bool ok, int value, const std::strin
     }
     delete task;
 }
-static void JNICALL Dialogs_OnResult(JNIEnv* env, jclass, jlong id, jboolean ok, jint value, jbyteArray data)
+static void JNICALL Bridge_OnDialogResult(JNIEnv* env, jclass, jlong id, jboolean ok, jint value, jbyteArray data)
 {
     SDialogTask* task = (SDialogTask*)(uintptr_t)id;
     if(!task) return;
@@ -1938,11 +1843,15 @@ static void JNICALL Dialogs_OnResult(JNIEnv* env, jclass, jlong id, jboolean ok,
     }
     FinishDialog(task, ok, value, bytes);
 }
-static bool InitDialogsJNI(JNIEnv* env)
+static void JNICALL Bridge_OnLifecycle(JNIEnv*, jclass, jint event);
+static jmethodID g_GetVisibleMethod = NULL;
+static bool InitBridgeJNI(JNIEnv* env)
 {
-    if(g_DialogsObject) return true;
+    if(g_BridgeObject) return true;
 
-    jobject obj = ::InjectSmaliDEX(env, g_DialogsDex, sizeof(g_DialogsDex), "net.rusjj.aml.Dialogs");
+    jobject context = ::GetCurrentContext();
+    if(!context) return false;
+    jobject obj = ::InjectSmaliDEX(env, g_BridgeDex, sizeof(g_BridgeDex), "net.rusjj.aml.Bridge");
     if(!obj) return false;
 
     auto cls = MakeJNILocalRef(env, env->GetObjectClass(obj));
@@ -1956,14 +1865,40 @@ static bool InitDialogsJNI(JNIEnv* env)
             return false;
         }
     }
-    JNINativeMethod natives[] = { { "onResult", "(JZI[B)V", (void*)Dialogs_OnResult } };
-    if(env->RegisterNatives(cls.Get(), natives, 1) != JNI_OK)
+    jmethodID init = env->GetMethodID(cls.Get(), "init", "(Landroid/content/Context;)V");
+    g_GetVisibleMethod = env->GetMethodID(cls.Get(), "getVisible", "()Landroid/app/Activity;");
+    JNINativeMethod natives[] =
+    {
+        { "onResult", "(JZI[B)V", (void*)Bridge_OnDialogResult },
+        { "onLifecycle", "(I)V", (void*)Bridge_OnLifecycle },
+    };
+    if(!init || !g_GetVisibleMethod || env->RegisterNatives(cls.Get(), natives, 2) != JNI_OK)
     {
         if(env->ExceptionCheck()) env->ExceptionClear();
         return false;
     }
-    g_DialogsObject = obj;
+    env->CallVoidMethod(obj, init, context);
+    if(env->ExceptionCheck())
+    {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        return false;
+    }
+    g_BridgeObject = obj;
     return true;
+}
+// A local ref, the first activity AML has found if the bridge is not there
+static jobject GetVisibleActivity(JNIEnv* env)
+{
+    std::lock_guard<std::mutex> lock(g_BridgeMutex);
+    if(InitBridgeJNI(env))
+    {
+        jobject visible = env->CallObjectMethod(g_BridgeObject, g_GetVisibleMethod);
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        else if(visible) return visible;
+    }
+    jobject first = ::GetCurrentActivity();
+    return first ? env->NewLocalRef(first) : NULL;
 }
 static jbyteArray NewUTF8ByteArray(JNIEnv* env, const std::string& str)
 {
@@ -1991,14 +1926,12 @@ static void DialogTask(void* data)
 {
     SDialogTask* task = (SDialogTask*)data;
     JNIEnv* env = GetCurrentJNI();
-    jobject activity = ::GetCurrentActivity();
 
     bool shown = false;
-    if(!env || !activity) logger->Error("Cannot show a dialog: no Java activity");
-    else
+    if(env)
     {
-        std::lock_guard<std::mutex> lock(g_DialogsMutex);
-        if(!InitDialogsJNI(env)) logger->Error("Cannot show a dialog: Dialogs DEX injection failed");
+        std::lock_guard<std::mutex> lock(g_BridgeMutex);
+        if(!InitBridgeJNI(env)) logger->Error("Cannot show a dialog: Java bridge injection failed");
         else
         {
             jmethodID method = g_DialogsMethodIDs[task->kind];
@@ -2007,25 +1940,26 @@ static void DialogTask(void* data)
             auto s0 = MakeJNILocalRef(env, (task->strs.size() > 0) ? NewUTF8ByteArray(env, task->strs[0]) : NULL);
             auto s1 = MakeJNILocalRef(env, (task->strs.size() > 1) ? NewUTF8ByteArray(env, task->strs[1]) : NULL);
             auto s2 = MakeJNILocalRef(env, (task->strs.size() > 2) ? NewUTF8ByteArray(env, task->strs[2]) : NULL);
-            auto style = MakeJNILocalRef(env, env->NewIntArray(6));
-            if(style.Get()) env->SetIntArrayRegion(style.Get(), 0, 6, task->style);
-            if(title.Get() && style.Get() && !env->ExceptionCheck())
+            auto style = MakeJNILocalRef(env, env->NewIntArray(14));
+            if(style.Get()) env->SetIntArrayRegion(style.Get(), 0, 14, task->style);
+            auto font = MakeJNILocalRef(env, NewUTF8ByteArray(env, task->font));
+            if(title.Get() && style.Get() && font.Get() && !env->ExceptionCheck())
             {
                 switch(task->kind)
                 {
                     case DIALOG_ALERT:
-                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), s0.Get(), s1.Get(), style.Get(), id);
+                        env->CallVoidMethod(g_BridgeObject, method, title.Get(), s0.Get(), s1.Get(), style.Get(), font.Get(), id);
                         break;
                     case DIALOG_INPUT:
-                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), s0.Get(), s1.Get(), task->i0, style.Get(), id);
+                        env->CallVoidMethod(g_BridgeObject, method, title.Get(), s0.Get(), s1.Get(), task->i0, style.Get(), font.Get(), id);
                         break;
                     case DIALOG_CONFIRM:
-                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), s0.Get(), s1.Get(), s2.Get(), style.Get(), id);
+                        env->CallVoidMethod(g_BridgeObject, method, title.Get(), s0.Get(), s1.Get(), s2.Get(), style.Get(), font.Get(), id);
                         break;
                     case DIALOG_CHOICE:
                     {
                         auto items = MakeJNILocalRef(env, NewUTF8ByteArrays(env, task->strs));
-                        if(items.Get()) env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), items.Get(), task->i0, style.Get(), id);
+                        if(items.Get()) env->CallVoidMethod(g_BridgeObject, method, title.Get(), items.Get(), task->i0, style.Get(), font.Get(), id);
                         break;
                     }
                     case DIALOG_MULTICHOICE:
@@ -2033,11 +1967,11 @@ static void DialogTask(void* data)
                         auto items = MakeJNILocalRef(env, NewUTF8ByteArrays(env, task->strs));
                         auto checked = MakeJNILocalRef(env, env->NewBooleanArray(task->checked.size()));
                         if(checked.Get()) env->SetBooleanArrayRegion(checked.Get(), 0, task->checked.size(), task->checked.data());
-                        if(items.Get() && checked.Get()) env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), items.Get(), checked.Get(), style.Get(), id);
+                        if(items.Get() && checked.Get()) env->CallVoidMethod(g_BridgeObject, method, title.Get(), items.Get(), checked.Get(), style.Get(), font.Get(), id);
                         break;
                     }
                     case DIALOG_SLIDER:
-                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), task->i0, task->i1, task->i2, style.Get(), id);
+                        env->CallVoidMethod(g_BridgeObject, method, title.Get(), task->i0, task->i1, task->i2, style.Get(), font.Get(), id);
                         break;
                 }
                 shown = !env->ExceptionCheck();
@@ -2050,7 +1984,7 @@ static void DialogTask(void* data)
         }
     }
 
-    // From here the task belongs to Dialogs_OnResult
+    // From here the task belongs to Bridge_OnDialogResult
     if(!shown) FinishDialog(task, false, 0, "");
 }
 static SDialogTask* NewDialogTask(int kind, const DialogStyle* style, const char* title, void* cb, void* data)
@@ -2059,15 +1993,19 @@ static SDialogTask* NewDialogTask(int kind, const DialogStyle* style, const char
     task->kind = kind;
     task->cb = cb;
     task->data = data;
-    if(style)
-    {
-        task->style[0] = style->baseTheme;
-        task->style[1] = (jint)style->background;
-        task->style[2] = (jint)style->text;
-        task->style[3] = (jint)style->accent;
-        memcpy(&task->style[4], &style->cornerRadius, sizeof(float));
-        memcpy(&task->style[5], &style->dimAmount, sizeof(float));
-    }
+    DialogStyle defaults;
+    if(!style || style->structSize < (int)sizeof(DialogStyle)) style = &defaults;
+    const float floats[] = { style->cornerRadius, style->borderWidth, style->dimAmount, style->textSize, style->titleSize, style->width };
+    task->style[0] = style->baseTheme;
+    task->style[1] = (jint)style->background;
+    task->style[2] = (jint)style->text;
+    task->style[3] = (jint)style->title;
+    task->style[4] = (jint)style->accent;
+    task->style[5] = (jint)style->border;
+    memcpy(&task->style[6], floats, sizeof(floats));
+    task->style[12] = style->gravity;
+    task->style[13] = style->cancelable ? 1 : 0;
+    task->font = style->font ? style->font : "";
     task->title = title ? title : "";
     task->i0 = task->i1 = task->i2 = 0;
     return task;
@@ -2083,31 +2021,31 @@ static void AddDialogItems(SDialogTask* task, const char** items, int count)
 
 void AML::ShowInputDialog(const char* title, const char* text, InputDialogCallback cb, void* data, const char* hint, int inputType, int styleResource)
 {
-    DialogStyle style = {}; style.baseTheme = styleResource;
+    DialogStyle style; style.baseTheme = styleResource;
     ShowInputDialog(&style, title, text, cb, data, hint, inputType);
 }
 
 void AML::ShowConfirmDialog(const char* title, const char* message, ConfirmDialogCallback cb, void* data, const char* yesText, const char* noText, int styleResource)
 {
-    DialogStyle style = {}; style.baseTheme = styleResource;
+    DialogStyle style; style.baseTheme = styleResource;
     ShowConfirmDialog(&style, title, message, cb, data, yesText, noText);
 }
 
 void AML::ShowChoiceDialog(const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data, int selected, int styleResource)
 {
-    DialogStyle style = {}; style.baseTheme = styleResource;
+    DialogStyle style; style.baseTheme = styleResource;
     ShowChoiceDialog(&style, title, items, count, cb, data, selected);
 }
 
 void AML::ShowMultiChoiceDialog(const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data, int styleResource)
 {
-    DialogStyle style = {}; style.baseTheme = styleResource;
+    DialogStyle style; style.baseTheme = styleResource;
     ShowMultiChoiceDialog(&style, title, items, count, checked, cb, data);
 }
 
 void AML::ShowSliderDialog(const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data, int styleResource)
 {
-    DialogStyle style = {}; style.baseTheme = styleResource;
+    DialogStyle style; style.baseTheme = styleResource;
     ShowSliderDialog(&style, title, minValue, maxValue, value, cb, data);
 }
 
@@ -2162,6 +2100,111 @@ void AML::ShowSliderDialog(const DialogStyle* style, const char* title, int minV
     task->i1 = maxValue;
     task->i2 = (value < minValue) ? minValue : (value > maxValue) ? maxValue : value;
     LaunchDialog(task);
+}
+
+
+
+static std::mutex g_LifecycleMutex;
+static std::condition_variable g_LifecycleCV;
+static std::deque<int> g_LifecycleEvents;
+static std::vector<std::pair<IAML::LifecycleCallback, void*>> g_LifecycleListeners;
+static std::atomic<bool> g_bLifecycleStarted(false), g_bAppForeground(true), g_bAppFocused(true);
+static bool g_bLifecycleListening = false;
+static void JNICALL Bridge_OnLifecycle(JNIEnv*, jclass, jint event)
+{
+    if(event == LIFECYCLE_PAUSE || event == LIFECYCLE_RESUME) g_bAppForeground = (event == LIFECYCLE_RESUME);
+    else g_bAppFocused = (event == LIFECYCLE_FOCUS_GAINED);
+    {
+        std::lock_guard<std::mutex> lock(g_LifecycleMutex);
+        if(!g_bLifecycleListening) return; // Bridge is used by dialogs only
+        g_LifecycleEvents.push_back(event);
+    }
+    g_LifecycleCV.notify_one();
+}
+// Listeners run here, so a slow one never holds the game's UI thread
+static void LifecycleThread()
+{
+    std::unique_lock<std::mutex> lock(g_LifecycleMutex);
+    while(true)
+    {
+        g_LifecycleCV.wait(lock, []{ return !g_LifecycleEvents.empty(); });
+        int event = g_LifecycleEvents.front();
+        g_LifecycleEvents.pop_front();
+        auto listeners = g_LifecycleListeners;
+        lock.unlock();
+
+        if(event == LIFECYCLE_FOCUS_GAINED)
+        {
+            bool clipboardUsed;
+            {
+                std::lock_guard<std::mutex> clipLock(g_ClipboardMutex);
+                clipboardUsed = g_bClipboardKnown;
+            }
+            if(clipboardUsed && !g_bClipboardFetching.exchange(true)) RunClipboardTask(ClipboardFetchTask, NULL);
+        }
+        for(auto& l : listeners) l.first(event, l.second);
+        lock.lock();
+    }
+}
+static void LifecycleInitTask(void*)
+{
+    JNIEnv* env = GetCurrentJNI();
+    if(!env || !::GetCurrentContext())
+    {
+        g_bLifecycleStarted = false; // Too early, the next call retries
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_BridgeMutex);
+    if(!InitBridgeJNI(env))
+    {
+        logger->Error("Cannot watch the app lifecycle: Java bridge injection failed");
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lifeLock(g_LifecycleMutex);
+        g_bLifecycleListening = true;
+    }
+    std::thread(LifecycleThread).detach();
+}
+static void StartLifecycle()
+{
+    if(!g_bLifecycleStarted.exchange(true) && !::PushToJavaUIThread(LifecycleInitTask, NULL)) LifecycleInitTask(NULL);
+}
+
+void AML::AddLifecycleListener(LifecycleCallback cb, void* data)
+{
+    if(!cb) return;
+    {
+        std::lock_guard<std::mutex> lock(g_LifecycleMutex);
+        g_LifecycleListeners.push_back({ cb, data });
+    }
+    StartLifecycle();
+}
+
+void AML::RemoveLifecycleListener(LifecycleCallback cb, void* data)
+{
+    std::lock_guard<std::mutex> lock(g_LifecycleMutex);
+    for(auto it = g_LifecycleListeners.begin(); it != g_LifecycleListeners.end(); ++it)
+    {
+        if(it->first == cb && it->second == data)
+        {
+            g_LifecycleListeners.erase(it);
+            return;
+        }
+    }
+}
+
+bool AML::IsAppInForeground()
+{
+    StartLifecycle();
+    return g_bAppForeground;
+}
+
+bool AML::HasWindowFocus()
+{
+    StartLifecycle();
+    return g_bAppFocused;
 }
 
 

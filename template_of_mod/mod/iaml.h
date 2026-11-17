@@ -76,13 +76,32 @@ struct GlossRegisters
 typedef void* PHookHandle;
 typedef void (*HookWithRegistersFn)(GlossRegisters* regs, PHookHandle hook);
 
-// Zero fields keep the theme's values
+enum eLifecycleEvent
+{
+    LIFECYCLE_PAUSE = 0,
+    LIFECYCLE_RESUME,
+    LIFECYCLE_FOCUS_LOST,
+    LIFECYCLE_FOCUS_GAINED,
+};
+
+// Everything starts as the theme's look, change only what you need
 struct DialogStyle
 {
-    int      baseTheme; // android.R.style.*
-    uint32_t background, text, accent; // ARGB
-    float    cornerRadius; // dp
-    float    dimAmount; // 0.0 - 1.0, negative removes the dim
+    int         structSize; // Set by the constructor, lets AML add fields later
+    int         baseTheme; // android.R.style.*, 0 is the default theme
+    uint32_t    background, text, title, accent, border; // ARGB, 0 keeps the theme's
+    float       cornerRadius; // dp, negative keeps the theme's
+    float       borderWidth; // dp, 0 is no border
+    float       dimAmount; // 0.0 - 1.0, negative keeps the theme's
+    float       textSize, titleSize; // sp, 0 keeps the theme's
+    float       width; // Up to 1.0 is a part of the screen width, more is dp. 0 keeps the theme's
+    int         gravity; // android.view.Gravity (48 is top, 80 is bottom), 0 keeps the theme's
+    bool        cancelable; // false: only the buttons close it, not Back or a tap outside
+    const char* font; // .ttf or .otf: an absolute path or a path inside APK assets. NULL keeps the theme's
+
+    DialogStyle() : structSize(sizeof(DialogStyle)), baseTheme(0), background(0), text(0), title(0), accent(0), border(0),
+                    cornerRadius(-1.0f), borderWidth(0.0f), dimAmount(-1.0f), textSize(0.0f), titleSize(0.0f), width(0.0f),
+                    gravity(0), cancelable(true), font(NULL) {}
 };
 
 #if defined(__cplusplus)
@@ -101,6 +120,7 @@ public:
     typedef void(*ChoiceDialogCallback)(int index, void* data);
     typedef void(*MultiChoiceDialogCallback)(const bool* checked, int count, void* data);
     typedef void(*SliderDialogCallback)(bool ok, int value, void* data);
+    typedef void(*LifecycleCallback)(int event, void* data);
 
 public:
     /* AML 1.0.0.0 */
@@ -291,6 +311,12 @@ public:
     virtual void        ShowChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL, int selected = -1);
     virtual void        ShowMultiChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data = NULL);
     virtual void        ShowSliderDialog(const DialogStyle* style, const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data = NULL);
+    virtual void        AddLifecycleListener(LifecycleCallback cb, void* data = NULL); // "event" is eLifecycleEvent, called on AML's own thread
+    virtual void        RemoveLifecycleListener(LifecycleCallback cb, void* data = NULL);
+    virtual bool        IsAppInForeground();
+    virtual bool        HasWindowFocus();
+    virtual int         GetThermalStatus(); // PowerManager.THERMAL_STATUS_*: 0 is none, 6 is shutdown. -1 below Android 10
+    virtual bool        IsCharging(); // Always false below Android 6
 
 
     // Inlines (shortcuts for you!)

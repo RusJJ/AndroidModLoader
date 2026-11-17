@@ -411,6 +411,8 @@ const char* GetDeviceManufacturer();
 const char* GetDeviceModel();
 uint64_t GetTotalRAM();                            // байты
 uint64_t GetAvailableRAM();                        // байты, MemAvailable из /proc/meminfo
+int   GetThermalStatus();                          // PowerManager.THERMAL_STATUS_*: 0 нет .. 6 выключение, -1 ниже Android 10
+bool  IsCharging();                                // всегда false ниже Android 6
 ```
 
 ### Буфер обмена (AML 1.5.0)
@@ -449,11 +451,19 @@ void ShowSliderDialog(const char* title, int minValue, int maxValue, int value, 
 ```cpp
 struct DialogStyle
 {
-    int      baseTheme;                 // android.R.style.*
-    uint32_t background, text, accent;  // ARGB
-    float    cornerRadius;              // dp
-    float    dimAmount;                 // 0.0 - 1.0, отрицательное значение убирает затемнение
-}; // нулевые поля оставляют значения темы
+    int         structSize;              // Заполняет конструктор, позволяет AML добавлять поля позже
+    int         baseTheme;               // android.R.style.*, 0 — тема по умолчанию
+    uint32_t    background, text, title, accent, border; // ARGB, 0 оставляет цвет темы
+    float       cornerRadius;            // dp, отрицательное оставляет значение темы
+    float       borderWidth;             // dp, 0 — без рамки
+    float       dimAmount;               // 0.0 - 1.0, отрицательное оставляет значение темы
+    float       textSize, titleSize;     // sp, 0 оставляет значение темы
+    float       width;                   // до 1.0 — доля ширины экрана, больше — dp. 0 оставляет значение темы
+    int         gravity;                 // android.view.Gravity (48 — сверху, 80 — снизу), 0 оставляет значение темы
+    bool        cancelable;              // false: закрыть можно только кнопками, а не «Назад» или нажатием вне диалога
+    const char* font;                    // .ttf или .otf: абсолютный путь или путь внутри assets APK. NULL оставляет шрифт темы
+    DialogStyle();
+}; // конструктор оставляет вид темы, меняйте только нужное
 
 void ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
 void ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, ...);
@@ -469,13 +479,25 @@ static void OnName(const char* text, void* data)
     if(text) snprintf(g_szName, sizeof(g_szName), "%s", text);
 }
 
-DialogStyle style = {};
+DialogStyle style;
 style.background   = 0xFF1E1E24;
 style.text         = 0xFFEEEEEE;
 style.accent       = 0xFF4FC3F7;
 style.cornerRadius = 16.0f;
 aml->ShowInputDialog(&style, "Имя игрока", g_szName, OnName, NULL, "До 16 букв");
 ```
+
+### Жизненный цикл приложения (AML 1.5.0)
+```cpp
+enum eLifecycleEvent { LIFECYCLE_PAUSE = 0, LIFECYCLE_RESUME, LIFECYCLE_FOCUS_LOST, LIFECYCLE_FOCUS_GAINED };
+typedef void(*LifecycleCallback)(int event, void* data);
+
+void AddLifecycleListener(LifecycleCallback cb, void* data = NULL);
+void RemoveLifecycleListener(LifecycleCallback cb, void* data = NULL);
+bool IsAppInForeground();
+bool HasWindowFocus();
+```
+AML только наблюдает за activity игры и ничего не переопределяет, поэтому игра ведёт себя точно так же. Слушатели вызываются в собственном потоке AML, а не в UI-потоке игры, так что медленный слушатель не задержит игру; порядок событий сохраняется. Pause/resume — игра ушла в фон или вернулась. Фокус теряется ещё и тогда, когда игру закрывает шторка уведомлений, диалог или клавиатура. Собственные диалоги AML не считаются сменой фокуса, поэтому диалог из события фокуса не зациклится. Оба геттера только читают флаг и их можно вызывать каждый кадр. Ничего не настраивается, пока мод не вызовет одну из этих функций.
 
 ### Сеть / загрузки
 ```cpp
@@ -805,6 +827,7 @@ ON_MOD_UNLOAD()
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Устройство/интерфейс |
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Диалоги с результатом (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Буфер обмена |
+| `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Жизненный цикл |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Информация о системе |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Идентификация/версия целевого приложения |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Макросы хуков |

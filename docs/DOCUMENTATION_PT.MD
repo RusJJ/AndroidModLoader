@@ -411,6 +411,8 @@ const char* GetDeviceManufacturer();
 const char* GetDeviceModel();
 uint64_t GetTotalRAM();                            // bytes
 uint64_t GetAvailableRAM();                        // bytes, MemAvailable de /proc/meminfo
+int   GetThermalStatus();                          // PowerManager.THERMAL_STATUS_*: 0 nenhum .. 6 desligamento, -1 abaixo do Android 10
+bool  IsCharging();                                // sempre false abaixo do Android 6
 ```
 
 ### Área de transferência (AML 1.5.0)
@@ -449,11 +451,19 @@ Todo diálogo (e o `ShowDialog`) também tem uma variação que recebe primeiro 
 ```cpp
 struct DialogStyle
 {
-    int      baseTheme;                 // android.R.style.*
-    uint32_t background, text, accent;  // ARGB
-    float    cornerRadius;              // dp
-    float    dimAmount;                 // 0.0 - 1.0, negativo remove o escurecimento
-}; // campos zerados mantêm os valores do tema
+    int         structSize;              // Preenchido pelo construtor, permite ao AML adicionar campos depois
+    int         baseTheme;               // android.R.style.*, 0 é o tema padrão
+    uint32_t    background, text, title, accent, border; // ARGB, 0 mantém a cor do tema
+    float       cornerRadius;            // dp, negativo mantém o do tema
+    float       borderWidth;             // dp, 0 é sem borda
+    float       dimAmount;               // 0.0 - 1.0, negativo mantém o do tema
+    float       textSize, titleSize;     // sp, 0 mantém o do tema
+    float       width;                   // até 1.0 é uma fração da largura da tela, acima disso é dp. 0 mantém o do tema
+    int         gravity;                 // android.view.Gravity (48 é topo, 80 é base), 0 mantém o do tema
+    bool        cancelable;              // false: só os botões fecham, não o Voltar nem um toque fora
+    const char* font;                    // .ttf ou .otf: caminho absoluto ou caminho dentro dos assets do APK. NULL mantém a fonte do tema
+    DialogStyle();
+}; // o construtor mantém o visual do tema, mude só o que precisar
 
 void ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
 void ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, ...);
@@ -469,13 +479,25 @@ static void OnName(const char* text, void* data)
     if(text) snprintf(g_szName, sizeof(g_szName), "%s", text);
 }
 
-DialogStyle style = {};
+DialogStyle style;
 style.background   = 0xFF1E1E24;
 style.text         = 0xFFEEEEEE;
 style.accent       = 0xFF4FC3F7;
 style.cornerRadius = 16.0f;
 aml->ShowInputDialog(&style, "Nome do jogador", g_szName, OnName, NULL, "Até 16 letras");
 ```
+
+### Ciclo de vida do app (AML 1.5.0)
+```cpp
+enum eLifecycleEvent { LIFECYCLE_PAUSE = 0, LIFECYCLE_RESUME, LIFECYCLE_FOCUS_LOST, LIFECYCLE_FOCUS_GAINED };
+typedef void(*LifecycleCallback)(int event, void* data);
+
+void AddLifecycleListener(LifecycleCallback cb, void* data = NULL);
+void RemoveLifecycleListener(LifecycleCallback cb, void* data = NULL);
+bool IsAppInForeground();
+bool HasWindowFocus();
+```
+O AML só observa a activity do jogo e não sobrescreve nada, então o jogo se comporta exatamente igual. Os listeners rodam na thread própria do AML, nunca na thread de UI do jogo, então um listener lento não atrasa o jogo; os eventos continuam chegando em ordem. Pause/resume significa que o jogo foi para o segundo plano ou voltou. O foco também é perdido enquanto a barra de notificações, um diálogo ou o teclado cobre o jogo. Os diálogos do próprio AML não contam como mudança de foco, então mostrar um a partir de um evento de foco não entra em loop. Os dois getters só leem uma flag e podem ser chamados todo frame. Nada é preparado até um mod chamar uma dessas funções.
 
 ### Rede / downloads
 ```cpp
@@ -805,6 +827,7 @@ ON_MOD_UNLOAD()
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Dispositivo/UI |
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Diálogos com resultado (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Área de transferência |
+| `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Ciclo de vida |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Informações do sistema |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Identidade/versão do app alvo |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Macros de hook |

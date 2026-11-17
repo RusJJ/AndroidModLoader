@@ -411,6 +411,8 @@ const char* GetDeviceManufacturer();
 const char* GetDeviceModel();
 uint64_t GetTotalRAM();                            // byte
 uint64_t GetAvailableRAM();                        // byte, MemAvailable dari /proc/meminfo
+int   GetThermalStatus();                          // PowerManager.THERMAL_STATUS_*: 0 tidak ada .. 6 mati, -1 di bawah Android 10
+bool  IsCharging();                                // selalu false di bawah Android 6
 ```
 
 ### Clipboard (AML 1.5.0)
@@ -449,11 +451,19 @@ Setiap dialog (dan `ShowDialog`) juga punya variasi yang menerima `DialogStyle` 
 ```cpp
 struct DialogStyle
 {
-    int      baseTheme;                 // android.R.style.*
-    uint32_t background, text, accent;  // ARGB
-    float    cornerRadius;              // dp
-    float    dimAmount;                 // 0.0 - 1.0, negatif menghapus peredupan
-}; // field bernilai nol memakai nilai dari tema
+    int         structSize;              // Diisi oleh konstruktor, agar AML bisa menambah field nanti
+    int         baseTheme;               // android.R.style.*, 0 adalah tema default
+    uint32_t    background, text, title, accent, border; // ARGB, 0 memakai warna tema
+    float       cornerRadius;            // dp, negatif memakai nilai tema
+    float       borderWidth;             // dp, 0 berarti tanpa garis tepi
+    float       dimAmount;               // 0.0 - 1.0, negatif memakai nilai tema
+    float       textSize, titleSize;     // sp, 0 memakai nilai tema
+    float       width;                   // sampai 1.0 adalah bagian dari lebar layar, lebih dari itu dp. 0 memakai nilai tema
+    int         gravity;                 // android.view.Gravity (48 atas, 80 bawah), 0 memakai nilai tema
+    bool        cancelable;              // false: hanya tombol yang menutupnya, bukan tombol Kembali atau ketukan di luar
+    const char* font;                    // .ttf atau .otf: path absolut atau path di dalam assets APK. NULL memakai font tema
+    DialogStyle();
+}; // konstruktor memakai tampilan tema, ubah hanya yang perlu
 
 void ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
 void ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, ...);
@@ -469,13 +479,25 @@ static void OnName(const char* text, void* data)
     if(text) snprintf(g_szName, sizeof(g_szName), "%s", text);
 }
 
-DialogStyle style = {};
+DialogStyle style;
 style.background   = 0xFF1E1E24;
 style.text         = 0xFFEEEEEE;
 style.accent       = 0xFF4FC3F7;
 style.cornerRadius = 16.0f;
 aml->ShowInputDialog(&style, "Nama pemain", g_szName, OnName, NULL, "Maks. 16 huruf");
 ```
+
+### Siklus hidup aplikasi (AML 1.5.0)
+```cpp
+enum eLifecycleEvent { LIFECYCLE_PAUSE = 0, LIFECYCLE_RESUME, LIFECYCLE_FOCUS_LOST, LIFECYCLE_FOCUS_GAINED };
+typedef void(*LifecycleCallback)(int event, void* data);
+
+void AddLifecycleListener(LifecycleCallback cb, void* data = NULL);
+void RemoveLifecycleListener(LifecycleCallback cb, void* data = NULL);
+bool IsAppInForeground();
+bool HasWindowFocus();
+```
+AML hanya mengamati activity game dan tidak menimpa apa pun, jadi game berperilaku persis sama. Listener dijalankan di thread milik AML sendiri, bukan di thread UI game, sehingga listener yang lambat tidak bisa menunda game; urutan event tetap terjaga. Pause/resume berarti game masuk ke latar belakang atau kembali. Fokus juga hilang saat panel notifikasi, dialog, atau keyboard menutupi game. Dialog milik AML sendiri tidak dihitung sebagai perubahan fokus, jadi menampilkan dialog dari event fokus tidak akan berulang terus. Kedua getter hanya membaca sebuah flag dan aman dipanggil setiap frame. Tidak ada yang disiapkan sampai sebuah mod memanggil salah satu fungsi ini.
 
 ### Jaringan / unduhan
 ```cpp
@@ -805,6 +827,7 @@ ON_MOD_UNLOAD()
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Perangkat/UI |
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Dialog dengan hasil (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Clipboard |
+| `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Siklus hidup |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Info sistem |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Identitas/versi aplikasi target |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Makro hook |

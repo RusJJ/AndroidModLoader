@@ -172,6 +172,12 @@ public:
     void        ShowChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL, int selected = -1);
     void        ShowMultiChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data = NULL);
     void        ShowSliderDialog(const DialogStyle* style, const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data = NULL);
+    void        AddLifecycleListener(LifecycleCallback cb, void* data = NULL);
+    void        RemoveLifecycleListener(LifecycleCallback cb, void* data = NULL);
+    bool        IsAppInForeground();
+    bool        HasWindowFocus();
+    int         GetThermalStatus();
+    bool        IsCharging();
 };
 
 extern char g_szAMLFeatures[2048];
