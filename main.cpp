@@ -17,6 +17,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <pthread.h>
+#include <thread>
 #include <limits.h>
 
 #include <aml.h>
@@ -518,6 +519,36 @@ void AML_PostLoadLibs()
     }
 }
 
+static void LoadNewsAndUpdate(bool bEnableUpdater)
+{
+    if(g_nEnableNews > 0)
+    {
+        char newsBuf[24]{0};
+        if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", g_szNewsString, sizeof(g_szNewsString)) && g_szNewsString[0])
+        {
+            memcpy(newsBuf, g_szNewsString, 16);
+            if(strncmp(g_pLastNewsId->GetString(), newsBuf, 16) != 0)
+            {
+                for(int i = 0; i < g_nEnableNews; ++i)
+                {
+                    aml->ShowToast(true, "%s", g_szNewsString);
+                }
+
+                newsBuf[16] = '|'; // Anti- news spamming :p
+                newsBuf[17] = 0;
+                g_pLastNewsId->SetString(newsBuf);
+                cfg->Save();
+            }
+            delete g_pLastNewsId;
+        }
+    }
+    if(bEnableUpdater)
+    {
+        modlist->ProcessUpdater();
+        logger->Info("Mods were updated!");
+    }
+}
+
 void StartAMLRightNow(const char* libsArray = NULL)
 {
     if(g_bAMLStarted)
@@ -749,36 +780,11 @@ void StartAMLRightNow(const char* libsArray = NULL)
     if(bHasChangedCfgAuthor) g_pAML->AddFeature("STEALER"); // For fun
     if(!logger->HasOutput()) g_pAML->AddFeature("NOLOGGING");
     
-    /* Load news first! */
-    if(g_nEnableNews > 0)
-    {
-        char newsBuf[24]{0};
-        if(aml->DownloadFileToData("https://raw.githubusercontent.com/RusJJ/AndroidModLoader/main/news.txt", g_szNewsString, sizeof(g_szNewsString)) && g_szNewsString[0])
-        {
-            memcpy(newsBuf, g_szNewsString, 16);
-            if(strncmp(g_pLastNewsId->GetString(), newsBuf, 16) != 0)
-            {
-                for(int i = 0; i < g_nEnableNews; ++i)
-                {
-                    aml->ShowToast(true, "%s", g_szNewsString);
-                }
-
-                newsBuf[16] = '|'; // Anti- news spamming :p
-                newsBuf[17] = 0;
-                g_pLastNewsId->SetString(newsBuf);
-                cfg->Save();
-            }
-            delete g_pLastNewsId;
-        }
-    }
+    /* A slow network should not hold the game's loading. Mod updates apply on the next launch anyway */
+    if(bEnableUpdater) g_pAML->AddFeature("UPDATER");
+    std::thread(LoadNewsAndUpdate, bEnableUpdater).detach();
     
     /* All mods are sorted and should be loaded! */
-    if(bEnableUpdater)
-    {
-        g_pAML->AddFeature("UPDATER");
-        modlist->ProcessUpdater();
-        logger->Info("Mods were updated!");
-    }
     if(!g_bNoMods)
     {
         modlist->ProcessPreLoading();

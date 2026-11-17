@@ -292,8 +292,7 @@ void ModsList::ProcessUpdater()
     ModDesc* desc = NULL;
     LIST_FOR_FAST(listMods)
     {
-        desc = item->pModDesc;
-        pLastModProcessed = desc;
+        desc = item->pModDesc; // No pLastModProcessed, this runs beside the loading
         if(desc->m_fnRequestUpdaterURL)
         {
             const char* url = desc->m_fnRequestUpdaterURL();
