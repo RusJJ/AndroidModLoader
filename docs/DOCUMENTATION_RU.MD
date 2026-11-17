@@ -499,6 +499,33 @@ bool HasWindowFocus();
 ```
 AML только наблюдает за activity игры и ничего не переопределяет, поэтому игра ведёт себя точно так же. Слушатели вызываются в собственном потоке AML, а не в UI-потоке игры, так что медленный слушатель не задержит игру; порядок событий сохраняется. Pause/resume — игра ушла в фон или вернулась. Фокус теряется ещё и тогда, когда игру закрывает шторка уведомлений, диалог или клавиатура. Собственные диалоги AML не считаются сменой фокуса, поэтому диалог из события фокуса не зациклится. Оба геттера только читают флаг и их можно вызывать каждый кадр. Ничего не настраивается, пока мод не вызовет одну из этих функций.
 
+### Оверлей (AML 1.5.0)
+```cpp
+enum eOverlaySlide { OVERLAY_SLIDE_NONE = 0, OVERLAY_SLIDE_LEFT, OVERLAY_SLIDE_RIGHT, OVERLAY_SLIDE_UP, OVERLAY_SLIDE_DOWN };
+
+int  AddOverlayText(const char* text, float x, float y, const DialogStyle* style = NULL); // 0 on failure
+void SetOverlayText(int id, const char* text);
+void SetOverlayPosition(int id, float x, float y);
+void SetOverlayStyle(int id, const DialogStyle* style);
+void ShowOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, int holdMs = 0);
+void HideOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, bool remove = false);
+void RemoveOverlay(int id);
+```
+Текст поверх игры, в любой игре. Это обычный Android view в отдельном окне над окном игры, поэтому игра не может его перекрыть: рендер игры не затрагивается, и все касания по-прежнему уходят в игру. `x` и `y` идут от `0` (левый/верхний край) до `1` (правый/нижний край), с небольшим отступом от краёв экрана, так что `1, 0` — правый верхний угол, а `0.5, 0.5` — центр. Из `DialogStyle` используются `text` (по умолчанию белый с тенью), `textSize` (по умолчанию 14), `font`, `background`, `cornerRadius`, `border`, `borderWidth` и `gravity`, который выравнивает строки (`3` — влево, `17` — по центру, `5` — вправо). Размеры в оверлее (`textSize`, `cornerRadius`, `borderWidth`) задаются не в sp/dp, а в 1/360 короткой стороны экрана, поэтому оверлей занимает одинаковую часть любого экрана; на обычном телефоне это совпадает с sp/dp. `SetOverlayText` достаточно дешёвый для вызова каждый кадр: неизменённый текст вообще не отправляется, а рисуется только последний.
+
+`ShowOverlay` плавно показывает текст, выдвигая его с края экрана, выбранного в `slide`. Если `holdMs` больше `0`, текст держится столько времени, уходит тем же путём и удаляется сам; с этого вызова его id больше нельзя менять. `HideOverlay` плавно скрывает и уводит текст, но оставляет его для следующего `ShowOverlay`, если не задан `remove`. Анимации идут в UI-потоке Android, а не в потоках игры. AML и сам так показывает, сколько модов загружено и сколько не загрузилось; `ShowModsLoadedOverlay = false` в конфиге AML это отключает.
+
+Пример:
+```cpp
+// Уведомление: выезжает слева, держится 4 секунды, уезжает обратно
+aml->ShowOverlay(aml->AddOverlayText("Сохранено!", 0.0f, 1.0f), 400, OVERLAY_SLIDE_LEFT, 4000);
+
+// Счётчик: создаётся один раз, дальше меняется только текст
+static int g_nFPSText;
+g_nFPSText = aml->AddOverlayText("FPS: --", 1.0f, 0.0f); // один раз
+aml->SetOverlayText(g_nFPSText, szFPS);                    // каждый кадр
+```
+
 ### Сеть / загрузки
 ```cpp
 bool DownloadFile(const char* url, const char* saveto);
@@ -828,6 +855,7 @@ ON_MOD_UNLOAD()
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Диалоги с результатом (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Буфер обмена |
 | `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Жизненный цикл |
+| `aml->AddOverlayText / SetOverlayText / RemoveOverlay` | Оверлей |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Информация о системе |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Идентификация/версия целевого приложения |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Макросы хуков |

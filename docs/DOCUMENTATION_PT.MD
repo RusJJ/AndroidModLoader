@@ -499,6 +499,33 @@ bool HasWindowFocus();
 ```
 O AML só observa a activity do jogo e não sobrescreve nada, então o jogo se comporta exatamente igual. Os listeners rodam na thread própria do AML, nunca na thread de UI do jogo, então um listener lento não atrasa o jogo; os eventos continuam chegando em ordem. Pause/resume significa que o jogo foi para o segundo plano ou voltou. O foco também é perdido enquanto a barra de notificações, um diálogo ou o teclado cobre o jogo. Os diálogos do próprio AML não contam como mudança de foco, então mostrar um a partir de um evento de foco não entra em loop. Os dois getters só leem uma flag e podem ser chamados todo frame. Nada é preparado até um mod chamar uma dessas funções.
 
+### Overlay (AML 1.5.0)
+```cpp
+enum eOverlaySlide { OVERLAY_SLIDE_NONE = 0, OVERLAY_SLIDE_LEFT, OVERLAY_SLIDE_RIGHT, OVERLAY_SLIDE_UP, OVERLAY_SLIDE_DOWN };
+
+int  AddOverlayText(const char* text, float x, float y, const DialogStyle* style = NULL); // 0 on failure
+void SetOverlayText(int id, const char* text);
+void SetOverlayPosition(int id, float x, float y);
+void SetOverlayStyle(int id, const DialogStyle* style);
+void ShowOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, int holdMs = 0);
+void HideOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, bool remove = false);
+void RemoveOverlay(int id);
+```
+Texto desenhado por cima do jogo, em qualquer jogo. É uma view comum do Android numa janela própria acima da do jogo, então o jogo não consegue cobri-la: a renderização do jogo não é tocada e todo toque continua indo para o jogo. `x` e `y` vão de `0` (borda esquerda/superior) a `1` (borda direita/inferior), um pouco afastados das bordas da tela, então `1, 0` é o canto superior direito e `0.5, 0.5` o centro. Do `DialogStyle` são usados `text` (branco com sombra por padrão), `textSize` (14 por padrão), `font`, `background`, `cornerRadius`, `border`, `borderWidth` e `gravity`, que alinha as linhas (`3` à esquerda, `17` no centro, `5` à direita). Os tamanhos no overlay (`textSize`, `cornerRadius`, `borderWidth`) não são sp/dp, e sim 1/360 do lado menor da tela, então o overlay ocupa a mesma parte de qualquer tela; num celular comum isso equivale a sp/dp. `SetOverlayText` é barato o bastante para todo frame: um texto sem mudança nem é enviado e só o mais recente é desenhado.
+
+`ShowOverlay` faz o texto aparecer aos poucos, deslizando a partir da borda da tela escolhida em `slide`. Com `holdMs` acima de `0` ele fica esse tempo, sai do mesmo jeito e se remove sozinho; a partir dessa chamada o id não pode mais ser alterado. `HideOverlay` faz o texto sumir e deslizar para fora, mantendo-o para um `ShowOverlay` depois, a menos que `remove` esteja ativo. As animações rodam na thread de UI do Android, não nas threads do jogo. O próprio AML usa isso para mostrar quantos mods carregaram e quantos falharam; `ShowModsLoadedOverlay = false` na config do AML desliga isso.
+
+Exemplo:
+```cpp
+// Uma notificação: desliza da esquerda, fica 4 segundos, desliza de volta
+aml->ShowOverlay(aml->AddOverlayText("Salvo!", 0.0f, 1.0f), 400, OVERLAY_SLIDE_LEFT, 4000);
+
+// Um contador: criado uma vez, depois só o texto muda
+static int g_nFPSText;
+g_nFPSText = aml->AddOverlayText("FPS: --", 1.0f, 0.0f); // uma vez
+aml->SetOverlayText(g_nFPSText, szFPS);                    // todo frame
+```
+
 ### Rede / downloads
 ```cpp
 bool DownloadFile(const char* url, const char* saveto);
@@ -828,6 +855,7 @@ ON_MOD_UNLOAD()
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Diálogos com resultado (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Área de transferência |
 | `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Ciclo de vida |
+| `aml->AddOverlayText / SetOverlayText / RemoveOverlay` | Overlay |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Informações do sistema |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Identidade/versão do app alvo |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Macros de hook |

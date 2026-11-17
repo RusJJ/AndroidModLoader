@@ -549,6 +549,28 @@ static void LoadNewsAndUpdate(bool bEnableUpdater)
     }
 }
 
+bool PushToJavaUIThread(void (*fn)(void*), void* data);
+// Bottom left: how many mods are loaded. Bottom right, in red: how many failed
+static void ShowModsLoadedOverlay(void*)
+{
+    char text[128];
+    DialogStyle style;
+    style.background = 0xB0000000;
+    style.cornerRadius = 8.0f;
+    style.textSize = 12.0f;
+
+    int loaded = modlist->GetModsNum() - 1; // Not counting AML itself
+    snprintf(text, sizeof(text), "AML v%s: %d mod%s loaded", amlmodinfo->VersionString(), loaded, (loaded == 1) ? "" : "s");
+    aml->ShowOverlay(aml->AddOverlayText(text, 0.0f, 1.0f, &style), 400, OVERLAY_SLIDE_LEFT, 8000);
+
+    if(g_nFailedToLoad > 0)
+    {
+        style.text = 0xFFFF5050;
+        snprintf(text, sizeof(text), "%d mod%s failed to load", g_nFailedToLoad, (g_nFailedToLoad == 1) ? "" : "s");
+        aml->ShowOverlay(aml->AddOverlayText(text, 1.0f, 1.0f, &style), 400, OVERLAY_SLIDE_RIGHT, 10000);
+    }
+}
+
 void StartAMLRightNow(const char* libsArray = NULL)
 {
     if(g_bAMLStarted)
@@ -694,6 +716,7 @@ void StartAMLRightNow(const char* libsArray = NULL)
     g_nEnableNews = clampint(0, 3, cfg->GetInt("ShowNewsForFewTimes", 3));
     g_pLastNewsId = cfg->Bind("LastNewsIdShowed", 0, "Savings");
     g_nDownloadTimeout = clampint(1, 5, cfg->GetInt("DownloadTimeout", 2));
+    bool bShowModsOverlay = cfg->GetBool("ShowModsLoadedOverlay", true);
 
     g_bCrashAML = cfg->GetBool("CrashAML", false, "DevTools");
     g_bNoMods = cfg->GetBool("DontLoadMods", false, "DevTools");
@@ -791,6 +814,7 @@ void StartAMLRightNow(const char* libsArray = NULL)
         modlist->ProcessLoading();
         modlist->OnAllModsLoaded();
         logger->Info("Mods were launched!");
+        if(bShowModsOverlay && !PushToJavaUIThread(ShowModsLoadedOverlay, NULL)) ShowModsLoadedOverlay(NULL);
     }
     pLastModProcessed = NULL;
 

@@ -499,6 +499,33 @@ bool HasWindowFocus();
 ```
 AML hanya mengamati activity game dan tidak menimpa apa pun, jadi game berperilaku persis sama. Listener dijalankan di thread milik AML sendiri, bukan di thread UI game, sehingga listener yang lambat tidak bisa menunda game; urutan event tetap terjaga. Pause/resume berarti game masuk ke latar belakang atau kembali. Fokus juga hilang saat panel notifikasi, dialog, atau keyboard menutupi game. Dialog milik AML sendiri tidak dihitung sebagai perubahan fokus, jadi menampilkan dialog dari event fokus tidak akan berulang terus. Kedua getter hanya membaca sebuah flag dan aman dipanggil setiap frame. Tidak ada yang disiapkan sampai sebuah mod memanggil salah satu fungsi ini.
 
+### Overlay (AML 1.5.0)
+```cpp
+enum eOverlaySlide { OVERLAY_SLIDE_NONE = 0, OVERLAY_SLIDE_LEFT, OVERLAY_SLIDE_RIGHT, OVERLAY_SLIDE_UP, OVERLAY_SLIDE_DOWN };
+
+int  AddOverlayText(const char* text, float x, float y, const DialogStyle* style = NULL); // 0 on failure
+void SetOverlayText(int id, const char* text);
+void SetOverlayPosition(int id, float x, float y);
+void SetOverlayStyle(int id, const DialogStyle* style);
+void ShowOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, int holdMs = 0);
+void HideOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, bool remove = false);
+void RemoveOverlay(int id);
+```
+Teks yang digambar di atas game, di game apa pun. Ini adalah view Android biasa dalam jendela sendiri di atas jendela game, jadi game tidak bisa menutupinya: rendering game tidak disentuh dan setiap sentuhan tetap masuk ke game. `x` dan `y` bernilai dari `0` (tepi kiri/atas) sampai `1` (tepi kanan/bawah), sedikit menjauh dari tepi layar, jadi `1, 0` adalah pojok kanan atas dan `0.5, 0.5` tengah. Dari `DialogStyle` yang dipakai adalah `text` (default putih dengan bayangan), `textSize` (default 14), `font`, `background`, `cornerRadius`, `border`, `borderWidth`, dan `gravity`, yang meratakan baris (`3` kiri, `17` tengah, `5` kanan). Ukuran di overlay (`textSize`, `cornerRadius`, `borderWidth`) bukan sp/dp, melainkan 1/360 dari sisi pendek layar, jadi overlay mengambil bagian yang sama di layar apa pun; di ponsel biasa nilainya sama dengan sp/dp. `SetOverlayText` cukup ringan untuk setiap frame: teks yang tidak berubah tidak dikirim sama sekali dan hanya teks terbaru yang digambar.
+
+`ShowOverlay` memunculkan teks perlahan, menggesernya masuk dari tepi layar yang dipilih lewat `slide`. Jika `holdMs` lebih dari `0`, teks bertahan selama itu, keluar dengan cara yang sama, lalu menghapus dirinya sendiri; sejak panggilan itu id-nya tidak bisa diubah lagi. `HideOverlay` menghilangkan dan menggeser teks keluar, tapi menyimpannya untuk `ShowOverlay` berikutnya kecuali `remove` diaktifkan. Animasi berjalan di thread UI Android, bukan di thread game. AML sendiri memakai ini untuk menampilkan berapa mod yang dimuat dan berapa yang gagal; `ShowModsLoadedOverlay = false` di config AML mematikannya.
+
+Contoh:
+```cpp
+// Notifikasi: masuk dari kiri, bertahan 4 detik, lalu keluar lagi
+aml->ShowOverlay(aml->AddOverlayText("Tersimpan!", 0.0f, 1.0f), 400, OVERLAY_SLIDE_LEFT, 4000);
+
+// Penghitung: dibuat sekali, lalu hanya teksnya yang berubah
+static int g_nFPSText;
+g_nFPSText = aml->AddOverlayText("FPS: --", 1.0f, 0.0f); // sekali
+aml->SetOverlayText(g_nFPSText, szFPS);                    // setiap frame
+```
+
 ### Jaringan / unduhan
 ```cpp
 bool DownloadFile(const char* url, const char* saveto);
@@ -828,6 +855,7 @@ ON_MOD_UNLOAD()
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Dialog dengan hasil (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Clipboard |
 | `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Siklus hidup |
+| `aml->AddOverlayText / SetOverlayText / RemoveOverlay` | Overlay |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Info sistem |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Identitas/versi aplikasi target |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Makro hook |

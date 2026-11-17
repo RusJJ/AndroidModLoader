@@ -78,6 +78,15 @@ struct GlossRegisters
 typedef void* PHookHandle;
 typedef void (*HookWithRegistersFn)(GlossRegisters* regs, PHookHandle hook);
 
+enum eOverlaySlide
+{
+    OVERLAY_SLIDE_NONE = 0,
+    OVERLAY_SLIDE_LEFT,
+    OVERLAY_SLIDE_RIGHT,
+    OVERLAY_SLIDE_UP,
+    OVERLAY_SLIDE_DOWN,
+};
+
 enum eLifecycleEvent
 {
     LIFECYCLE_PAUSE = 0,
@@ -319,6 +328,13 @@ public:
     virtual bool        HasWindowFocus();
     virtual int         GetThermalStatus(); // PowerManager.THERMAL_STATUS_*: 0 is none, 6 is shutdown. -1 below Android 10
     virtual bool        IsCharging(); // Always false below Android 6
+    virtual int         AddOverlayText(const char* text, float x, float y, const DialogStyle* style = NULL); // Text over the game, touches go through it. x, y: 0 is the left/top edge, 1 is the right/bottom one. Sizes are 1/360 of the screen's short side. Returns 0 on failure
+    virtual void        SetOverlayText(int id, const char* text); // Cheap enough for every frame
+    virtual void        RemoveOverlay(int id);
+    virtual void        SetOverlayPosition(int id, float x, float y);
+    virtual void        SetOverlayStyle(int id, const DialogStyle* style); // DialogStyle::gravity aligns the lines here
+    virtual void        ShowOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, int holdMs = 0); // "slide" is eOverlaySlide. holdMs > 0: hides and removes itself after that, the id cannot be changed from this call on
+    virtual void        HideOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, bool remove = false);
 
 
     // Inlines (shortcuts for you!)

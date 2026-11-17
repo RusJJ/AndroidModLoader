@@ -178,6 +178,13 @@ public:
     bool        HasWindowFocus();
     int         GetThermalStatus();
     bool        IsCharging();
+    int         AddOverlayText(const char* text, float x, float y, const DialogStyle* style = NULL);
+    void        SetOverlayText(int id, const char* text);
+    void        RemoveOverlay(int id);
+    void        SetOverlayPosition(int id, float x, float y);
+    void        SetOverlayStyle(int id, const DialogStyle* style);
+    void        ShowOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, int holdMs = 0);
+    void        HideOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, bool remove = false);
 };
 
 extern char g_szAMLFeatures[2048];

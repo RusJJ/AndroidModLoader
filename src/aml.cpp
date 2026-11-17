@@ -1845,6 +1845,34 @@ static void JNICALL Bridge_OnDialogResult(JNIEnv* env, jclass, jlong id, jboolea
 }
 static void JNICALL Bridge_OnLifecycle(JNIEnv*, jclass, jint event);
 static jmethodID g_GetVisibleMethod = NULL;
+static jobject g_OverlayObject = NULL;
+static struct { jmethodID add, setText, setPosition, setStyle, show, hide, remove; } g_OverlayMethods;
+static bool InitOverlayJNI(JNIEnv* env, jobject bridge, jclass bridgeCls)
+{
+    jmethodID getOverlay = env->GetMethodID(bridgeCls, "getOverlay", "()Lnet/rusjj/aml/Overlay;");
+    auto overlay = MakeJNILocalRef(env, getOverlay ? env->CallObjectMethod(bridge, getOverlay) : NULL);
+    auto cls = MakeJNILocalRef(env, overlay.Get() ? env->GetObjectClass(overlay.Get()) : NULL);
+    if(!cls.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+    g_OverlayMethods.add = env->GetMethodID(cls.Get(), "add", "(I[BFF[I[B)V");
+    g_OverlayMethods.setText = env->GetMethodID(cls.Get(), "setText", "(I[B)V");
+    g_OverlayMethods.setPosition = env->GetMethodID(cls.Get(), "setPosition", "(IFF)V");
+    g_OverlayMethods.setStyle = env->GetMethodID(cls.Get(), "setStyle", "(I[I[B)V");
+    g_OverlayMethods.show = env->GetMethodID(cls.Get(), "show", "(IIII)V");
+    g_OverlayMethods.hide = env->GetMethodID(cls.Get(), "hide", "(IIIZ)V");
+    g_OverlayMethods.remove = env->GetMethodID(cls.Get(), "remove", "(I)V");
+    if(!g_OverlayMethods.add || !g_OverlayMethods.setText || !g_OverlayMethods.setPosition || !g_OverlayMethods.setStyle ||
+       !g_OverlayMethods.show || !g_OverlayMethods.hide || !g_OverlayMethods.remove)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+    g_OverlayObject = env->NewGlobalRef(overlay.Get());
+    return g_OverlayObject != NULL;
+}
 static bool InitBridgeJNI(JNIEnv* env)
 {
     if(g_BridgeObject) return true;
@@ -1872,7 +1900,7 @@ static bool InitBridgeJNI(JNIEnv* env)
         { "onResult", "(JZI[B)V", (void*)Bridge_OnDialogResult },
         { "onLifecycle", "(I)V", (void*)Bridge_OnLifecycle },
     };
-    if(!init || !g_GetVisibleMethod || env->RegisterNatives(cls.Get(), natives, 2) != JNI_OK)
+    if(!init || !g_GetVisibleMethod || !InitOverlayJNI(env, obj, cls.Get()) || env->RegisterNatives(cls.Get(), natives, 2) != JNI_OK)
     {
         if(env->ExceptionCheck()) env->ExceptionClear();
         return false;
@@ -1987,25 +2015,30 @@ static void DialogTask(void* data)
     // From here the task belongs to Bridge_OnDialogResult
     if(!shown) FinishDialog(task, false, 0, "");
 }
+// Into Bridge.java's Style
+static void PackStyle(const DialogStyle* style, jint out[14], std::string& font)
+{
+    DialogStyle defaults;
+    if(!style || style->structSize < (int)sizeof(DialogStyle)) style = &defaults;
+    const float floats[] = { style->cornerRadius, style->borderWidth, style->dimAmount, style->textSize, style->titleSize, style->width };
+    out[0] = style->baseTheme;
+    out[1] = (jint)style->background;
+    out[2] = (jint)style->text;
+    out[3] = (jint)style->title;
+    out[4] = (jint)style->accent;
+    out[5] = (jint)style->border;
+    memcpy(&out[6], floats, sizeof(floats));
+    out[12] = style->gravity;
+    out[13] = style->cancelable ? 1 : 0;
+    font = style->font ? style->font : "";
+}
 static SDialogTask* NewDialogTask(int kind, const DialogStyle* style, const char* title, void* cb, void* data)
 {
     SDialogTask* task = new SDialogTask();
     task->kind = kind;
     task->cb = cb;
     task->data = data;
-    DialogStyle defaults;
-    if(!style || style->structSize < (int)sizeof(DialogStyle)) style = &defaults;
-    const float floats[] = { style->cornerRadius, style->borderWidth, style->dimAmount, style->textSize, style->titleSize, style->width };
-    task->style[0] = style->baseTheme;
-    task->style[1] = (jint)style->background;
-    task->style[2] = (jint)style->text;
-    task->style[3] = (jint)style->title;
-    task->style[4] = (jint)style->accent;
-    task->style[5] = (jint)style->border;
-    memcpy(&task->style[6], floats, sizeof(floats));
-    task->style[12] = style->gravity;
-    task->style[13] = style->cancelable ? 1 : 0;
-    task->font = style->font ? style->font : "";
+    PackStyle(style, task->style, task->font);
     task->title = title ? title : "";
     task->i0 = task->i1 = task->i2 = 0;
     return task;
@@ -2205,6 +2238,135 @@ bool AML::HasWindowFocus()
 {
     StartLifecycle();
     return g_bAppFocused;
+}
+
+
+
+static std::atomic<int> g_nLastOverlayID(0);
+static std::mutex g_OverlayMutex;
+static std::unordered_map<int, std::string> g_OverlayTexts; // What Java has, an unchanged text is not sent again
+
+// Locks the bridge until it goes out of scope, NULL env if there is no bridge
+struct SOverlayCall
+{
+    std::lock_guard<std::mutex> lock;
+    JNIEnv* env;
+    SOverlayCall() : lock(g_BridgeMutex), env(GetCurrentJNI())
+    {
+        if(env && !InitBridgeJNI(env))
+        {
+            logger->Error("Cannot use overlays: Java bridge injection failed");
+            env = NULL;
+        }
+    }
+    ~SOverlayCall()
+    {
+        if(env && env->ExceptionCheck())
+        {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+    }
+};
+static bool HasOverlay(int id)
+{
+    std::lock_guard<std::mutex> lock(g_OverlayMutex);
+    return g_OverlayTexts.count(id) != 0;
+}
+
+int AML::AddOverlayText(const char* text, float x, float y, const DialogStyle* style)
+{
+    if(!text) text = "";
+    SOverlayCall call;
+    if(!call.env) return 0;
+
+    jint styleData[14];
+    std::string font;
+    PackStyle(style, styleData, font);
+    auto jText = MakeJNILocalRef(call.env, NewUTF8ByteArray(call.env, text));
+    auto jStyle = MakeJNILocalRef(call.env, call.env->NewIntArray(14));
+    if(jStyle.Get()) call.env->SetIntArrayRegion(jStyle.Get(), 0, 14, styleData);
+    auto jFont = MakeJNILocalRef(call.env, NewUTF8ByteArray(call.env, font));
+    if(!jText.Get() || !jStyle.Get() || !jFont.Get() || call.env->ExceptionCheck()) return 0;
+
+    int id = ++g_nLastOverlayID;
+    call.env->CallVoidMethod(g_OverlayObject, g_OverlayMethods.add, id, jText.Get(), x, y, jStyle.Get(), jFont.Get());
+    if(call.env->ExceptionCheck()) return 0;
+
+    std::lock_guard<std::mutex> lock(g_OverlayMutex);
+    g_OverlayTexts[id] = text;
+    return id;
+}
+
+void AML::SetOverlayText(int id, const char* text)
+{
+    if(!text) text = "";
+    {
+        std::lock_guard<std::mutex> lock(g_OverlayMutex);
+        auto it = g_OverlayTexts.find(id);
+        if(it == g_OverlayTexts.end() || it->second == text) return;
+        it->second = text;
+    }
+    SOverlayCall call;
+    if(!call.env) return;
+    auto jText = MakeJNILocalRef(call.env, NewUTF8ByteArray(call.env, text));
+    if(jText.Get()) call.env->CallVoidMethod(g_OverlayObject, g_OverlayMethods.setText, id, jText.Get());
+}
+
+void AML::SetOverlayPosition(int id, float x, float y)
+{
+    if(!HasOverlay(id)) return;
+    SOverlayCall call;
+    if(call.env) call.env->CallVoidMethod(g_OverlayObject, g_OverlayMethods.setPosition, id, x, y);
+}
+
+void AML::SetOverlayStyle(int id, const DialogStyle* style)
+{
+    if(!HasOverlay(id)) return;
+    SOverlayCall call;
+    if(!call.env) return;
+
+    jint styleData[14];
+    std::string font;
+    PackStyle(style, styleData, font);
+    auto jStyle = MakeJNILocalRef(call.env, call.env->NewIntArray(14));
+    if(jStyle.Get()) call.env->SetIntArrayRegion(jStyle.Get(), 0, 14, styleData);
+    auto jFont = MakeJNILocalRef(call.env, NewUTF8ByteArray(call.env, font));
+    if(jStyle.Get() && jFont.Get() && !call.env->ExceptionCheck()) call.env->CallVoidMethod(g_OverlayObject, g_OverlayMethods.setStyle, id, jStyle.Get(), jFont.Get());
+}
+
+void AML::ShowOverlay(int id, int fadeMs, int slide, int holdMs)
+{
+    if(holdMs > 0) // It removes itself
+    {
+        std::lock_guard<std::mutex> lock(g_OverlayMutex);
+        if(!g_OverlayTexts.erase(id)) return;
+    }
+    else if(!HasOverlay(id)) return;
+    SOverlayCall call;
+    if(call.env) call.env->CallVoidMethod(g_OverlayObject, g_OverlayMethods.show, id, (jint)fadeMs, (jint)slide, (jint)holdMs);
+}
+
+void AML::HideOverlay(int id, int fadeMs, int slide, bool remove)
+{
+    if(remove)
+    {
+        std::lock_guard<std::mutex> lock(g_OverlayMutex);
+        if(!g_OverlayTexts.erase(id)) return;
+    }
+    else if(!HasOverlay(id)) return;
+    SOverlayCall call;
+    if(call.env) call.env->CallVoidMethod(g_OverlayObject, g_OverlayMethods.hide, id, (jint)fadeMs, (jint)slide, (jboolean)remove);
+}
+
+void AML::RemoveOverlay(int id)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_OverlayMutex);
+        if(!g_OverlayTexts.erase(id)) return;
+    }
+    SOverlayCall call;
+    if(call.env) call.env->CallVoidMethod(g_OverlayObject, g_OverlayMethods.remove, id);
 }
 
 

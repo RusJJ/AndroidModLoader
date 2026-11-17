@@ -58,12 +58,12 @@ public class Bridge
         });
     }
 
-    private static final Handler ui = new Handler(Looper.getMainLooper());
-    private static volatile Activity visible; // Dialogs and AML's activity calls go to the screen the player sees
+    static final Handler ui = new Handler(Looper.getMainLooper());
+    static volatile Activity visible; // Dialogs and AML's activity calls go to the screen the player sees
     private static final ArrayList<Runnable> waiting = new ArrayList<>(); // Dialogs asked for while no screen is up
 
     // Android's own record, for a resume that happened before the callbacks below were registered
-    private static Activity findResumed()
+    static Activity findResumed()
     {
         try
         {
@@ -87,9 +87,11 @@ public class Bridge
 
     // Only observes: activities and their Window.Callback stay untouched.
     // Started activities are counted, so going to an ad or another screen of the game is not a pause
+    static Context appContext;
     public void init(Context context)
     {
         Application app = (Application)context.getApplicationContext();
+        appContext = app;
         ui.post(() -> {
             Activity now = findResumed();
             if(now != null)
@@ -106,10 +108,15 @@ public class Bridge
                 {
                     visible = a;
                     watchFocus(a);
+                    Overlay.attach(a);
                     for(Runnable r : waiting) r.run();
                     waiting.clear();
                 }
-                @Override public void onActivityDestroyed(Activity a) { if(visible == a) visible = null; }
+                @Override public void onActivityDestroyed(Activity a)
+                {
+                    if(visible == a) visible = null;
+                    Overlay.detach(a);
+                }
                 @Override public void onActivityPaused(Activity a) {}
                 @Override public void onActivityCreated(Activity a, Bundle b) {}
                 @Override public void onActivitySaveInstanceState(Activity a, Bundle b) {}
@@ -121,6 +128,8 @@ public class Bridge
         Activity a = visible;
         return (a != null) ? a : findResumed();
     }
+    private final Overlay overlay = new Overlay();
+    public Overlay getOverlay() { return overlay; }
 
     private static final class Result implements DialogInterface.OnDismissListener
     {
@@ -159,7 +168,7 @@ public class Bridge
         });
     }
 
-    private static String str(byte[] b) { return new String(b, StandardCharsets.UTF_8); }
+    static String str(byte[] b) { return new String(b, StandardCharsets.UTF_8); }
     private static String[] strs(byte[][] b)
     {
         String[] out = new String[b.length];
@@ -168,7 +177,7 @@ public class Bridge
     }
     private static CharSequence label(Context ctx, byte[] b, int fallbackRes) { return (b.length > 0) ? str(b) : ctx.getString(fallbackRes); }
     // DialogStyle from iaml.h, floats come as their bits
-    private static final class Style
+    static final class Style
     {
         final int theme, background, text, title, accent, border, gravity;
         final float radius, borderWidth, dim, textSize, titleSize, width;
@@ -185,7 +194,7 @@ public class Bridge
     }
 
     private static final HashMap<String, Typeface> fonts = new HashMap<>();
-    private static Typeface loadFont(Context ctx, String path)
+    static Typeface loadFont(Context ctx, String path)
     {
         if(path == null) return null;
         if(fonts.containsKey(path)) return fonts.get(path);

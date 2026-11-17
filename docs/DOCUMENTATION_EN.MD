@@ -499,6 +499,33 @@ bool HasWindowFocus();
 ```
 AML only observes the game's activity and overrides nothing, so the game behaves exactly the same. Listeners run on AML's own thread, never on the game's UI thread, so a slow listener cannot delay the game; events still arrive in order. Pause/resume means the game went to the background or came back. Focus is also lost while the notification shade, a dialog or the keyboard covers the game. AML's own dialogs are not reported as focus changes, so showing one from a focus event cannot loop. The two getters only read a flag and are safe to call every frame. Nothing is set up until a mod calls one of these functions.
 
+### Overlay (AML 1.5.0)
+```cpp
+enum eOverlaySlide { OVERLAY_SLIDE_NONE = 0, OVERLAY_SLIDE_LEFT, OVERLAY_SLIDE_RIGHT, OVERLAY_SLIDE_UP, OVERLAY_SLIDE_DOWN };
+
+int  AddOverlayText(const char* text, float x, float y, const DialogStyle* style = NULL); // 0 on failure
+void SetOverlayText(int id, const char* text);
+void SetOverlayPosition(int id, float x, float y);
+void SetOverlayStyle(int id, const DialogStyle* style);
+void ShowOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, int holdMs = 0);
+void HideOverlay(int id, int fadeMs = 300, int slide = OVERLAY_SLIDE_NONE, bool remove = false);
+void RemoveOverlay(int id);
+```
+Text drawn over the game in any game. It is a plain Android view in a window of its own above the game's, so the game cannot cover it: the game's rendering is not touched and every touch still goes to the game. `x` and `y` go from `0` (left/top edge) to `1` (right/bottom edge), a little away from the screen edges, so `1, 0` is the top right corner and `0.5, 0.5` the center. From `DialogStyle` it uses `text` (white with a shadow by default), `textSize` (14 by default), `font`, `background`, `cornerRadius`, `border`, `borderWidth` and `gravity`, which aligns the lines (`3` left, `17` center, `5` right). Overlay sizes (`textSize`, `cornerRadius`, `borderWidth`) are not sp/dp but 1/360 of the screen's short side, so an overlay takes the same part of any screen; on a usual phone that equals sp/dp. `SetOverlayText` is cheap enough for every frame: an unchanged text is not sent at all and only the latest text gets drawn.
+
+`ShowOverlay` fades the text in, sliding it in from the screen edge picked by `slide`. With `holdMs` above `0` it stays for that long, goes out the same way and removes itself; from that call on its id cannot be changed anymore. `HideOverlay` fades and slides it out and keeps it for a later `ShowOverlay`, unless `remove` is set. The animations run on Android's UI thread, not on the game's threads. AML uses this itself to show how many mods were loaded and how many failed; `ShowModsLoadedOverlay = false` in AML's config turns that off.
+
+Example:
+```cpp
+// A notification: slides in from the left, stays for 4 seconds, slides back out
+aml->ShowOverlay(aml->AddOverlayText("Saved!", 0.0f, 1.0f), 400, OVERLAY_SLIDE_LEFT, 4000);
+
+// A counter: added once, then only its text changes
+static int g_nFPSText;
+g_nFPSText = aml->AddOverlayText("FPS: --", 1.0f, 0.0f); // once
+aml->SetOverlayText(g_nFPSText, szFPS);                    // every frame
+```
+
 ### Networking / downloads
 ```cpp
 bool DownloadFile(const char* url, const char* saveto);
@@ -828,6 +855,7 @@ ON_MOD_UNLOAD()
 | `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Dialogs with a result (+ `DialogStyle`) |
 | `aml->SetClipboardText / GetClipboardText` | Clipboard |
 | `aml->AddLifecycleListener / IsAppInForeground / HasWindowFocus` | Lifecycle |
+| `aml->AddOverlayText / SetOverlayText / RemoveOverlay` | Overlay |
 | `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | System info |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Target app identity/version |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Hook macros |
