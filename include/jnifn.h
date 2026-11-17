@@ -297,6 +297,7 @@ inline jobject LoadSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSize
     std::string cacheDir = nativePath;
     std::string dexFilePath = cacheDir + "/amlInject_" + std::to_string(++dexCount) + ".dex";
 
+    unlink(dexFilePath.c_str()); // Left read-only by the previous launch, "wb" fails on it
     LocalRef<FILE*> fp(fopen(dexFilePath.c_str(), "wb"), [](FILE* file){ if(file) fclose(file); });
     if (!fp.Get()) return NULL;
     fwrite(dexBytes, 1, dexSize, fp.Get());
@@ -348,6 +349,7 @@ inline jobject InjectSmaliDEX(JNIEnv* env, const uint8_t* dexBytes, size_t dexSi
     std::string cacheDir = nativePath;
     std::string dexFilePath = cacheDir + "/amlInject_" + std::to_string(++dexCount) + ".dex";
 
+    unlink(dexFilePath.c_str()); // Left read-only by the previous launch, "wb" fails on it
     LocalRef<FILE*> fp(fopen(dexFilePath.c_str(), "wb"), [](FILE* file){ if(file) fclose(file); });
     if (!fp.Get()) return NULL;
     fwrite(dexBytes, 1, dexSize, fp.Get());

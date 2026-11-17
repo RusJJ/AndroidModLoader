@@ -2,10 +2,10 @@
 #define _IAML
 
 // Usage: place 3 lines somewhere in the code AFTER #include <mod/amlmod.h>
-// #if !defined(IAML_VER) && IAML_VER < 01040100
-//     #error "You need to update your MOD folder to 1.4.1!"
+// #if !defined(IAML_VER) && IAML_VER < 01050000
+//     #error "You need to update your MOD folder to 1.5.0!"
 // #endif
-#define IAML_VER 01040100
+#define IAML_VER 01050000
 
 #include <stdint.h>
 #include <type_traits>
@@ -78,6 +78,15 @@ struct GlossRegisters
 typedef void* PHookHandle;
 typedef void (*HookWithRegistersFn)(GlossRegisters* regs, PHookHandle hook);
 
+// Zero fields keep the theme's values
+struct DialogStyle
+{
+    int      baseTheme; // android.R.style.*
+    uint32_t background, text, accent; // ARGB
+    float    cornerRadius; // dp
+    float    dimAmount; // 0.0 - 1.0, negative removes the dim
+};
+
 #if defined(__cplusplus)
     extern "C"
 #endif
@@ -89,6 +98,11 @@ public:
     typedef void(*ListDirCallback)(const char* name, bool isDir, void* data);
     typedef void(*ListModsCallback)(const char* guid, const char* version, void* data);
     typedef void(*ListInterfacesCallback)(const char* name, void* pointer, void* data);
+    typedef void(*InputDialogCallback)(const char* text, void* data);
+    typedef void(*ConfirmDialogCallback)(bool yes, void* data);
+    typedef void(*ChoiceDialogCallback)(int index, void* data);
+    typedef void(*MultiChoiceDialogCallback)(const bool* checked, int count, void* data);
+    typedef void(*SliderDialogCallback)(bool ok, int value, void* data);
 
 public:
     /* AML 1.0.0.0 */
@@ -249,7 +263,7 @@ public:
     virtual int         GetLatestDownloadErrorCode();
     virtual int         GetCPUCores();
 
-    /* AML 1.4.1 */
+    /* AML 1.5.0 */
     virtual void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL);
     virtual const char* GetAppVersionName();
     virtual int64_t     GetAppVersionCode();
@@ -257,6 +271,28 @@ public:
     virtual const char* GetApkMD5();
     virtual uint32_t    GetStringHash(const char* str, size_t len = 0); // murmur3 hash
     virtual uint32_t    GetCRC32(const void* str, size_t len);
+    virtual void        SetClipboardText(const char* text); // Does not block, applied on Java UI thread
+    virtual bool        GetClipboardText(char* buf, size_t len, bool now = false); // Gives the last known text and requests a fresh one. "now" reads it on this thread instead (blocks for a binder call). False if nothing is known yet
+    virtual const char* GetSystemLanguage(); // "en-US", cached on the first call
+    virtual int         GetDisplayDPI(); // 160 is a 1.0x UI scale, 0 if unknown
+    virtual float       GetRefreshRate(); // Hz, 0 if unknown
+    virtual bool        SetKeepScreenOn(bool keepOn); // Applied on Java UI thread
+    virtual void        ShareText(const char* text, const char* title = NULL); // Opens Android share menu
+    virtual const char* GetDeviceManufacturer();
+    virtual const char* GetDeviceModel();
+    virtual uint64_t    GetTotalRAM(); // In bytes
+    virtual uint64_t    GetAvailableRAM(); // In bytes
+    virtual void        ShowInputDialog(const char* title, const char* text, InputDialogCallback cb, void* data = NULL, const char* hint = NULL, int inputType = 0, int styleResource = 0); // "cb" is called once on Java UI thread, text is NULL if cancelled. inputType is android.text.InputType (0 is text)
+    virtual void        ShowConfirmDialog(const char* title, const char* message, ConfirmDialogCallback cb, void* data = NULL, const char* yesText = NULL, const char* noText = NULL, int styleResource = 0); // "yes" is false if cancelled
+    virtual void        ShowChoiceDialog(const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL, int selected = -1, int styleResource = 0); // index is -1 if cancelled
+    virtual void        ShowMultiChoiceDialog(const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data = NULL, int styleResource = 0); // "checked" is NULL if cancelled
+    virtual void        ShowSliderDialog(const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data = NULL, int styleResource = 0);
+    virtual void        ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
+    virtual void        ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, void* data = NULL, const char* hint = NULL, int inputType = 0);
+    virtual void        ShowConfirmDialog(const DialogStyle* style, const char* title, const char* message, ConfirmDialogCallback cb, void* data = NULL, const char* yesText = NULL, const char* noText = NULL);
+    virtual void        ShowChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL, int selected = -1);
+    virtual void        ShowMultiChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data = NULL);
+    virtual void        ShowSliderDialog(const DialogStyle* style, const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data = NULL);
 
 
     // Inlines (shortcuts for you!)

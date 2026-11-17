@@ -4,7 +4,7 @@
 > Mods de exemplo: https://github.com/AndroidModLoader?tab=repositories
 > Discord: https://discord.gg/2MY7W39kBg
 >
-> Este documento foi escrito com base nos headers reais dos mods (`amlmod.h`, `iaml.h`, `interface.h`, `config.h`, `icfg.h`, `logger.h`, `localref.h`, `scopeguard.h`, `listitem.h`, `il2cpp.h`). O conjunto de headers corresponde a **IAML_VER `01040000` (AML 1.4.0)**.
+> Este documento foi escrito com base nos headers reais dos mods (`amlmod.h`, `iaml.h`, `interface.h`, `config.h`, `icfg.h`, `logger.h`, `localref.h`, `scopeguard.h`, `listitem.h`, `il2cpp.h`). O conjunto de headers corresponde a **IAML_VER `01050000` (AML 1.5.0)**.
 
 ---
 
@@ -261,6 +261,7 @@ bool        HasModOfBiggerVersion(const char* guid, const char* version);
 int         GetModsLoadedCount();
 int         GetFailedModsCount();
 void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
+void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL); // todas as interfaces registradas
 const char* GetFeatures();                    // string de recursos do build
 ```
 
@@ -372,6 +373,8 @@ int    ReadFileToBuffer(const char* path, char* out, size_t maxLen);
 bool   WriteBufferToFile(const char* path, const void* buf, size_t len);
 void   FileMD5(const char* path, char* out, size_t out_len);   // >= MINIMUM_MD5_BUF_SIZE (33)
 void   DataMD5(void* data, size_t len, char* out, size_t out_len);
+uint32_t GetStringHash(const char* str, size_t len = 0);   // murmur3, len 0 = strlen
+uint32_t GetCRC32(const void* data, size_t len);
 ```
 
 ### Assets (assets do APK)
@@ -399,6 +402,79 @@ void  OpenURL(const char* url);
 int   GetCPUCores();
 bool  IsMainThread();
 void  GetNewsString(char* buf, size_t len);
+const char* GetSystemLanguage();                   // "en-US", em cache após a primeira chamada
+int   GetDisplayDPI();                             // 160 = escala de UI 1.0x, 0 se desconhecido
+float GetRefreshRate();                            // Hz, 0 se desconhecido
+bool  SetKeepScreenOn(bool keepOn);                // aplicado na thread de UI do Java
+void  ShareText(const char* text, const char* title = NULL); // menu de compartilhamento do Android
+const char* GetDeviceManufacturer();
+const char* GetDeviceModel();
+uint64_t GetTotalRAM();                            // bytes
+uint64_t GetAvailableRAM();                        // bytes, MemAvailable de /proc/meminfo
+```
+
+### Área de transferência (AML 1.5.0)
+```cpp
+void SetClipboardText(const char* text);
+bool GetClipboardText(char* buf, size_t len, bool now = false);
+```
+Por padrão nenhuma chamada bloqueia: `SetClipboardText` é aplicado na thread de UI do Java, e `GetClipboardText` copia para `buf` o último texto conhecido e pede um novo em segundo plano, retornando `false` enquanto nada é conhecido. Chame-o uma vez antes (`GetClipboardText(NULL, 0)`) para preencher o cache. Com `now = true` a área de transferência é lida na própria thread que chamou: uma chamada ao sistema, serve para um botão "Colar", mas não para todo frame. No Android 10+ só o app em foco pode ler a área de transferência; o Android 12+ mostra o aviso "colado da área de transferência" uma vez por texto copiado.
+
+### Diálogos (AML 1.5.0)
+```cpp
+typedef void(*InputDialogCallback)(const char* text, void* data);                     // NULL se cancelado
+typedef void(*ConfirmDialogCallback)(bool yes, void* data);                           // false se cancelado
+typedef void(*ChoiceDialogCallback)(int index, void* data);                           // -1 se cancelado
+typedef void(*MultiChoiceDialogCallback)(const bool* checked, int count, void* data); // NULL se cancelado
+typedef void(*SliderDialogCallback)(bool ok, int value, void* data);
+
+void ShowInputDialog(const char* title, const char* text, InputDialogCallback cb, void* data = NULL,
+                     const char* hint = NULL, int inputType = 0, int styleResource = 0);
+void ShowConfirmDialog(const char* title, const char* message, ConfirmDialogCallback cb, void* data = NULL,
+                       const char* yesText = NULL, const char* noText = NULL, int styleResource = 0);
+void ShowChoiceDialog(const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL,
+                      int selected = -1, int styleResource = 0);
+void ShowMultiChoiceDialog(const char* title, const char** items, int count, const bool* checked,
+                           MultiChoiceDialogCallback cb, void* data = NULL, int styleResource = 0);
+void ShowSliderDialog(const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb,
+                      void* data = NULL, int styleResource = 0);
+```
+- A chamada retorna na hora; o callback roda **exatamente uma vez na thread de UI do Java** (copie o resultado ou marque uma flag, não mexa no estado do jogo a partir dali).
+- Cancelar = botão Voltar, toque fora do diálogo ou "Cancelar". Um diálogo que não pôde ser mostrado também informa cancelamento.
+- As strings vão em UTF-8 de verdade, emojis inclusos. Os botões padrão usam o OK/Cancelar localizado do sistema.
+- `inputType` é um valor de `android.text.InputType`: `0` texto, `2` números, `129` senha.
+- `styleResource` é um valor `android.R.style.*` (veja `GetAndroidSystemResID`), `0` é o padrão.
+
+Todo diálogo (e o `ShowDialog`) também tem uma variação que recebe primeiro um `DialogStyle` no lugar de `styleResource`:
+```cpp
+struct DialogStyle
+{
+    int      baseTheme;                 // android.R.style.*
+    uint32_t background, text, accent;  // ARGB
+    float    cornerRadius;              // dp
+    float    dimAmount;                 // 0.0 - 1.0, negativo remove o escurecimento
+}; // campos zerados mantêm os valores do tema
+
+void ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
+void ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, ...);
+// ...igual para ShowConfirmDialog / ShowChoiceDialog / ShowMultiChoiceDialog / ShowSliderDialog
+```
+`accent` colore os botões, as caixas de seleção, o slider e a linha do campo de texto.
+
+Exemplo:
+```cpp
+static char g_szName[64];
+static void OnName(const char* text, void* data)
+{
+    if(text) snprintf(g_szName, sizeof(g_szName), "%s", text);
+}
+
+DialogStyle style = {};
+style.background   = 0xFF1E1E24;
+style.text         = 0xFFEEEEEE;
+style.accent       = 0xFF4FC3F7;
+style.cornerRadius = 16.0f;
+aml->ShowInputDialog(&style, "Nome do jogador", g_szName, OnName, NULL, "Até 16 letras");
 ```
 
 ### Rede / downloads
@@ -727,6 +803,9 @@ ON_MOD_UNLOAD()
 | `aml->GetJNIEnvironment / CallStaticJavaMethod / GetCurrentActivity` | Ponte JNI |
 | `aml->MLS*` | Armazenamento persistente chave/valor |
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Dispositivo/UI |
+| `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Diálogos com resultado (+ `DialogStyle`) |
+| `aml->SetClipboardText / GetClipboardText` | Área de transferência |
+| `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Informações do sistema |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Identidade/versão do app alvo |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Macros de hook |
 | `cfg->GetInt/GetFloat/GetBool/GetString/GetColor(key, def, section="Preferences")` | Ler configuração |
@@ -740,8 +819,8 @@ ON_MOD_UNLOAD()
 ### Verificação de versão
 ```cpp
 #include <mod/amlmod.h>
-#if !defined(IAML_VER) || IAML_VER < 01040000
-    #error "You need to update your MOD folder to 1.4.0!"
+#if !defined(IAML_VER) || IAML_VER < 01050000
+    #error "You need to update your MOD folder to 1.5.0!"
 #endif
 ```
 

@@ -142,7 +142,7 @@ public:
     void        DataMD5(void* data, size_t len, char* out, size_t out_len);
     int         GetLatestDownloadErrorCode();
     int         GetCPUCores();
-    /* AML 1.4.1 */
+    /* AML 1.5.0 */
     void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL);
     const char* GetAppVersionName();
     int64_t     GetAppVersionCode();
@@ -150,6 +150,28 @@ public:
     const char* GetApkMD5();
     uint32_t    GetStringHash(const char* str, size_t len = 0); // murmur3 hash
     uint32_t    GetCRC32(const void* str, size_t len);
+    void        SetClipboardText(const char* text);
+    bool        GetClipboardText(char* buf, size_t len, bool now = false);
+    const char* GetSystemLanguage();
+    int         GetDisplayDPI();
+    float       GetRefreshRate();
+    bool        SetKeepScreenOn(bool keepOn);
+    void        ShareText(const char* text, const char* title = NULL);
+    const char* GetDeviceManufacturer();
+    const char* GetDeviceModel();
+    uint64_t    GetTotalRAM();
+    uint64_t    GetAvailableRAM();
+    void        ShowInputDialog(const char* title, const char* text, InputDialogCallback cb, void* data = NULL, const char* hint = NULL, int inputType = 0, int styleResource = 0);
+    void        ShowConfirmDialog(const char* title, const char* message, ConfirmDialogCallback cb, void* data = NULL, const char* yesText = NULL, const char* noText = NULL, int styleResource = 0);
+    void        ShowChoiceDialog(const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL, int selected = -1, int styleResource = 0);
+    void        ShowMultiChoiceDialog(const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data = NULL, int styleResource = 0);
+    void        ShowSliderDialog(const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data = NULL, int styleResource = 0);
+    void        ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
+    void        ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, void* data = NULL, const char* hint = NULL, int inputType = 0);
+    void        ShowConfirmDialog(const DialogStyle* style, const char* title, const char* message, ConfirmDialogCallback cb, void* data = NULL, const char* yesText = NULL, const char* noText = NULL);
+    void        ShowChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL, int selected = -1);
+    void        ShowMultiChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data = NULL);
+    void        ShowSliderDialog(const DialogStyle* style, const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data = NULL);
 };
 
 extern char g_szAMLFeatures[2048];

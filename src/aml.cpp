@@ -7,11 +7,15 @@
 #include <unordered_map>
 #include <sstream>
 #include <mutex>
+#include <atomic>
+#include <memory>
+#include <thread>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <sys/system_properties.h>
 
 #include <stdio.h>
 #include <time.h>
@@ -21,6 +25,7 @@
 
 #include <Gloss.h>
 
+#include <dex_dialogs.h>
 #include <httputils.h>
 #include <cryptutils.h>
 JMD5 g_MD5;
@@ -1579,6 +1584,584 @@ uint32_t AML::GetCRC32(const void* str, size_t len)
         }
     }
     return ~crc;
+}
+
+static std::mutex g_ClipboardMutex, g_ClipboardJNIMutex;
+static std::string g_szClipboardText;
+static bool g_bClipboardKnown = false;
+static std::atomic<bool> g_bClipboardFetching(false);
+static jobject g_ClipboardManager = NULL;
+static jclass g_ClipDataClass = NULL;
+static jmethodID g_GetPrimaryClipMethod, g_SetPrimaryClipMethod, g_NewPlainTextMethod, g_GetItemCountMethod, g_GetItemAtMethod, g_GetTextMethod, g_ToStringMethod;
+static bool InitClipboardJNI(JNIEnv* env)
+{
+    if(g_ClipboardManager) return true;
+
+    jobject context = ::GetCurrentContext();
+    if(!context) return false;
+
+    auto contextCls = MakeJNILocalRef(env, env->GetObjectClass(context));
+    jmethodID getSystemService = contextCls.Get() ? env->GetMethodID(contextCls.Get(), "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;") : NULL;
+    auto serviceName = MakeJNILocalRef(env, env->NewStringUTF("clipboard"));
+    if(!getSystemService || !serviceName.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+    auto manager = MakeJNILocalRef(env, env->CallObjectMethod(context, getSystemService, serviceName.Get()));
+    if(env->ExceptionCheck()) env->ExceptionClear();
+
+    auto managerCls = MakeJNILocalRef(env, env->FindClass("android/content/ClipboardManager"));
+    auto clipDataCls = MakeJNILocalRef(env, env->FindClass("android/content/ClipData"));
+    auto clipItemCls = MakeJNILocalRef(env, env->FindClass("android/content/ClipData$Item"));
+    auto charSeqCls = MakeJNILocalRef(env, env->FindClass("java/lang/CharSequence"));
+    if(!manager.Get() || !managerCls.Get() || !clipDataCls.Get() || !clipItemCls.Get() || !charSeqCls.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+
+    g_GetPrimaryClipMethod = env->GetMethodID(managerCls.Get(), "getPrimaryClip", "()Landroid/content/ClipData;");
+    g_SetPrimaryClipMethod = env->GetMethodID(managerCls.Get(), "setPrimaryClip", "(Landroid/content/ClipData;)V");
+    g_NewPlainTextMethod = env->GetStaticMethodID(clipDataCls.Get(), "newPlainText", "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;");
+    g_GetItemCountMethod = env->GetMethodID(clipDataCls.Get(), "getItemCount", "()I");
+    g_GetItemAtMethod = env->GetMethodID(clipDataCls.Get(), "getItemAt", "(I)Landroid/content/ClipData$Item;");
+    g_GetTextMethod = env->GetMethodID(clipItemCls.Get(), "getText", "()Ljava/lang/CharSequence;");
+    g_ToStringMethod = env->GetMethodID(charSeqCls.Get(), "toString", "()Ljava/lang/String;");
+    if(!g_GetPrimaryClipMethod || !g_SetPrimaryClipMethod || !g_NewPlainTextMethod || !g_GetItemCountMethod ||
+       !g_GetItemAtMethod || !g_GetTextMethod || !g_ToStringMethod)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+
+    g_ClipDataClass = (jclass)env->NewGlobalRef(clipDataCls.Get());
+    g_ClipboardManager = env->NewGlobalRef(manager.Get());
+    return true;
+}
+static void RunClipboardTask(void (*fn)(void*), void* data)
+{
+    if(!::PushToJavaUIThread(fn, data)) std::thread(fn, data).detach();
+}
+static void FetchClipboard()
+{
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return;
+
+    std::lock_guard<std::mutex> jlock(g_ClipboardJNIMutex);
+    if(!InitClipboardJNI(env)) return;
+
+    std::string text;
+    auto clip = MakeJNILocalRef(env, env->CallObjectMethod(g_ClipboardManager, g_GetPrimaryClipMethod));
+    if(!env->ExceptionCheck() && clip.Get() && env->CallIntMethod(clip.Get(), g_GetItemCountMethod) > 0 && !env->ExceptionCheck())
+    {
+        auto item = MakeJNILocalRef(env, env->CallObjectMethod(clip.Get(), g_GetItemAtMethod, 0));
+        auto seq = MakeJNILocalRef(env, (!env->ExceptionCheck() && item.Get()) ? env->CallObjectMethod(item.Get(), g_GetTextMethod) : NULL);
+        auto str = MakeJNILocalRef(env, (!env->ExceptionCheck() && seq.Get()) ? (jstring)env->CallObjectMethod(seq.Get(), g_ToStringMethod) : NULL);
+        const char* szStr = (!env->ExceptionCheck() && str.Get()) ? env->GetStringUTFChars(str.Get(), NULL) : NULL;
+        if(szStr)
+        {
+            text = szStr;
+            env->ReleaseStringUTFChars(str.Get(), szStr);
+        }
+    }
+    if(env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_ClipboardMutex);
+    g_szClipboardText = text;
+    g_bClipboardKnown = true;
+}
+static void ClipboardFetchTask(void*)
+{
+    FetchClipboard();
+    g_bClipboardFetching = false;
+}
+static void ClipboardSetTask(void* data)
+{
+    char* text = (char*)data;
+    DEFER(free(text));
+
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return;
+
+    std::lock_guard<std::mutex> jlock(g_ClipboardJNIMutex);
+    if(!InitClipboardJNI(env)) return;
+
+    auto label = MakeJNILocalRef(env, env->NewStringUTF(""));
+    auto jText = MakeJNILocalRef(env, env->NewStringUTF(text));
+    if(!label.Get() || !jText.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+    auto clip = MakeJNILocalRef(env, env->CallStaticObjectMethod(g_ClipDataClass, g_NewPlainTextMethod, label.Get(), jText.Get()));
+    if(!env->ExceptionCheck() && clip.Get()) env->CallVoidMethod(g_ClipboardManager, g_SetPrimaryClipMethod, clip.Get());
+    if(env->ExceptionCheck())
+    {
+        env->ExceptionClear();
+        return;
+    }
+
+    // A fetch queued before this task could have put the old text back
+    std::lock_guard<std::mutex> lock(g_ClipboardMutex);
+    g_szClipboardText = text;
+    g_bClipboardKnown = true;
+}
+
+void AML::SetClipboardText(const char* text)
+{
+    if(!text) text = "";
+    {
+        std::lock_guard<std::mutex> lock(g_ClipboardMutex);
+        g_szClipboardText = text;
+        g_bClipboardKnown = true;
+    }
+    char* copy = strdup(text);
+    if(copy) RunClipboardTask(ClipboardSetTask, copy);
+}
+
+bool AML::GetClipboardText(char* buf, size_t len, bool now)
+{
+    if(now) FetchClipboard();
+    else if(!g_bClipboardFetching.exchange(true)) RunClipboardTask(ClipboardFetchTask, NULL);
+    if(!buf || !len) return false;
+
+    std::lock_guard<std::mutex> lock(g_ClipboardMutex);
+    snprintf(buf, len, "%s", g_szClipboardText.c_str());
+    return g_bClipboardKnown;
+}
+
+static char g_szSystemLanguage[32] = "";
+const char* AML::GetSystemLanguage()
+{
+    if(g_szSystemLanguage[0] == 0)
+    {
+        JNIEnv* env = GetCurrentJNI();
+        if(!env) return "";
+
+        auto localeCls = MakeJNILocalRef(env, env->FindClass("java/util/Locale"));
+        jmethodID getDefault = localeCls.Get() ? env->GetStaticMethodID(localeCls.Get(), "getDefault", "()Ljava/util/Locale;") : NULL;
+        if(!getDefault)
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return "";
+        }
+        auto locale = MakeJNILocalRef(env, env->CallStaticObjectMethod(localeCls.Get(), getDefault));
+        if(env->ExceptionCheck()) env->ExceptionClear();
+
+        auto tag = MakeJNILocalRef(env, CallJavaMethod<jstring>(locale.Get(), "toLanguageTag", "()Ljava/lang/String;"));
+        JUTFString szTag(tag.Get(), env);
+        if(!szTag) return "";
+        snprintf(g_szSystemLanguage, sizeof(g_szSystemLanguage), "%s", szTag.c_str());
+    }
+    return g_szSystemLanguage;
+}
+
+int AML::GetDisplayDPI()
+{
+    JNIEnv* env = GetCurrentJNI();
+    jobject context = ::GetCurrentContext();
+    if(!env || !context) return 0;
+
+    auto resources = MakeJNILocalRef(env, CallJavaMethod<jobject>(context, "getResources", "()Landroid/content/res/Resources;"));
+    auto displayMetrics = MakeJNILocalRef(env, CallJavaMethod<jobject>(resources.Get(), "getDisplayMetrics", "()Landroid/util/DisplayMetrics;"));
+    if(!displayMetrics.Get()) return 0;
+
+    auto dmClass = MakeJNILocalRef(env, env->GetObjectClass(displayMetrics.Get()));
+    jfieldID dpiField = dmClass.Get() ? env->GetFieldID(dmClass.Get(), "densityDpi", "I") : NULL;
+    if(!dpiField)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return 0;
+    }
+    return env->GetIntField(displayMetrics.Get(), dpiField);
+}
+
+float AML::GetRefreshRate()
+{
+    JNIEnv* env = GetCurrentJNI();
+    if(!env) return 0.0f;
+
+    jobject context = ::GetCurrentActivity();
+    if(!context) context = ::GetCurrentContext();
+    if(!context) return 0.0f;
+
+    auto serviceName = MakeJNILocalRef(env, env->NewStringUTF("window"));
+    auto windowManager = MakeJNILocalRef(env, CallJavaMethod<jobject>(context, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;", serviceName.Get()));
+    auto display = MakeJNILocalRef(env, CallJavaMethod<jobject>(windowManager.Get(), "getDefaultDisplay", "()Landroid/view/Display;"));
+    return CallJavaMethod<jfloat>(display.Get(), "getRefreshRate", "()F");
+}
+
+static void KeepScreenOnTask(void* data)
+{
+    JNIEnv* env = GetCurrentJNI();
+    jobject activity = ::GetCurrentActivity();
+    if(!env || !activity) return;
+
+    auto window = MakeJNILocalRef(env, CallJavaMethod<jobject>(activity, "getWindow", "()Landroid/view/Window;"));
+    CallJavaMethod<void>(window.Get(), data ? "addFlags" : "clearFlags", "(I)V", (jint)0x80); // FLAG_KEEP_SCREEN_ON
+}
+bool AML::SetKeepScreenOn(bool keepOn)
+{
+    return ::PushToJavaUIThread(KeepScreenOnTask, keepOn ? (void*)1 : NULL);
+}
+
+void AML::ShareText(const char* text, const char* title)
+{
+    if(!text) return;
+
+    JNIEnv* env = GetCurrentJNI();
+    jobject activity = ::GetCurrentActivity();
+    if(!env || !activity) return;
+
+    auto intentClass = MakeJNILocalRef(env, env->FindClass("android/content/Intent"));
+    jmethodID ctor = intentClass.Get() ? env->GetMethodID(intentClass.Get(), "<init>", "(Ljava/lang/String;)V") : NULL;
+    jmethodID createChooser = intentClass.Get() ? env->GetStaticMethodID(intentClass.Get(), "createChooser", "(Landroid/content/Intent;Ljava/lang/CharSequence;)Landroid/content/Intent;") : NULL;
+    auto action = MakeJNILocalRef(env, env->NewStringUTF("android.intent.action.SEND"));
+    auto type = MakeJNILocalRef(env, env->NewStringUTF("text/plain"));
+    auto extraText = MakeJNILocalRef(env, env->NewStringUTF("android.intent.extra.TEXT"));
+    auto jText = MakeJNILocalRef(env, env->NewStringUTF(text));
+    auto jTitle = MakeJNILocalRef(env, title ? env->NewStringUTF(title) : NULL);
+    if(!ctor || !createChooser || !action.Get() || !type.Get() || !extraText.Get() || !jText.Get())
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+
+    auto intent = MakeJNILocalRef(env, env->NewObject(intentClass.Get(), ctor, action.Get()));
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    if(!intent.Get()) return;
+
+    MakeJNILocalRef(env, CallJavaMethod<jobject>(intent.Get(), "setType", "(Ljava/lang/String;)Landroid/content/Intent;", type.Get()));
+    MakeJNILocalRef(env, CallJavaMethod<jobject>(intent.Get(), "putExtra", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;", extraText.Get(), jText.Get()));
+
+    auto chooser = MakeJNILocalRef(env, env->CallStaticObjectMethod(intentClass.Get(), createChooser, intent.Get(), jTitle.Get()));
+    if(env->ExceptionCheck()) env->ExceptionClear();
+    CallJavaMethod<void>(activity, "startActivity", "(Landroid/content/Intent;)V", chooser.Get() ? chooser.Get() : intent.Get());
+}
+
+static char g_szDeviceManufacturer[92] = "", g_szDeviceModel[92] = ""; // PROPERTY_VALUE_MAX
+const char* AML::GetDeviceManufacturer()
+{
+    if(g_szDeviceManufacturer[0] == 0) __system_property_get("ro.product.manufacturer", g_szDeviceManufacturer);
+    return g_szDeviceManufacturer;
+}
+
+const char* AML::GetDeviceModel()
+{
+    if(g_szDeviceModel[0] == 0) __system_property_get("ro.product.model", g_szDeviceModel);
+    return g_szDeviceModel;
+}
+
+uint64_t AML::GetTotalRAM()
+{
+    return (uint64_t)sysconf(_SC_PHYS_PAGES) * (uint64_t)sysconf(_SC_PAGESIZE);
+}
+
+uint64_t AML::GetAvailableRAM()
+{
+    // MemAvailable counts reclaimable cache too, _SC_AVPHYS_PAGES does not
+    FILE* f = fopen("/proc/meminfo", "r");
+    if(f)
+    {
+        char line[128];
+        unsigned long long kb = 0;
+        while(fgets(line, sizeof(line), f))
+        {
+            if(sscanf(line, "MemAvailable: %llu kB", &kb) == 1) break;
+        }
+        fclose(f);
+        if(kb) return (uint64_t)kb * 1024;
+    }
+    return (uint64_t)sysconf(_SC_AVPHYS_PAGES) * (uint64_t)sysconf(_SC_PAGESIZE);
+}
+
+// Dialogs are java/net/rusjj/aml/Dialogs.java, rebuild its DEX with java/build_dex.ps1
+enum eDialogKind { DIALOG_ALERT = 0, DIALOG_INPUT, DIALOG_CONFIRM, DIALOG_CHOICE, DIALOG_MULTICHOICE, DIALOG_SLIDER, DIALOG_KINDS };
+static const char* const g_DialogMethods[DIALOG_KINDS][2] =
+{
+    { "showAlert",       "(Landroid/app/Activity;[B[B[B[IJ)V" },
+    { "showInput",       "(Landroid/app/Activity;[B[B[BI[IJ)V" },
+    { "showConfirm",     "(Landroid/app/Activity;[B[B[B[B[IJ)V" },
+    { "showChoice",      "(Landroid/app/Activity;[B[[BI[IJ)V" },
+    { "showMultiChoice", "(Landroid/app/Activity;[B[[B[Z[IJ)V" },
+    { "showSlider",      "(Landroid/app/Activity;[BIII[IJ)V" },
+};
+struct SDialogTask
+{
+    int kind;
+    void* cb;
+    void* data;
+    jint style[6]; // Dialogs.java's layout of DialogStyle
+    std::string title;
+    std::vector<std::string> strs; // Alert: message, button. Input: text, hint. Confirm: message, yes, no. Choices: items
+    std::vector<jboolean> checked;
+    int i0, i1, i2; // Input: inputType. Choice: selected. Slider: min, max, value
+};
+static std::mutex g_DialogsMutex;
+static jobject g_DialogsObject = NULL;
+static jmethodID g_DialogsMethodIDs[DIALOG_KINDS];
+
+static void FinishDialog(SDialogTask* task, bool ok, int value, const std::string& bytes)
+{
+    if(task->cb) switch(task->kind)
+    {
+        case DIALOG_INPUT: ((IAML::InputDialogCallback)task->cb)(ok ? bytes.c_str() : NULL, task->data); break;
+        case DIALOG_CONFIRM: ((IAML::ConfirmDialogCallback)task->cb)(ok, task->data); break;
+        case DIALOG_CHOICE: ((IAML::ChoiceDialogCallback)task->cb)(ok ? value : -1, task->data); break;
+        case DIALOG_SLIDER: ((IAML::SliderDialogCallback)task->cb)(ok, ok ? value : task->i2, task->data); break;
+        case DIALOG_MULTICHOICE:
+        {
+            int count = (int)task->strs.size();
+            std::unique_ptr<bool[]> checked(new bool[count > 0 ? count : 1]);
+            for(int i = 0; i < count; ++i) checked[i] = (i < (int)bytes.size() && bytes[i] != 0);
+            ((IAML::MultiChoiceDialogCallback)task->cb)(ok ? checked.get() : NULL, count, task->data);
+            break;
+        }
+    }
+    delete task;
+}
+static void JNICALL Dialogs_OnResult(JNIEnv* env, jclass, jlong id, jboolean ok, jint value, jbyteArray data)
+{
+    SDialogTask* task = (SDialogTask*)(uintptr_t)id;
+    if(!task) return;
+
+    std::string bytes;
+    if(data)
+    {
+        bytes.resize(env->GetArrayLength(data));
+        env->GetByteArrayRegion(data, 0, bytes.size(), (jbyte*)&bytes[0]);
+    }
+    FinishDialog(task, ok, value, bytes);
+}
+static bool InitDialogsJNI(JNIEnv* env)
+{
+    if(g_DialogsObject) return true;
+
+    jobject obj = ::InjectSmaliDEX(env, g_DialogsDex, sizeof(g_DialogsDex), "net.rusjj.aml.Dialogs");
+    if(!obj) return false;
+
+    auto cls = MakeJNILocalRef(env, env->GetObjectClass(obj));
+    if(!cls.Get()) return false;
+    for(int i = 0; i < DIALOG_KINDS; ++i)
+    {
+        g_DialogsMethodIDs[i] = env->GetMethodID(cls.Get(), g_DialogMethods[i][0], g_DialogMethods[i][1]);
+        if(!g_DialogsMethodIDs[i])
+        {
+            if(env->ExceptionCheck()) env->ExceptionClear();
+            return false;
+        }
+    }
+    JNINativeMethod natives[] = { { "onResult", "(JZI[B)V", (void*)Dialogs_OnResult } };
+    if(env->RegisterNatives(cls.Get(), natives, 1) != JNI_OK)
+    {
+        if(env->ExceptionCheck()) env->ExceptionClear();
+        return false;
+    }
+    g_DialogsObject = obj;
+    return true;
+}
+static jbyteArray NewUTF8ByteArray(JNIEnv* env, const std::string& str)
+{
+    jbyteArray arr = env->NewByteArray(str.size());
+    if(arr) env->SetByteArrayRegion(arr, 0, str.size(), (const jbyte*)str.data());
+    return arr;
+}
+static jobjectArray NewUTF8ByteArrays(JNIEnv* env, const std::vector<std::string>& strs)
+{
+    auto byteArrCls = MakeJNILocalRef(env, env->FindClass("[B"));
+    jobjectArray arr = byteArrCls.Get() ? env->NewObjectArray(strs.size(), byteArrCls.Get(), NULL) : NULL;
+    for(size_t i = 0; arr && i < strs.size(); ++i)
+    {
+        auto item = MakeJNILocalRef(env, NewUTF8ByteArray(env, strs[i]));
+        if(!item.Get())
+        {
+            env->DeleteLocalRef(arr);
+            return NULL;
+        }
+        env->SetObjectArrayElement(arr, i, item.Get());
+    }
+    return arr;
+}
+static void DialogTask(void* data)
+{
+    SDialogTask* task = (SDialogTask*)data;
+    JNIEnv* env = GetCurrentJNI();
+    jobject activity = ::GetCurrentActivity();
+
+    bool shown = false;
+    if(!env || !activity) logger->Error("Cannot show a dialog: no Java activity");
+    else
+    {
+        std::lock_guard<std::mutex> lock(g_DialogsMutex);
+        if(!InitDialogsJNI(env)) logger->Error("Cannot show a dialog: Dialogs DEX injection failed");
+        else
+        {
+            jmethodID method = g_DialogsMethodIDs[task->kind];
+            jlong id = (jlong)(uintptr_t)task;
+            auto title = MakeJNILocalRef(env, NewUTF8ByteArray(env, task->title));
+            auto s0 = MakeJNILocalRef(env, (task->strs.size() > 0) ? NewUTF8ByteArray(env, task->strs[0]) : NULL);
+            auto s1 = MakeJNILocalRef(env, (task->strs.size() > 1) ? NewUTF8ByteArray(env, task->strs[1]) : NULL);
+            auto s2 = MakeJNILocalRef(env, (task->strs.size() > 2) ? NewUTF8ByteArray(env, task->strs[2]) : NULL);
+            auto style = MakeJNILocalRef(env, env->NewIntArray(6));
+            if(style.Get()) env->SetIntArrayRegion(style.Get(), 0, 6, task->style);
+            if(title.Get() && style.Get() && !env->ExceptionCheck())
+            {
+                switch(task->kind)
+                {
+                    case DIALOG_ALERT:
+                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), s0.Get(), s1.Get(), style.Get(), id);
+                        break;
+                    case DIALOG_INPUT:
+                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), s0.Get(), s1.Get(), task->i0, style.Get(), id);
+                        break;
+                    case DIALOG_CONFIRM:
+                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), s0.Get(), s1.Get(), s2.Get(), style.Get(), id);
+                        break;
+                    case DIALOG_CHOICE:
+                    {
+                        auto items = MakeJNILocalRef(env, NewUTF8ByteArrays(env, task->strs));
+                        if(items.Get()) env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), items.Get(), task->i0, style.Get(), id);
+                        break;
+                    }
+                    case DIALOG_MULTICHOICE:
+                    {
+                        auto items = MakeJNILocalRef(env, NewUTF8ByteArrays(env, task->strs));
+                        auto checked = MakeJNILocalRef(env, env->NewBooleanArray(task->checked.size()));
+                        if(checked.Get()) env->SetBooleanArrayRegion(checked.Get(), 0, task->checked.size(), task->checked.data());
+                        if(items.Get() && checked.Get()) env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), items.Get(), checked.Get(), style.Get(), id);
+                        break;
+                    }
+                    case DIALOG_SLIDER:
+                        env->CallVoidMethod(g_DialogsObject, method, activity, title.Get(), task->i0, task->i1, task->i2, style.Get(), id);
+                        break;
+                }
+                shown = !env->ExceptionCheck();
+            }
+            if(env->ExceptionCheck())
+            {
+                env->ExceptionDescribe();
+                env->ExceptionClear();
+            }
+        }
+    }
+
+    // From here the task belongs to Dialogs_OnResult
+    if(!shown) FinishDialog(task, false, 0, "");
+}
+static SDialogTask* NewDialogTask(int kind, const DialogStyle* style, const char* title, void* cb, void* data)
+{
+    SDialogTask* task = new SDialogTask();
+    task->kind = kind;
+    task->cb = cb;
+    task->data = data;
+    if(style)
+    {
+        task->style[0] = style->baseTheme;
+        task->style[1] = (jint)style->background;
+        task->style[2] = (jint)style->text;
+        task->style[3] = (jint)style->accent;
+        memcpy(&task->style[4], &style->cornerRadius, sizeof(float));
+        memcpy(&task->style[5], &style->dimAmount, sizeof(float));
+    }
+    task->title = title ? title : "";
+    task->i0 = task->i1 = task->i2 = 0;
+    return task;
+}
+static void LaunchDialog(SDialogTask* task)
+{
+    if(!::PushToJavaUIThread(DialogTask, task)) DialogTask(task); // Dialogs post themselves to UI thread anyway
+}
+static void AddDialogItems(SDialogTask* task, const char** items, int count)
+{
+    for(int i = 0; items && i < count; ++i) task->strs.push_back(items[i] ? items[i] : "");
+}
+
+void AML::ShowInputDialog(const char* title, const char* text, InputDialogCallback cb, void* data, const char* hint, int inputType, int styleResource)
+{
+    DialogStyle style = {}; style.baseTheme = styleResource;
+    ShowInputDialog(&style, title, text, cb, data, hint, inputType);
+}
+
+void AML::ShowConfirmDialog(const char* title, const char* message, ConfirmDialogCallback cb, void* data, const char* yesText, const char* noText, int styleResource)
+{
+    DialogStyle style = {}; style.baseTheme = styleResource;
+    ShowConfirmDialog(&style, title, message, cb, data, yesText, noText);
+}
+
+void AML::ShowChoiceDialog(const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data, int selected, int styleResource)
+{
+    DialogStyle style = {}; style.baseTheme = styleResource;
+    ShowChoiceDialog(&style, title, items, count, cb, data, selected);
+}
+
+void AML::ShowMultiChoiceDialog(const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data, int styleResource)
+{
+    DialogStyle style = {}; style.baseTheme = styleResource;
+    ShowMultiChoiceDialog(&style, title, items, count, checked, cb, data);
+}
+
+void AML::ShowSliderDialog(const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data, int styleResource)
+{
+    DialogStyle style = {}; style.baseTheme = styleResource;
+    ShowSliderDialog(&style, title, minValue, maxValue, value, cb, data);
+}
+
+void AML::ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText)
+{
+    SDialogTask* task = NewDialogTask(DIALOG_ALERT, style, title, NULL, NULL);
+    task->strs = { message ? message : "", buttonText ? buttonText : "" };
+    LaunchDialog(task);
+}
+
+void AML::ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, void* data, const char* hint, int inputType)
+{
+    if(!cb) return;
+    SDialogTask* task = NewDialogTask(DIALOG_INPUT, style, title, (void*)cb, data);
+    task->strs = { text ? text : "", hint ? hint : "" };
+    task->i0 = inputType;
+    LaunchDialog(task);
+}
+
+void AML::ShowConfirmDialog(const DialogStyle* style, const char* title, const char* message, ConfirmDialogCallback cb, void* data, const char* yesText, const char* noText)
+{
+    if(!cb) return;
+    SDialogTask* task = NewDialogTask(DIALOG_CONFIRM, style, title, (void*)cb, data);
+    task->strs = { message ? message : "", yesText ? yesText : "", noText ? noText : "" };
+    LaunchDialog(task);
+}
+
+void AML::ShowChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data, int selected)
+{
+    if(!cb) return;
+    SDialogTask* task = NewDialogTask(DIALOG_CHOICE, style, title, (void*)cb, data);
+    AddDialogItems(task, items, count);
+    task->i0 = (selected >= 0 && selected < (int)task->strs.size()) ? selected : -1;
+    LaunchDialog(task);
+}
+
+void AML::ShowMultiChoiceDialog(const DialogStyle* style, const char* title, const char** items, int count, const bool* checked, MultiChoiceDialogCallback cb, void* data)
+{
+    if(!cb) return;
+    SDialogTask* task = NewDialogTask(DIALOG_MULTICHOICE, style, title, (void*)cb, data);
+    AddDialogItems(task, items, count);
+    for(size_t i = 0; i < task->strs.size(); ++i) task->checked.push_back((checked && checked[i]) ? JNI_TRUE : JNI_FALSE);
+    LaunchDialog(task);
+}
+
+void AML::ShowSliderDialog(const DialogStyle* style, const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb, void* data)
+{
+    if(!cb) return;
+    if(minValue > maxValue) std::swap(minValue, maxValue);
+    SDialogTask* task = NewDialogTask(DIALOG_SLIDER, style, title, (void*)cb, data);
+    task->i0 = minValue;
+    task->i1 = maxValue;
+    task->i2 = (value < minValue) ? minValue : (value > maxValue) ? maxValue : value;
+    LaunchDialog(task);
 }
 
 

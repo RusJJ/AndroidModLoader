@@ -4,7 +4,7 @@
 > Contoh mod: https://github.com/AndroidModLoader?tab=repositories
 > Discord: https://discord.gg/2MY7W39kBg
 >
-> Dokumen ini ditulis berdasarkan header mod yang sebenarnya (`amlmod.h`, `iaml.h`, `interface.h`, `config.h`, `icfg.h`, `logger.h`, `localref.h`, `scopeguard.h`, `listitem.h`, `il2cpp.h`). Kumpulan header ini sesuai dengan **IAML_VER `01040000` (AML 1.4.0)**.
+> Dokumen ini ditulis berdasarkan header mod yang sebenarnya (`amlmod.h`, `iaml.h`, `interface.h`, `config.h`, `icfg.h`, `logger.h`, `localref.h`, `scopeguard.h`, `listitem.h`, `il2cpp.h`). Kumpulan header ini sesuai dengan **IAML_VER `01050000` (AML 1.5.0)**.
 
 ---
 
@@ -261,6 +261,7 @@ bool        HasModOfBiggerVersion(const char* guid, const char* version);
 int         GetModsLoadedCount();
 int         GetFailedModsCount();
 void        ListMods(ListModsCallback cb, void* data = NULL, bool startWithLatest = false);
+void        ListInterfaces(ListInterfacesCallback cb, void* data = NULL); // semua interface yang terdaftar
 const char* GetFeatures();                    // string fitur build
 ```
 
@@ -372,6 +373,8 @@ int    ReadFileToBuffer(const char* path, char* out, size_t maxLen);
 bool   WriteBufferToFile(const char* path, const void* buf, size_t len);
 void   FileMD5(const char* path, char* out, size_t out_len);   // >= MINIMUM_MD5_BUF_SIZE (33)
 void   DataMD5(void* data, size_t len, char* out, size_t out_len);
+uint32_t GetStringHash(const char* str, size_t len = 0);   // murmur3, len 0 = strlen
+uint32_t GetCRC32(const void* data, size_t len);
 ```
 
 ### Asset (asset APK)
@@ -399,6 +402,79 @@ void  OpenURL(const char* url);
 int   GetCPUCores();
 bool  IsMainThread();
 void  GetNewsString(char* buf, size_t len);
+const char* GetSystemLanguage();                   // "en-US", di-cache setelah panggilan pertama
+int   GetDisplayDPI();                             // 160 = skala UI 1.0x, 0 jika tidak diketahui
+float GetRefreshRate();                            // Hz, 0 jika tidak diketahui
+bool  SetKeepScreenOn(bool keepOn);                // diterapkan di thread UI Java
+void  ShareText(const char* text, const char* title = NULL); // menu berbagi Android
+const char* GetDeviceManufacturer();
+const char* GetDeviceModel();
+uint64_t GetTotalRAM();                            // byte
+uint64_t GetAvailableRAM();                        // byte, MemAvailable dari /proc/meminfo
+```
+
+### Clipboard (AML 1.5.0)
+```cpp
+void SetClipboardText(const char* text);
+bool GetClipboardText(char* buf, size_t len, bool now = false);
+```
+Secara default tidak ada panggilan yang memblokir: `SetClipboardText` diterapkan di thread UI Java, dan `GetClipboardText` menyalin teks terakhir yang diketahui ke `buf` lalu meminta yang baru di latar belakang, mengembalikan `false` selama belum ada teks yang diketahui. Panggil sekali lebih awal (`GetClipboardText(NULL, 0)`) untuk mengisi cache. Dengan `now = true` clipboard dibaca langsung di thread pemanggil: satu panggilan ke sistem, cocok untuk tombol "Tempel", tapi tidak untuk setiap frame. Di Android 10+ hanya aplikasi yang sedang fokus yang boleh membaca clipboard; Android 12+ menampilkan notifikasi "ditempel dari clipboard" sekali untuk setiap teks yang disalin.
+
+### Dialog (AML 1.5.0)
+```cpp
+typedef void(*InputDialogCallback)(const char* text, void* data);                     // NULL jika dibatalkan
+typedef void(*ConfirmDialogCallback)(bool yes, void* data);                           // false jika dibatalkan
+typedef void(*ChoiceDialogCallback)(int index, void* data);                           // -1 jika dibatalkan
+typedef void(*MultiChoiceDialogCallback)(const bool* checked, int count, void* data); // NULL jika dibatalkan
+typedef void(*SliderDialogCallback)(bool ok, int value, void* data);
+
+void ShowInputDialog(const char* title, const char* text, InputDialogCallback cb, void* data = NULL,
+                     const char* hint = NULL, int inputType = 0, int styleResource = 0);
+void ShowConfirmDialog(const char* title, const char* message, ConfirmDialogCallback cb, void* data = NULL,
+                       const char* yesText = NULL, const char* noText = NULL, int styleResource = 0);
+void ShowChoiceDialog(const char* title, const char** items, int count, ChoiceDialogCallback cb, void* data = NULL,
+                      int selected = -1, int styleResource = 0);
+void ShowMultiChoiceDialog(const char* title, const char** items, int count, const bool* checked,
+                           MultiChoiceDialogCallback cb, void* data = NULL, int styleResource = 0);
+void ShowSliderDialog(const char* title, int minValue, int maxValue, int value, SliderDialogCallback cb,
+                      void* data = NULL, int styleResource = 0);
+```
+- Panggilan langsung kembali; callback dijalankan **tepat satu kali di thread UI Java** (salin hasilnya atau set sebuah flag, jangan ubah state game dari sana).
+- Batal = tombol Kembali, ketukan di luar dialog, atau "Batal". Dialog yang gagal ditampilkan juga melaporkan batal.
+- String dikirim sebagai UTF-8 asli, termasuk emoji. Tombol default memakai OK/Batal sistem yang sudah dilokalkan.
+- `inputType` adalah nilai `android.text.InputType`: `0` teks, `2` angka, `129` kata sandi.
+- `styleResource` adalah nilai `android.R.style.*` (lihat `GetAndroidSystemResID`), `0` adalah default.
+
+Setiap dialog (dan `ShowDialog`) juga punya variasi yang menerima `DialogStyle` di depan sebagai pengganti `styleResource`:
+```cpp
+struct DialogStyle
+{
+    int      baseTheme;                 // android.R.style.*
+    uint32_t background, text, accent;  // ARGB
+    float    cornerRadius;              // dp
+    float    dimAmount;                 // 0.0 - 1.0, negatif menghapus peredupan
+}; // field bernilai nol memakai nilai dari tema
+
+void ShowDialog(const DialogStyle* style, const char* title, const char* message, const char* buttonText = NULL);
+void ShowInputDialog(const DialogStyle* style, const char* title, const char* text, InputDialogCallback cb, ...);
+// ...sama untuk ShowConfirmDialog / ShowChoiceDialog / ShowMultiChoiceDialog / ShowSliderDialog
+```
+`accent` mewarnai tombol, kotak centang, slider, dan garis bawah kolom teks.
+
+Contoh:
+```cpp
+static char g_szName[64];
+static void OnName(const char* text, void* data)
+{
+    if(text) snprintf(g_szName, sizeof(g_szName), "%s", text);
+}
+
+DialogStyle style = {};
+style.background   = 0xFF1E1E24;
+style.text         = 0xFFEEEEEE;
+style.accent       = 0xFF4FC3F7;
+style.cornerRadius = 16.0f;
+aml->ShowInputDialog(&style, "Nama pemain", g_szName, OnName, NULL, "Maks. 16 huruf");
 ```
 
 ### Jaringan / unduhan
@@ -727,6 +803,9 @@ ON_MOD_UNLOAD()
 | `aml->GetJNIEnvironment / CallStaticJavaMethod / GetCurrentActivity` | Jembatan JNI |
 | `aml->MLS*` | Penyimpanan key/value persisten |
 | `aml->ShowToast / ShowDialog / DoVibro / GetBatteryLevel` | Perangkat/UI |
+| `aml->Show[Input/Confirm/Choice/MultiChoice/Slider]Dialog` | Dialog dengan hasil (+ `DialogStyle`) |
+| `aml->SetClipboardText / GetClipboardText` | Clipboard |
+| `aml->GetSystemLanguage / GetDisplayDPI / GetRefreshRate / GetDeviceModel / GetTotalRAM` | Info sistem |
 | `aml->GetAppVersionName / GetAppVersionCode / GetApkPath / GetApkMD5` | Identitas/versi aplikasi target |
 | `DECL_HOOK[v/b/i/p]` + `HOOK[SYM/PLT/B/BL/BLX]` | Makro hook |
 | `cfg->GetInt/GetFloat/GetBool/GetString/GetColor(key, def, section="Preferences")` | Baca konfigurasi |
@@ -740,8 +819,8 @@ ON_MOD_UNLOAD()
 ### Pengecekan versi
 ```cpp
 #include <mod/amlmod.h>
-#if !defined(IAML_VER) || IAML_VER < 01040000
-    #error "You need to update your MOD folder to 1.4.0!"
+#if !defined(IAML_VER) || IAML_VER < 01050000
+    #error "You need to update your MOD folder to 1.5.0!"
 #endif
 ```
 
